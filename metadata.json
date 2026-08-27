@@ -1,0 +1,6 @@
+{
+  "name": "MUNGWELE IA STUDIO",
+  "description": "Plateforme tout-en-un de génération d'images, vidéos avec Google Veo 3, musiques et amélioration intelligente de prompts par IA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
