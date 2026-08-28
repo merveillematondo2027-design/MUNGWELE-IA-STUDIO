@@ -10,14 +10,16 @@ export interface FirebasePublicConfig {
 
 const env = import.meta.env;
 
+// Firebase Web configuration is public by design. Environment variables can
+// override these defaults for staging or another Firebase project.
 export const firebasePublicConfig: FirebasePublicConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || '',
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: env.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: env.VITE_FIREBASE_APP_ID || '',
-  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || undefined,
+  apiKey: env.VITE_FIREBASE_API_KEY || 'AIzaSyCqY3gtNKX62oFAwdSibtihDA1ifj8SxXs',
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || 'diablo-design-ai.firebaseapp.com',
+  projectId: env.VITE_FIREBASE_PROJECT_ID || 'diablo-design-ai',
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || 'diablo-design-ai.firebasestorage.app',
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || '582509216306',
+  appId: env.VITE_FIREBASE_APP_ID || '1:582509216306:web:61337d7a38ff9aa4abf22b',
+  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || 'G-77CWBPF23Q',
 };
 
 export const isFirebaseClientConfigured = Boolean(
