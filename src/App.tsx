@@ -21,19 +21,21 @@ import { Sparkles, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const FirebaseSessionBridge: React.FC = () => {
-  const { setUser, addNotification } = useApp();
+  const { setUser, resetUser, addNotification } = useApp();
 
   useEffect(() => {
     return subscribeToFirebaseUser(
       (profile) => {
         if (profile) setUser(profile);
+        else resetUser();
       },
       (error) => {
         console.warn('Firebase auth session sync error:', error);
+        resetUser();
         addNotification('warning', 'Synchronisation du compte', 'La session Firebase n’a pas pu être synchronisée.');
       },
     );
-  }, [setUser]);
+  }, []);
 
   return null;
 };
@@ -44,9 +46,11 @@ const MainLayout: React.FC = () => {
     activeMediaModal,
     setActiveMediaModal,
     appSettings,
+    user,
   } = useApp();
 
   const isStudioTab = activeTab.startsWith('studio-');
+  const canOpenAdmin = user.role === 'admin' && Boolean(user.id);
 
   return (
     <div className="relative min-h-screen bg-[#081226] text-gray-100 flex flex-col antialiased selection:bg-purple-600 selection:text-white font-sans overflow-x-hidden">
@@ -61,7 +65,7 @@ const MainLayout: React.FC = () => {
 
       {appSettings.announcementBanner && (
         <div className="relative z-30 bg-gradient-to-r from-purple-900/60 via-pink-900/50 to-blue-900/60 backdrop-blur-xl border-b border-white/10 px-4 py-2 text-center text-xs font-semibold text-white flex items-center justify-center space-x-2 shadow-lg">
-          <Sparkles className="w-3.5 h-3.5 text-pink-300 animate-pulse" />
+          <Sparkles className="w-3.5 h-3.5 text-pink-300" />
           <span>{appSettings.announcementBanner}</span>
         </div>
       )}
@@ -95,7 +99,7 @@ const MainLayout: React.FC = () => {
                 {activeTab === 'creations' && <CreationsView />}
                 {activeTab === 'subscription' && <SubscriptionView />}
                 {activeTab === 'profile' && <ProfileView />}
-                {activeTab === 'admin' && <AdminView />}
+                {activeTab === 'admin' && (canOpenAdmin ? <AdminView /> : <ProfileView />)}
                 {activeTab === 'help' && <HelpView />}
               </motion.div>
             </AnimatePresence>
