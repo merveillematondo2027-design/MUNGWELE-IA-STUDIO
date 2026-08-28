@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { X, Sparkles, Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
+import { X, Sparkles, Mail, Lock, User, ArrowRight, Loader2, ExternalLink, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   friendlyAuthError,
+  isEmbeddedAuthContext,
   loginWithEmail,
   loginWithGoogle,
   registerWithEmail,
@@ -29,12 +30,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ required = false }) => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const embeddedPreview = useMemo(() => isEmbeddedAuthContext(), []);
 
   const visible = required || isAuthModalOpen;
   if (!visible) return null;
 
+  const changeMode = (mode: 'login' | 'register' | 'forgot') => {
+    setAuthError('');
+    setAuthMode(mode);
+  };
+
   const finishLogin = (profile: Awaited<ReturnType<typeof loginWithEmail>>, isNew = false) => {
     setUser(profile);
+    setAuthError('');
     setIsAuthModalOpen(false);
     if (isNew) {
       triggerCelebration();
@@ -46,6 +55,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ required = false }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError('');
     setIsSubmitting(true);
     try {
       if (authMode === 'login') {
@@ -55,23 +65,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({ required = false }) => {
       } else {
         await requestPasswordReset(email);
         addNotification('success', 'E-mail envoyé', 'Consultez votre boîte mail pour réinitialiser votre mot de passe.');
+        changeMode('login');
+      }
+    } catch (error: any) {
+      const message = friendlyAuthError(error);
+      setAuthError(message);
+      if (error?.code === 'auth/email-already-in-use') {
         setAuthMode('login');
       }
-    } catch (error) {
-      addNotification('error', 'Authentification impossible', friendlyAuthError(error));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleGoogleLogin = async () => {
+    setAuthError('');
     setIsSubmitting(true);
     try {
       const profile = await loginWithGoogle();
       if (profile) finishLogin(profile);
     } catch (error) {
-      addNotification('error', 'Connexion Google impossible', friendlyAuthError(error));
+      setAuthError(friendlyAuthError(error));
+    } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const openStandalonePreview = () => {
+    try {
+      window.open(window.location.href, '_blank', 'noopener,noreferrer');
+    } catch {
+      setAuthError('Utilisez le bouton d’ouverture du preview dans un nouvel onglet en haut de Google AI Studio.');
     }
   };
 
@@ -122,6 +146,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ required = false }) => {
                 </p>
               </div>
 
+              {authError && (
+                <div className="mb-5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
               {authMode !== 'forgot' && (
                 <>
                   <button
@@ -133,6 +164,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ required = false }) => {
                     {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="w-5 h-5 rounded-full border border-gray-300 flex items-center justify-center font-black text-xs">G</span>}
                     Continuer avec Google
                   </button>
+
+                  {embeddedPreview && (
+                    <button
+                      type="button"
+                      onClick={openStandalonePreview}
+                      className="mt-2 w-full text-xs text-purple-300 hover:text-purple-200 flex items-center justify-center gap-1.5"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Ouvrir le preview dans un nouvel onglet pour Google
+                    </button>
+                  )}
+
                   <div className="flex items-center gap-3 my-5 text-[10px] uppercase tracking-widest text-gray-500">
                     <div className="h-px bg-white/10 flex-1" /><span>ou</span><div className="h-px bg-white/10 flex-1" />
                   </div>
@@ -159,7 +202,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ required = false }) => {
                       <input type="password" minLength={6} required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mot de passe (6 caractères minimum)" className="w-full pl-9 pr-3 py-3.5 rounded-xl bg-white/[0.04] border border-white/10 text-sm outline-none focus:border-purple-500" />
                     </div>
                     {authMode === 'login' && (
-                      <button type="button" onClick={() => setAuthMode('forgot')} className="mt-2 text-xs text-purple-400 hover:underline">Mot de passe oublié ?</button>
+                      <button type="button" onClick={() => changeMode('forgot')} className="mt-2 text-xs text-purple-400 hover:underline">Mot de passe oublié ?</button>
                     )}
                   </div>
                 )}
@@ -172,9 +215,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ required = false }) => {
 
               <div className="text-center pt-6 text-sm text-gray-400">
                 {authMode === 'login' ? (
-                  <p>Pas encore de compte ? <button onClick={() => setAuthMode('register')} className="text-purple-400 font-bold hover:underline">S'inscrire</button></p>
+                  <p>Pas encore de compte ? <button onClick={() => changeMode('register')} className="text-purple-400 font-bold hover:underline">S'inscrire</button></p>
                 ) : (
-                  <p>Vous avez déjà un compte ? <button onClick={() => setAuthMode('login')} className="text-purple-400 font-bold hover:underline">Se connecter</button></p>
+                  <p>Vous avez déjà un compte ? <button onClick={() => changeMode('login')} className="text-purple-400 font-bold hover:underline">Se connecter</button></p>
                 )}
               </div>
             </motion.div>
