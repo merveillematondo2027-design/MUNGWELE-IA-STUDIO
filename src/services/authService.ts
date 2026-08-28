@@ -5,6 +5,7 @@ import {
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   updateProfile,
   type User,
@@ -59,15 +60,7 @@ export async function ensureUserProfile(user: User, preferredName?: string): Pro
     await setDoc(ref, initial);
 
     if (admin) {
-      await setDoc(
-        ref,
-        {
-          role: 'admin',
-          adminLevel: 'general',
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true },
-      );
+      await setDoc(ref, { role: 'admin', adminLevel: 'general', updatedAt: new Date().toISOString() }, { merge: true });
       return mapProfile(user, { ...initial, role: 'admin', adminLevel: 'general' });
     }
 
@@ -75,17 +68,8 @@ export async function ensureUserProfile(user: User, preferredName?: string): Pro
   }
 
   const data = snapshot.data();
-
   if (admin && (data.role !== 'admin' || data.adminLevel !== 'general')) {
-    await setDoc(
-      ref,
-      {
-        role: 'admin',
-        adminLevel: 'general',
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true },
-    );
+    await setDoc(ref, { role: 'admin', adminLevel: 'general', updatedAt: new Date().toISOString() }, { merge: true });
   }
 
   return mapProfile(user, admin ? { ...data, role: 'admin', adminLevel: 'general' } : data);
@@ -102,11 +86,26 @@ export async function loginWithEmail(email: string, password: string) {
   return ensureUserProfile(credential.user);
 }
 
-export async function loginWithGoogle() {
+export async function loginWithGoogle(): Promise<UserProfile | null> {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  const credential = await signInWithPopup(auth, provider);
-  return ensureUserProfile(credential.user);
+
+  const embedded = window.self !== window.top;
+  if (embedded) {
+    await signInWithRedirect(auth, provider);
+    return null;
+  }
+
+  try {
+    const credential = await signInWithPopup(auth, provider);
+    return ensureUserProfile(credential.user);
+  } catch (error: any) {
+    if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/operation-not-supported-in-this-environment') {
+      await signInWithRedirect(auth, provider);
+      return null;
+    }
+    throw error;
+  }
 }
 
 export async function requestPasswordReset(email: string) {
@@ -155,7 +154,9 @@ export function friendlyAuthError(error: unknown): string {
     case 'auth/popup-closed-by-user':
       return 'Connexion Google annulée.';
     case 'auth/popup-blocked':
-      return 'Le navigateur a bloqué la fenêtre Google. Autorisez les pop-ups puis réessayez.';
+      return 'Le navigateur a bloqué la fenêtre Google. Une redirection sera utilisée à la place.';
+    case 'auth/unauthorized-domain':
+      return 'Ce domaine doit être ajouté dans Firebase Authentication > Paramètres > Domaines autorisés.';
     case 'auth/network-request-failed':
       return 'Connexion réseau indisponible. Vérifiez Internet puis réessayez.';
     default:
