@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
@@ -17,28 +17,8 @@ import { NotificationToast } from './components/common/NotificationToast';
 import { MediaViewerModal } from './components/common/MediaViewerModal';
 import { AuthModal } from './components/views/AuthModal';
 import { subscribeToFirebaseUser } from './services/authService';
-import { Sparkles, AlertTriangle } from 'lucide-react';
+import { Sparkles, AlertTriangle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-
-const FirebaseSessionBridge: React.FC = () => {
-  const { setUser, resetUser, addNotification } = useApp();
-
-  useEffect(() => {
-    return subscribeToFirebaseUser(
-      (profile) => {
-        if (profile) setUser(profile);
-        else resetUser();
-      },
-      (error) => {
-        console.warn('Firebase auth session sync error:', error);
-        resetUser();
-        addNotification('warning', 'Synchronisation du compte', 'La session Firebase n’a pas pu être synchronisée.');
-      },
-    );
-  }, []);
-
-  return null;
-};
 
 const MainLayout: React.FC = () => {
   const {
@@ -47,15 +27,62 @@ const MainLayout: React.FC = () => {
     setActiveMediaModal,
     appSettings,
     user,
+    setUser,
+    resetUser,
+    addNotification,
   } = useApp();
+
+  const [authReady, setAuthReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    return subscribeToFirebaseUser(
+      (profile) => {
+        if (profile) {
+          setUser(profile);
+          setIsAuthenticated(true);
+        } else {
+          resetUser();
+          setIsAuthenticated(false);
+        }
+        setAuthReady(true);
+      },
+      (error) => {
+        console.warn('Firebase auth session sync error:', error);
+        resetUser();
+        setIsAuthenticated(false);
+        setAuthReady(true);
+        addNotification('warning', 'Synchronisation du compte', 'La session Firebase n’a pas pu être synchronisée.');
+      },
+    );
+  }, []);
+
+  if (!authReady) {
+    return (
+      <div className="min-h-screen bg-[#050b18] text-white flex flex-col items-center justify-center gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center shadow-2xl border border-white/20">
+          <Sparkles className="w-7 h-7" />
+        </div>
+        <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
+        <p className="text-sm text-gray-400">Vérification de votre session sécurisée…</p>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#050b18]">
+        <AuthModal required />
+        <NotificationToast />
+      </div>
+    );
+  }
 
   const isStudioTab = activeTab.startsWith('studio-');
   const canOpenAdmin = user.role === 'admin' && Boolean(user.id);
 
   return (
     <div className="relative min-h-screen bg-[#081226] text-gray-100 flex flex-col antialiased selection:bg-purple-600 selection:text-white font-sans overflow-x-hidden">
-      <FirebaseSessionBridge />
-
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         <div className="absolute -top-32 -left-32 w-[550px] h-[550px] bg-purple-600/15 rounded-full blur-[120px]" />
         <div className="absolute top-1/3 -right-32 w-[500px] h-[500px] bg-blue-600/15 rounded-full blur-[140px]" />
