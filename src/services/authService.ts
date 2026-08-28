@@ -13,17 +13,21 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import type { UserProfile } from '../types';
 
-const ADMIN_EMAIL = 'merveillematondo2027@gmail.com';
-const DEFAULT_AVATAR =
-  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+export const GENERAL_ADMIN_EMAIL = 'merveillematondo2027@gmail.com';
+const DEFAULT_AVATAR = '';
+
+function isGeneralAdmin(user: User) {
+  return user.email?.toLowerCase() === GENERAL_ADMIN_EMAIL;
+}
 
 function mapProfile(user: User, data: Record<string, any>): UserProfile {
+  const admin = isGeneralAdmin(user);
   return {
     id: user.uid,
     name: data.name || user.displayName || user.email?.split('@')[0] || 'Utilisateur',
     email: user.email || data.email || '',
     avatar: data.avatar || user.photoURL || DEFAULT_AVATAR,
-    role: user.email?.toLowerCase() === ADMIN_EMAIL ? 'admin' : data.role === 'admin' ? 'admin' : 'user',
+    role: admin ? 'admin' : 'user',
     status: data.status === 'blocked' ? 'blocked' : 'active',
     credits: typeof data.credits === 'number' ? data.credits : 50,
     plan: ['free', 'creator', 'pro'].includes(data.plan) ? data.plan : 'free',
@@ -35,6 +39,7 @@ function mapProfile(user: User, data: Record<string, any>): UserProfile {
 export async function ensureUserProfile(user: User, preferredName?: string): Promise<UserProfile> {
   const ref = doc(db, 'users', user.uid);
   const snapshot = await getDoc(ref);
+  const admin = isGeneralAdmin(user);
 
   if (!snapshot.exists()) {
     const initial = {
@@ -52,10 +57,38 @@ export async function ensureUserProfile(user: User, preferredName?: string): Pro
     };
 
     await setDoc(ref, initial);
+
+    if (admin) {
+      await setDoc(
+        ref,
+        {
+          role: 'admin',
+          adminLevel: 'general',
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+      return mapProfile(user, { ...initial, role: 'admin', adminLevel: 'general' });
+    }
+
     return mapProfile(user, initial);
   }
 
-  return mapProfile(user, snapshot.data());
+  const data = snapshot.data();
+
+  if (admin && (data.role !== 'admin' || data.adminLevel !== 'general')) {
+    await setDoc(
+      ref,
+      {
+        role: 'admin',
+        adminLevel: 'general',
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+  }
+
+  return mapProfile(user, admin ? { ...data, role: 'admin', adminLevel: 'general' } : data);
 }
 
 export async function registerWithEmail(name: string, email: string, password: string) {
