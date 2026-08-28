@@ -16,9 +16,12 @@ import { HelpView } from './components/views/HelpView';
 import { NotificationToast } from './components/common/NotificationToast';
 import { MediaViewerModal } from './components/common/MediaViewerModal';
 import { AuthModal } from './components/views/AuthModal';
-import { subscribeToFirebaseUser } from './services/authService';
+import { completeRedirectLogin, subscribeToFirebaseUser } from './services/authService';
+import { auth } from './lib/firebase';
 import { Sparkles, AlertTriangle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
 const MainLayout: React.FC = () => {
   const {
@@ -32,34 +35,66 @@ const MainLayout: React.FC = () => {
     addNotification,
   } = useApp();
 
-  const [authReady, setAuthReady] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
 
   useEffect(() => {
-    return subscribeToFirebaseUser(
-      (profile) => {
-        if (profile) {
-          setUser(profile);
-          setIsAuthenticated(true);
-        } else {
-          resetUser();
-          setIsAuthenticated(false);
+    let mounted = true;
+    let unsubscribe = () => {};
+
+    const startAuth = async () => {
+      try {
+        const redirectProfile = await completeRedirectLogin();
+        if (redirectProfile && mounted) {
+          setUser(redirectProfile);
+          setAuthStatus('authenticated');
         }
-        setAuthReady(true);
-      },
-      (error) => {
-        console.warn('Firebase auth session sync error:', error);
-        resetUser();
-        setIsAuthenticated(false);
-        setAuthReady(true);
-        addNotification('warning', 'Synchronisation du compte', 'La session Firebase n’a pas pu être synchronisée.');
-      },
-    );
+      } catch (error) {
+        console.warn('Firebase redirect result error:', error);
+      }
+
+      unsubscribe = subscribeToFirebaseUser(
+        (profile) => {
+          if (!mounted) return;
+          if (profile) {
+            setUser(profile);
+            setAuthStatus('authenticated');
+          } else {
+            resetUser();
+            setAuthStatus('unauthenticated');
+          }
+        },
+        (error) => {
+          if (!mounted) return;
+          console.warn('Firebase profile/session sync warning:', error);
+
+          if (auth.currentUser) {
+            // The Firebase session is valid. Do not send the user back to login
+            // only because Firestore profile synchronization failed.
+            setAuthStatus('authenticated');
+            addNotification(
+              'warning',
+              'Profil à synchroniser',
+              'Votre connexion Firebase est active, mais le profil Firestore doit encore être synchronisé.',
+            );
+          } else {
+            resetUser();
+            setAuthStatus('unauthenticated');
+          }
+        },
+      );
+    };
+
+    startAuth();
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
   }, []);
 
-  if (!authReady) {
+  if (authStatus === 'loading') {
     return (
-      <div className="min-h-screen bg-[#050b18] text-white flex flex-col items-center justify-center gap-4">
+      <div className="min-h-screen bg-[#050b18] text-white flex flex-col items-center justify-center gap-4 px-6 text-center">
         <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center shadow-2xl border border-white/20">
           <Sparkles className="w-7 h-7" />
         </div>
@@ -69,7 +104,7 @@ const MainLayout: React.FC = () => {
     );
   }
 
-  if (!isAuthenticated) {
+  if (authStatus === 'unauthenticated') {
     return (
       <div className="min-h-screen bg-[#050b18]">
         <AuthModal required />
