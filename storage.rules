@@ -1,0 +1,55 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && (
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'merveillematondo2027@gmail.com'
+      );
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isImage() {
+      return request.resource != null
+        && request.resource.contentType != null
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Profile images uploaded directly by the authenticated user.
+    match /users/{userId}/avatar/{fileName} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if (isOwner(userId) || isAdmin())
+        && request.resource.size <= 5 * 1024 * 1024
+        && isImage();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Reference images used by Image/Veo studios.
+    match /users/{userId}/uploads/{fileName} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if (isOwner(userId) || isAdmin())
+        && request.resource.size <= 15 * 1024 * 1024
+        && isImage();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // AI outputs are written by the backend/Admin SDK only.
+    match /users/{userId}/generations/{allPaths=**} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

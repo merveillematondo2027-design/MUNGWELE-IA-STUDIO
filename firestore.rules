@@ -1,0 +1,126 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && (
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'merveillematondo2027@gmail.com'
+      );
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function ownsExisting() {
+      return signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    function ownsIncoming() {
+      return signedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // User profiles. Credits, role and welcome bonus are protected fields.
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+
+      allow create: if isOwner(userId)
+        && request.resource.data.credits == 50
+        && request.resource.data.role == 'user'
+        && request.resource.data.welcomeBonusGranted == true;
+
+      allow update: if isAdmin() || (
+        isOwner(userId)
+        && request.resource.data.credits == resource.data.credits
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.welcomeBonusGranted == resource.data.welcomeBonusGranted
+        && request.resource.data.totalGenerations == resource.data.totalGenerations
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Public application configuration. Only admins may change it.
+    match /appSettings/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /creditPacks/{packId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Generations are created/updated by the trusted backend (Admin SDK).
+    // Clients can only read/delete their own records.
+    match /generations/{generationId} {
+      allow read: if ownsExisting() || isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if ownsExisting() || isAdmin();
+    }
+
+    // Legacy media collections kept readable for migration compatibility.
+    match /images/{imageId} {
+      allow read: if ownsExisting() || isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if ownsExisting() || isAdmin();
+    }
+
+    match /videos/{videoId} {
+      allow read: if ownsExisting() || isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if ownsExisting() || isAdmin();
+    }
+
+    match /musics/{musicId} {
+      allow read: if ownsExisting() || isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if ownsExisting() || isAdmin();
+    }
+
+    // User-created workspace data.
+    match /projects/{projectId} {
+      allow read: if ownsExisting() || isAdmin();
+      allow create: if ownsIncoming();
+      allow update: if isAdmin() || (ownsExisting() && ownsIncoming());
+      allow delete: if ownsExisting() || isAdmin();
+    }
+
+    match /favorites/{favoriteId} {
+      allow read, delete: if ownsExisting() || isAdmin();
+      allow create: if ownsIncoming();
+      allow update: if isAdmin() || (ownsExisting() && ownsIncoming());
+    }
+
+    // Financial and system records are backend/admin write-only.
+    match /creditTransactions/{transactionId} {
+      allow read: if ownsExisting() || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if ownsExisting() || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /payments/{paymentId} {
+      allow read: if ownsExisting() || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /apiProviders/{providerId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
