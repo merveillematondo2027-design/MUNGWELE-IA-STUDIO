@@ -26,14 +26,16 @@ service cloud.firestore {
       return signedIn() && request.resource.data.userId == request.auth.uid;
     }
 
-    // User profiles. Credits, role and welcome bonus are protected fields.
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
 
       allow create: if isOwner(userId)
         && request.resource.data.credits == 50
-        && request.resource.data.role == 'user'
-        && request.resource.data.welcomeBonusGranted == true;
+        && request.resource.data.welcomeBonusGranted == true
+        && (
+          (isAdmin() && request.resource.data.role in ['admin', 'user']) ||
+          (!isAdmin() && request.resource.data.role == 'user')
+        );
 
       allow update: if isAdmin() || (
         isOwner(userId)
@@ -46,7 +48,6 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Public application configuration. Only admins may change it.
     match /appSettings/{document=**} {
       allow read: if true;
       allow write: if isAdmin();
@@ -57,15 +58,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Generations are created/updated by the trusted backend (Admin SDK).
-    // Clients can only read/delete their own records.
     match /generations/{generationId} {
       allow read: if ownsExisting() || isAdmin();
       allow create, update: if isAdmin();
       allow delete: if ownsExisting() || isAdmin();
     }
 
-    // Legacy media collections kept readable for migration compatibility.
     match /images/{imageId} {
       allow read: if ownsExisting() || isAdmin();
       allow create, update: if isAdmin();
@@ -84,7 +82,6 @@ service cloud.firestore {
       allow delete: if ownsExisting() || isAdmin();
     }
 
-    // User-created workspace data.
     match /projects/{projectId} {
       allow read: if ownsExisting() || isAdmin();
       allow create: if ownsIncoming();
@@ -98,7 +95,6 @@ service cloud.firestore {
       allow update: if isAdmin() || (ownsExisting() && ownsIncoming());
     }
 
-    // Financial and system records are backend/admin write-only.
     match /creditTransactions/{transactionId} {
       allow read: if ownsExisting() || isAdmin();
       allow write: if isAdmin();
