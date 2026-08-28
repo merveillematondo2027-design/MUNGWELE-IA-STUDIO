@@ -28,11 +28,7 @@ export const ProfileView: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(Boolean(auth.currentUser));
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  useEffect(() => {
-    return onAuthStateChanged(auth, (firebaseUser) => {
-      setIsAuthenticated(Boolean(firebaseUser));
-    });
-  }, []);
+  useEffect(() => onAuthStateChanged(auth, (firebaseUser) => setIsAuthenticated(Boolean(firebaseUser))), []);
 
   const openLogin = () => {
     setAuthMode('login');
@@ -49,7 +45,6 @@ export const ProfileView: React.FC = () => {
     setIsLoggingOut(true);
     try {
       await logoutFirebase();
-      localStorage.removeItem('mungwele_user');
       addNotification('success', 'Déconnexion réussie', 'Vous êtes maintenant déconnecté de MUNGWELE IA STUDIO.');
       setActiveTab('home');
     } catch (error) {
@@ -67,52 +62,54 @@ export const ProfileView: React.FC = () => {
           <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-tr from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center shadow-xl border border-white/20">
             <User className="w-8 h-8 text-white" />
           </div>
-
           <div>
             <h2 className="text-2xl font-display font-extrabold text-white">Mon compte MUNGWELE</h2>
-            <p className="text-sm text-gray-400 mt-2">
-              Connectez-vous pour retrouver vos crédits, votre galerie et vos créations IA.
-            </p>
+            <p className="text-sm text-gray-400 mt-2">Connectez-vous pour retrouver vos crédits, votre galerie et vos créations IA.</p>
           </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button
               id="profile-login-btn"
               onClick={openLogin}
-              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg border border-white/20 active:scale-[0.99] transition-all"
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg border border-white/20"
             >
               <LogIn className="w-5 h-5" />
               Se connecter
             </button>
-
             <button
               id="profile-register-btn"
               onClick={openRegister}
-              className="w-full py-3.5 px-4 rounded-2xl bg-white/[0.05] hover:bg-white/[0.08] border border-white/10 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all"
+              className="w-full py-3.5 px-4 rounded-2xl bg-white/[0.05] hover:bg-white/[0.08] border border-white/10 text-white font-bold text-sm flex items-center justify-center gap-2"
             >
               <UserPlus className="w-5 h-5" />
               Créer un compte
             </button>
           </div>
-
-          <p className="text-xs text-gray-500">Connexion disponible par e-mail/mot de passe ou avec Google.</p>
+          <p className="text-xs text-gray-500">Connexion réelle via Firebase Authentication.</p>
         </div>
       </div>
     );
   }
+
+  const roleLabel = user.role === 'admin' ? 'ADMIN GÉNÉRAL' : 'UTILISATEUR';
 
   return (
     <div id="profile-view-container" className="w-full max-w-4xl mx-auto space-y-8 pb-20">
       <div className="rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-6 sm:p-8 shadow-2xl">
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-left">
           <div className="relative">
-            <img
-              src={user.avatar}
-              alt={user.name}
-              className="w-24 h-24 rounded-3xl object-cover ring-4 ring-purple-500/40 shadow-xl border border-white/20"
-            />
-            <span className="absolute -bottom-2 -right-2 px-2.5 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-bold uppercase tracking-wider border-2 border-[#081226]">
-              {user.role}
+            {user.avatar ? (
+              <img
+                src={user.avatar}
+                alt={user.name}
+                className="w-24 h-24 rounded-3xl object-cover ring-4 ring-purple-500/40 shadow-xl border border-white/20"
+              />
+            ) : (
+              <div className="w-24 h-24 rounded-3xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center ring-4 ring-purple-500/20">
+                <User className="w-10 h-10 text-purple-300" />
+              </div>
+            )}
+            <span className={`absolute -bottom-2 -right-2 px-2.5 py-0.5 rounded-full text-white text-[10px] font-bold uppercase tracking-wider border-2 border-[#081226] ${user.role === 'admin' ? 'bg-rose-600' : 'bg-purple-600'}`}>
+              {roleLabel}
             </span>
           </div>
 
@@ -126,6 +123,12 @@ export const ProfileView: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+              {user.role === 'admin' && (
+                <span className="px-3 py-1 rounded-xl bg-rose-950/60 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center space-x-1">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Administrateur général</span>
+                </span>
+              )}
               <span className="px-3 py-1 rounded-xl bg-purple-950/60 border border-purple-500/30 text-purple-300 text-xs font-semibold flex items-center space-x-1">
                 <Sparkles className="w-3.5 h-3.5 text-pink-400" />
                 <span className="capitalize">Forfait {user.plan}</span>
@@ -147,7 +150,7 @@ export const ProfileView: React.FC = () => {
             id="profile-logout-btn"
             onClick={handleLogout}
             disabled={isLoggingOut}
-            className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 hover:text-rose-200 font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+            className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 hover:text-rose-200 font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <LogOut className="w-5 h-5" />
             {isLoggingOut ? 'Déconnexion...' : 'Se déconnecter'}
@@ -161,7 +164,7 @@ export const ProfileView: React.FC = () => {
           <h3 className="text-sm font-bold text-white">Compte sécurisé avec Firebase</h3>
         </div>
         <p className="text-xs text-gray-400 leading-relaxed">
-          Votre session est gérée par Firebase Authentication. Les clés secrètes des fournisseurs IA restent côté serveur et ne sont pas exposées dans le navigateur.
+          Votre session est gérée par Firebase Authentication. Aucun compte de démonstration n’est utilisé dans l’application.
         </p>
       </div>
     </div>
