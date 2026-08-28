@@ -1,57 +1,4 @@
-import { PlanConfig, UserProfile, ApiProviderSetting } from '../types';
-
-export const INITIAL_USER: UserProfile = {
-  id: 'usr-demo-01',
-  name: 'Merveille Matondo',
-  email: 'merveillematondo2027@gmail.com',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
-  role: 'admin',
-  status: 'active',
-  credits: 185,
-  plan: 'creator',
-  totalGenerations: 24,
-  createdAt: '2025-01-15T10:00:00.000Z',
-};
-
-export const DEMO_USERS: UserProfile[] = [
-  INITIAL_USER,
-  {
-    id: 'usr-demo-02',
-    name: 'Sarah Connor',
-    email: 'sarah.c@studio.ai',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=250&q=80',
-    role: 'user',
-    status: 'active',
-    credits: 45,
-    plan: 'free',
-    totalGenerations: 8,
-    createdAt: '2025-02-10T14:20:00.000Z',
-  },
-  {
-    id: 'usr-demo-03',
-    name: 'Alexandre Dumas',
-    email: 'alex.dumas@creators.io',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=250&q=80',
-    role: 'user',
-    status: 'active',
-    credits: 920,
-    plan: 'pro',
-    totalGenerations: 114,
-    createdAt: '2024-11-05T09:15:00.000Z',
-  },
-  {
-    id: 'usr-demo-04',
-    name: 'David Kasongo',
-    email: 'david.k@enterprise.com',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=250&q=80',
-    role: 'user',
-    status: 'blocked',
-    credits: 0,
-    plan: 'free',
-    totalGenerations: 3,
-    createdAt: '2025-02-01T16:45:00.000Z',
-  },
-];
+import { PlanConfig } from '../types';
 
 export const SUBSCRIPTION_PLANS: PlanConfig[] = [
   {
@@ -135,7 +82,7 @@ export const STYLE_PRESETS_VIDEO = [
   { id: 'cinematic', label: 'Cinématique', icon: '🎥', desc: 'Prises de vue de film, travelling dynamique 60fps' },
   { id: 'commercial', label: 'Publicitaire', icon: '🛍️', desc: 'Couleurs éclatantes, rythme dynamique haut de gamme' },
   { id: 'realistic', label: 'Réaliste', icon: '📹', desc: 'Mouvements fluides naturels en haute définition' },
-  { id: '3d_animation', label: 'Animation 3D', icon: '🧸', desc: 'Style Pixar / DreamWorks volumétrique' },
+  { id: '3d_animation', label: 'Animation 3D', icon: '🧸', desc: 'Style animation 3D volumétrique' },
   { id: 'social_media', label: 'Réseaux sociaux', icon: '📱', desc: 'Format vertical accrocheur pour TikTok et Reels' },
   { id: 'music_clip', label: 'Clip musical', icon: '🎵', desc: 'Effets visuels rythmés et néons vibrants' },
 ];
