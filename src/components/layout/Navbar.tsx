@@ -1,38 +1,69 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
 import { useApp } from '../../context/AppContext';
-import { 
-  Zap, 
-  Sun, 
-  Moon, 
-  Sparkles, 
-  User, 
-  PlusCircle, 
-  ShieldAlert, 
-  HelpCircle,
-  FolderOpen
+import { auth } from '../../lib/firebase';
+import { logoutFirebase } from '../../services/authService';
+import {
+  Zap,
+  Sun,
+  Moon,
+  Sparkles,
+  PlusCircle,
+  LogIn,
+  LogOut,
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
-  const { 
-    user, 
-    credits, 
-    activeTab, 
-    setActiveTab, 
-    isDarkMode, 
-    toggleTheme, 
+  const {
+    user,
+    credits,
+    activeTab,
+    setActiveTab,
+    isDarkMode,
+    toggleTheme,
     setIsAuthModalOpen,
+    setAuthMode,
     setActiveStudio,
-    generations
+    addNotification,
   } = useApp();
 
+  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(auth.currentUser));
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, (firebaseUser) => {
+      setIsAuthenticated(Boolean(firebaseUser));
+    });
+  }, []);
+
+  const openLogin = () => {
+    setAuthMode('login');
+    setIsAuthModalOpen(true);
+  };
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await logoutFirebase();
+      localStorage.removeItem('mungwele_user');
+      setActiveTab('home');
+      addNotification('success', 'Déconnexion réussie', 'Votre session Firebase a été fermée.');
+    } catch (error) {
+      console.warn('Firebase logout error:', error);
+      addNotification('error', 'Déconnexion impossible', 'Réessayez dans quelques instants.');
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
   return (
-    <header 
+    <header
       id="top-navbar"
       className="sticky top-0 z-30 w-full h-16 bg-white/[0.03] backdrop-blur-2xl border-b border-white/10 px-4 lg:px-8 flex items-center justify-between transition-colors shadow-lg shadow-black/20"
     >
-      {/* Brand on mobile (on desktop handled by sidebar) */}
       <div className="flex items-center space-x-3 lg:hidden">
-        <button 
+        <button
           onClick={() => setActiveTab('home')}
           className="flex items-center space-x-2 text-left"
         >
@@ -50,7 +81,6 @@ export const Navbar: React.FC = () => {
         </button>
       </div>
 
-      {/* Slogan on Desktop */}
       <div className="hidden lg:flex items-center space-x-3">
         <span className="text-xs font-semibold px-3 py-1 rounded-full bg-white/[0.04] backdrop-blur-md border border-white/10 text-purple-200 flex items-center space-x-1.5 shadow-sm">
           <Sparkles className="w-3.5 h-3.5 text-pink-400" />
@@ -58,9 +88,7 @@ export const Navbar: React.FC = () => {
         </span>
       </div>
 
-      {/* Right Navigation & Controls */}
       <div className="flex items-center space-x-2 sm:space-x-4">
-        {/* Quick Studio Switcher (Compact Desktop) */}
         <div className="hidden md:flex items-center space-x-1 p-1 rounded-xl bg-white/[0.04] backdrop-blur-md border border-white/10">
           <button
             onClick={() => {
@@ -86,7 +114,7 @@ export const Navbar: React.FC = () => {
                 : 'text-gray-300 hover:text-white hover:bg-white/5'
             }`}
           >
-            Vidéo (Veo 3)
+            Vidéo
           </button>
           <button
             onClick={() => {
@@ -103,24 +131,20 @@ export const Navbar: React.FC = () => {
           </button>
         </div>
 
-        {/* Credits Counter Pill */}
-        <button
-          id="navbar-credits-btn"
-          onClick={() => setActiveTab('subscription')}
-          className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.08] backdrop-blur-md border border-amber-500/30 text-amber-300 transition-all shadow-sm active:scale-95"
-          title="Recharger des crédits"
-        >
-          <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
-          <span className="text-xs font-bold font-mono tracking-tight text-white">
-            {credits}
-          </span>
-          <span className="text-[10px] uppercase font-semibold text-amber-400/90 hidden sm:inline">
-            Crédits
-          </span>
-          <PlusCircle className="w-3.5 h-3.5 text-amber-400 hidden sm:inline" />
-        </button>
+        {isAuthenticated && (
+          <button
+            id="navbar-credits-btn"
+            onClick={() => setActiveTab('subscription')}
+            className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.08] backdrop-blur-md border border-amber-500/30 text-amber-300 transition-all shadow-sm active:scale-95"
+            title="Recharger des crédits"
+          >
+            <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
+            <span className="text-xs font-bold font-mono tracking-tight text-white">{credits}</span>
+            <span className="text-[10px] uppercase font-semibold text-amber-400/90 hidden sm:inline">Crédits</span>
+            <PlusCircle className="w-3.5 h-3.5 text-amber-400 hidden sm:inline" />
+          </button>
+        )}
 
-        {/* Theme Mode Toggle */}
         <button
           id="theme-toggle-btn"
           onClick={toggleTheme}
@@ -130,26 +154,48 @@ export const Navbar: React.FC = () => {
           {isDarkMode ? <Sun className="w-4 h-4 text-amber-300" /> : <Moon className="w-4 h-4 text-purple-400" />}
         </button>
 
-        {/* User Profile avatar */}
-        <button
-          id="navbar-profile-btn"
-          onClick={() => setActiveTab('profile')}
-          className="flex items-center space-x-2 p-1 pl-1.5 pr-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-md border border-white/10 text-white transition-colors"
-        >
-          <img
-            src={user.avatar}
-            alt={user.name}
-            className="w-7 h-7 rounded-lg object-cover ring-2 ring-purple-500/40"
-          />
-          <div className="hidden sm:block text-left">
-            <span className="text-xs font-semibold leading-none block truncate max-w-[100px]">
-              {user.name.split(' ')[0]}
-            </span>
-            <span className="text-[10px] text-purple-400 uppercase font-medium">
-              {user.plan}
-            </span>
-          </div>
-        </button>
+        {!isAuthenticated ? (
+          <button
+            id="navbar-login-btn"
+            onClick={openLogin}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 hover:opacity-95 text-white text-xs font-bold border border-white/20 shadow-lg active:scale-95 transition-all"
+          >
+            <LogIn className="w-4 h-4" />
+            <span className="hidden sm:inline">Connexion</span>
+          </button>
+        ) : (
+          <>
+            <button
+              id="navbar-profile-btn"
+              onClick={() => setActiveTab('profile')}
+              className="flex items-center space-x-2 p-1 pl-1.5 pr-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-md border border-white/10 text-white transition-colors"
+              title="Ouvrir mon profil"
+            >
+              <img
+                src={user.avatar}
+                alt={user.name}
+                className="w-7 h-7 rounded-lg object-cover ring-2 ring-purple-500/40"
+              />
+              <div className="hidden sm:block text-left">
+                <span className="text-xs font-semibold leading-none block truncate max-w-[100px]">
+                  {user.name.split(' ')[0]}
+                </span>
+                <span className="text-[10px] text-purple-400 uppercase font-medium">{user.plan}</span>
+              </div>
+            </button>
+
+            <button
+              id="navbar-logout-btn"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-rose-500/10 border border-white/10 hover:border-rose-500/30 text-gray-300 hover:text-rose-300 text-xs font-bold transition-all disabled:opacity-50"
+              title="Se déconnecter"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">{isLoggingOut ? 'Déconnexion...' : 'Déconnexion'}</span>
+            </button>
+          </>
+        )}
       </div>
     </header>
   );
