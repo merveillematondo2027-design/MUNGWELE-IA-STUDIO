@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
@@ -16,22 +16,42 @@ import { HelpView } from './components/views/HelpView';
 import { NotificationToast } from './components/common/NotificationToast';
 import { MediaViewerModal } from './components/common/MediaViewerModal';
 import { AuthModal } from './components/views/AuthModal';
+import { subscribeToFirebaseUser } from './services/authService';
 import { Sparkles, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+const FirebaseSessionBridge: React.FC = () => {
+  const { setUser, addNotification } = useApp();
+
+  useEffect(() => {
+    return subscribeToFirebaseUser(
+      (profile) => {
+        if (profile) setUser(profile);
+      },
+      (error) => {
+        console.warn('Firebase auth session sync error:', error);
+        addNotification('warning', 'Synchronisation du compte', 'La session Firebase n’a pas pu être synchronisée.');
+      },
+    );
+  }, [setUser]);
+
+  return null;
+};
+
 const MainLayout: React.FC = () => {
-  const { 
-    activeTab, 
-    activeMediaModal, 
+  const {
+    activeTab,
+    activeMediaModal,
     setActiveMediaModal,
-    appSettings 
+    appSettings,
   } = useApp();
 
   const isStudioTab = activeTab.startsWith('studio-');
 
   return (
     <div className="relative min-h-screen bg-[#081226] text-gray-100 flex flex-col antialiased selection:bg-purple-600 selection:text-white font-sans overflow-x-hidden">
-      {/* Background Frosted Glass Ambient Light Orbs */}
+      <FirebaseSessionBridge />
+
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         <div className="absolute -top-32 -left-32 w-[550px] h-[550px] bg-purple-600/15 rounded-full blur-[120px]" />
         <div className="absolute top-1/3 -right-32 w-[500px] h-[500px] bg-blue-600/15 rounded-full blur-[140px]" />
@@ -39,18 +59,13 @@ const MainLayout: React.FC = () => {
         <div className="absolute top-2/3 right-1/4 w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[130px]" />
       </div>
 
-      {/* Optional Announcement Banner */}
       {appSettings.announcementBanner && (
-        <div 
-          id="global-announcement-banner"
-          className="relative z-30 bg-gradient-to-r from-purple-900/60 via-pink-900/50 to-blue-900/60 backdrop-blur-xl border-b border-white/10 px-4 py-2 text-center text-xs font-semibold text-white flex items-center justify-center space-x-2 shadow-lg"
-        >
+        <div className="relative z-30 bg-gradient-to-r from-purple-900/60 via-pink-900/50 to-blue-900/60 backdrop-blur-xl border-b border-white/10 px-4 py-2 text-center text-xs font-semibold text-white flex items-center justify-center space-x-2 shadow-lg">
           <Sparkles className="w-3.5 h-3.5 text-pink-300 animate-pulse" />
           <span>{appSettings.announcementBanner}</span>
         </div>
       )}
 
-      {/* Maintenance Mode Alert */}
       {appSettings.maintenanceMode && (
         <div className="relative z-30 bg-amber-950/60 backdrop-blur-xl border-b border-amber-500/30 px-4 py-2 text-center text-xs font-semibold text-amber-200 flex items-center justify-center space-x-2 shadow-lg">
           <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -58,21 +73,12 @@ const MainLayout: React.FC = () => {
         </div>
       )}
 
-      {/* Main Structural Wrapper */}
       <div className="relative z-10 flex-1 flex flex-row overflow-hidden">
-        {/* Left Desktop Sidebar */}
         <Sidebar />
-
-        {/* Right Content Area */}
         <div className="flex-1 flex flex-col min-w-0 min-h-screen">
-          {/* Top Navbar */}
           <Navbar />
-
-          {/* Dynamic Content Views */}
           <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 overflow-y-auto">
-            {/* Quick 3-Studio switcher tabs if viewing any studio */}
             {isStudioTab && <StudioTabsHeader />}
-
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
@@ -97,19 +103,9 @@ const MainLayout: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Bottom Navigation Bar */}
       <MobileNav />
-
-      {/* Global Notification Toast Container */}
       <NotificationToast />
-
-      {/* Global Media Lightbox Viewer Modal */}
-      <MediaViewerModal
-        media={activeMediaModal}
-        onClose={() => setActiveMediaModal(null)}
-      />
-
-      {/* Authentication Modal */}
+      <MediaViewerModal media={activeMediaModal} onClose={() => setActiveMediaModal(null)} />
       <AuthModal />
     </div>
   );
