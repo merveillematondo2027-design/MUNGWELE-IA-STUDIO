@@ -86,7 +86,6 @@ export async function generateVideo(
     aspectRatio: options.aspectRatio,
     durationSeconds: effectiveDuration,
     resolution: '720p',
-    generateAudio: true,
   };
 
   if (last) {
