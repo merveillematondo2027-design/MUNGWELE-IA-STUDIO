@@ -1,351 +1,113 @@
 import React, { useRef, useState } from 'react';
+import { Image as ImageIcon, Plus, Send, Settings2, X, Loader2, Film, Download } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import {
-  Copy,
-  Download,
-  Film,
-  Image as ImageIcon,
-  Maximize2,
-  RefreshCw,
-  Sparkles,
-  Trash2,
-  Upload,
-  X,
-} from 'lucide-react';
-import { GenerationRecord } from '../../types';
 
 export const ImageStudio: React.FC = () => {
-  const {
-    useCredits,
-    refundCredits,
-    addGeneration,
-    removeGeneration,
-    addNotification,
-    setActiveMediaModal,
-    setImageToVideoTransfer,
-    setActiveStudio,
-    setActiveTab,
-    triggerCelebration,
-    generations,
-  } = useApp();
-
+  const { useCredits, refundCredits, addGeneration, addNotification, triggerCelebration, generations, setImageToVideoTransfer, setActiveStudio, setActiveTab } = useApp();
   const [prompt, setPrompt] = useState('');
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generationProgress, setGenerationProgress] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const imageCreations = generations.filter((g) => g.type === 'image');
   const creditCost = 8;
+  const latest = generations.find((g) => g.type === 'image');
 
-  const clearWorkspace = () => {
-    setPrompt('');
-    setReferenceImage(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleFileUpload = (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      addNotification('error', 'Format invalide', 'Importez une image PNG, JPG ou WEBP.');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      addNotification('error', 'Fichier trop lourd', 'La taille maximale est de 10 Mo.');
-      return;
-    }
-
+  const loadImage = (file: File) => {
+    if (!file.type.startsWith('image/')) return addNotification('error', 'Format invalide', 'Utilisez PNG, JPG ou WEBP.');
+    if (file.size > 10 * 1024 * 1024) return addNotification('error', 'Fichier trop lourd', '10 Mo maximum.');
     const reader = new FileReader();
-    reader.onload = () => {
-      setReferenceImage(reader.result as string);
-      addNotification(
-        'info',
-        'Image chargée',
-        'Décrivez maintenant uniquement la modification à effectuer dans le prompt.'
-      );
-    };
+    reader.onload = () => setReferenceImage(reader.result as string);
     reader.readAsDataURL(file);
   };
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) {
-      addNotification('warning', 'Prompt requis', 'Décrivez précisément ce que vous voulez créer ou modifier.');
-      return;
-    }
-
-    const hadReferenceImage = Boolean(referenceImage);
-    const reason = hadReferenceImage ? 'Retouche image par prompt' : 'Génération image par prompt';
-    const allowed = useCredits(creditCost, reason);
-    if (!allowed) return;
-
+  const generate = async () => {
+    if (!prompt.trim()) return addNotification('warning', 'Prompt requis', 'Décrivez ce que vous voulez créer ou modifier.');
+    const reason = referenceImage ? 'Retouche image par prompt' : 'Génération image par prompt';
+    if (!useCredits(creditCost, reason)) return;
     setIsGenerating(true);
-    setGenerationProgress(12);
-
-    const timer = window.setInterval(() => {
-      setGenerationProgress((current) => (current >= 88 ? 88 : current + 12));
-    }, 550);
-
     try {
       const response = await fetch('/api/generate/image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: prompt.trim(),
-          enhancedPrompt: prompt.trim(),
-          referenceImage,
-        }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompt.trim(), enhancedPrompt: prompt.trim(), referenceImage }),
       });
-
       const data = await response.json().catch(() => ({}));
-      window.clearInterval(timer);
-
-      if (!response.ok || !data.generation) {
-        throw new Error(data.error || 'La génération a échoué.');
-      }
-
-      if (String(data.generation.resultUrl || '').includes('images.unsplash.com')) {
-        throw new Error('Résultat de démonstration refusé. Réessayez avec le fournisseur IA réel.');
-      }
-
-      setGenerationProgress(100);
+      if (!response.ok || !data.generation) throw new Error(data.error || 'La génération a échoué.');
       addGeneration(data.generation);
       triggerCelebration();
-      clearWorkspace();
-      addNotification(
-        'success',
-        hadReferenceImage ? 'Modification terminée' : 'Image générée',
-        hadReferenceImage
-          ? 'La modification a été appliquée. Le prompt et l’image de référence ont été vidés pour votre prochain projet.'
-          : 'Votre image a été créée. Le champ du prompt a été vidé pour votre prochain projet.'
-      );
+      setPrompt('');
+      setReferenceImage(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      addNotification('success', 'Image prête', 'Votre création est disponible.');
     } catch (error: any) {
-      window.clearInterval(timer);
       refundCredits(creditCost, reason);
-      addNotification(
-        'error',
-        'Génération impossible',
-        error?.message || 'Le fournisseur IA est temporairement indisponible. Vos crédits ont été remboursés.'
-      );
+      addNotification('error', 'Génération impossible', error?.message || 'Erreur fournisseur. Vos crédits ont été remboursés.');
     } finally {
       setIsGenerating(false);
-      window.setTimeout(() => setGenerationProgress(0), 250);
     }
   };
 
-  const handleTransferToVideo = (imageUrl: string) => {
-    setImageToVideoTransfer(imageUrl);
+  const toVideo = () => {
+    if (!latest?.resultUrl) return;
+    setImageToVideoTransfer(latest.resultUrl);
     setActiveStudio('video');
     setActiveTab('studio-video');
-    addNotification('success', 'Image envoyée vers Vidéo', 'Décrivez l’animation souhaitée dans le prompt vidéo.');
-  };
-
-  const reusePrompt = (generation: GenerationRecord) => {
-    setPrompt(generation.prompt);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    addNotification('info', 'Prompt repris', 'Le prompt a été replacé dans le champ principal.');
   };
 
   return (
-    <div id="image-studio-container" className="w-full max-w-6xl mx-auto space-y-8 pb-16">
-      <section className="bg-white/[0.04] backdrop-blur-2xl border border-white/10 rounded-3xl p-5 sm:p-7 shadow-2xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-white/10">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-display font-extrabold text-white flex items-center gap-2">
-              <span className="p-2 rounded-xl bg-purple-600/20 text-purple-300 border border-purple-500/30">
-                <ImageIcon className="w-5 h-5" />
-              </span>
-              <span>Studio Image IA</span>
-            </h2>
-            <p className="text-xs sm:text-sm text-gray-400 mt-1">
-              Un seul contrôle créatif : votre prompt. Décrivez tout ce que vous voulez, y compris les retouches.
-            </p>
-          </div>
+    <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-5xl flex-col">
+      <div className="mb-5 flex items-center justify-between px-1">
+        <div><h1 className="text-xl font-black text-white sm:text-2xl">Studio Image</h1><p className="mt-1 text-xs text-gray-500">Écrivez, joignez une référence si nécessaire, générez.</p></div>
+        <span className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-bold text-amber-300">{creditCost} crédits</span>
+      </div>
 
-          <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-white/[0.05] border border-purple-500/30 text-purple-200">
-            {creditCost} crédits / image
-          </span>
-        </div>
-
-        <div className="space-y-5 pt-5">
-          <div>
-            <label className="block text-sm font-bold text-gray-200 mb-2">
-              Prompt détaillé
-            </label>
-            <textarea
-              id="image-prompt-input"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder={
-                referenceImage
-                  ? 'Ex : Garde exactement cette image et ajoute seulement le texte « Maman » en lettres dorées élégantes au centre, sans modifier les visages, les vêtements ni le décor.'
-                  : 'Ex : Crée une affiche publicitaire premium pour une boutique de mode, fond blanc, lumière studio douce, mannequin élégant, typographie dorée...'
-              }
-              rows={6}
-              className="w-full px-4 py-4 rounded-2xl bg-white/[0.04] border border-white/10 focus:border-purple-500/80 text-white placeholder-gray-500 text-sm outline-none resize-y shadow-inner"
-            />
-            <p className="mt-2 text-[11px] text-gray-500">
-              Indiquez directement dans le prompt le style, le format, l’éclairage, les couleurs, le texte exact et tous les détails souhaités.
-            </p>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-gray-300">
-                Image à modifier ou référence
-              </label>
-              {referenceImage && (
-                <span className="text-[10px] text-emerald-300">Mode modification activé</span>
-              )}
+      <div className="flex flex-1 flex-col justify-end rounded-[28px] border border-white/10 bg-white/[0.025] p-3 sm:p-5">
+        <div className="flex-1 overflow-y-auto pb-6">
+          {latest ? (
+            <div className="mx-auto max-w-3xl">
+              <div className="overflow-hidden rounded-3xl border border-white/10 bg-black/20">
+                <img src={latest.resultUrl} alt={latest.title} className="max-h-[58vh] w-full object-contain" />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={() => { const a=document.createElement('a'); a.href=latest.resultUrl; a.download=`mungwele-image-${latest.id}.png`; a.click(); }} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-bold text-gray-200"><Download className="h-3.5 w-3.5" /> Télécharger</button>
+                <button onClick={toVideo} className="inline-flex items-center gap-2 rounded-xl border border-pink-500/20 bg-pink-500/10 px-3 py-2 text-xs font-bold text-pink-200"><Film className="h-3.5 w-3.5" /> Animer avec Veo</button>
+              </div>
             </div>
-
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
-            />
-
-            {referenceImage ? (
-              <div className="relative rounded-2xl overflow-hidden border border-purple-500/40 bg-black/20">
-                <img src={referenceImage} alt="Image à modifier" className="w-full max-h-80 object-contain" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReferenceImage(null);
-                    if (fileInputRef.current) fileInputRef.current.value = '';
-                  }}
-                  className="absolute top-3 right-3 p-2 rounded-full bg-black/70 hover:bg-rose-600 text-white"
-                  title="Retirer l'image"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  if (e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]);
-                }}
-                className="w-full py-5 px-6 rounded-2xl border border-dashed border-white/15 hover:border-purple-500/60 bg-white/[0.02] hover:bg-white/[0.05] flex items-center justify-center gap-3 transition-all"
-              >
-                <Upload className="w-5 h-5 text-purple-400" />
-                <div className="text-left">
-                  <span className="text-xs font-semibold text-gray-300 block">Importer une image à modifier</span>
-                  <span className="text-[10px] text-gray-500">PNG, JPG ou WEBP — 10 Mo maximum</span>
-                </div>
-              </button>
-            )}
-          </div>
-
-          {isGenerating && (
-            <div className="p-4 rounded-2xl bg-white/[0.04] border border-purple-500/40 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-purple-300 flex items-center gap-2">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  {referenceImage ? 'Application précise de votre modification...' : 'Création à partir de votre prompt...'}
-                </span>
-                <span className="font-mono text-purple-400 font-bold">{generationProgress}%</span>
-              </div>
-              <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500 transition-all duration-300"
-                  style={{ width: `${generationProgress}%` }}
-                />
-              </div>
+          ) : (
+            <div className="flex min-h-[42vh] flex-col items-center justify-center text-center">
+              <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-purple-500/20 bg-purple-500/10"><ImageIcon className="h-5 w-5 text-purple-200" /></span>
+              <p className="text-sm font-bold text-gray-300">Votre prochaine image commence par un prompt.</p>
+              <p className="mt-1 max-w-md text-xs leading-5 text-gray-600">Pour une retouche, ajoutez simplement l’image avec + puis décrivez uniquement la modification.</p>
             </div>
           )}
-
-          <button
-            id="btn-generate-image"
-            onClick={handleGenerate}
-            disabled={isGenerating || !prompt.trim()}
-            className="w-full py-4 rounded-2xl font-display font-extrabold text-base bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white flex items-center justify-center gap-3 shadow-xl transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed border border-white/20"
-          >
-            {isGenerating ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-            <span>{referenceImage ? `Modifier l’image (${creditCost} crédits)` : `Générer l’image (${creditCost} crédits)`}</span>
-          </button>
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2">
-            <span>Galerie d’Images</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-purple-500/30 text-purple-300 font-mono">
-              {imageCreations.length}
-            </span>
-          </h3>
         </div>
 
-        {imageCreations.length === 0 ? (
-          <div className="text-center py-12 px-4 rounded-3xl bg-white/[0.02] border border-white/10">
-            <ImageIcon className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-gray-300">Aucune image générée pour l’instant</p>
-            <p className="text-xs text-gray-500 mt-1">Écrivez un prompt détaillé puis lancez la génération.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {imageCreations.map((gen) => (
-              <article key={gen.id} className="group rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden shadow-xl">
-                <button
-                  type="button"
-                  onClick={() => setActiveMediaModal(gen)}
-                  className="relative aspect-square w-full overflow-hidden bg-black/40"
-                >
-                  <img src={gen.resultUrl} alt={gen.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                  <span className="absolute bottom-3 left-3 text-xs font-semibold text-white flex items-center gap-1 bg-black/50 px-2 py-1 rounded-lg">
-                    <Maximize2 className="w-3.5 h-3.5" /> Agrandir
-                  </span>
-                </button>
-
-                <div className="p-4 space-y-3">
-                  <h4 className="text-xs font-bold text-white line-clamp-1">{gen.title}</h4>
-                  <p className="text-[11px] text-gray-400 line-clamp-3">{gen.prompt}</p>
-
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const a = document.createElement('a');
-                        a.href = gen.resultUrl;
-                        a.download = `mungwele-image-${gen.id}.png`;
-                        a.click();
-                      }}
-                      className="py-2 rounded-lg bg-white/[0.06] text-gray-200 text-[10px] flex items-center justify-center gap-1"
-                    >
-                      <Download className="w-3 h-3" /> Télécharger
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleTransferToVideo(gen.resultUrl)}
-                      className="py-2 rounded-lg bg-pink-950/40 border border-pink-500/30 text-pink-200 text-[10px] flex items-center justify-center gap-1"
-                    >
-                      <Film className="w-3 h-3" /> Vers Vidéo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => reusePrompt(gen)}
-                      className="py-2 rounded-lg bg-white/[0.06] text-gray-200 text-[10px] flex items-center justify-center gap-1"
-                    >
-                      <Copy className="w-3 h-3" /> Reprendre prompt
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeGeneration(gen.id)}
-                      className="py-2 rounded-lg bg-rose-950/30 border border-rose-500/20 text-rose-300 text-[10px] flex items-center justify-center gap-1"
-                    >
-                      <Trash2 className="w-3 h-3" /> Supprimer
-                    </button>
-                  </div>
-                </div>
-              </article>
-            ))}
+        {referenceImage && (
+          <div className="mb-2 flex items-center gap-2 px-1">
+            <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-purple-400/30 bg-black/20"><img src={referenceImage} alt="Référence" className="h-full w-full object-cover" /><button onClick={() => setReferenceImage(null)} className="absolute right-1 top-1 rounded-full bg-black/70 p-1"><X className="h-3 w-3" /></button></div>
+            <span className="text-[11px] text-gray-500">Image de référence ajoutée</span>
           </div>
         )}
-      </section>
+
+        <div className="rounded-3xl border border-white/10 bg-[#0b1426]/95 p-2 shadow-2xl">
+          <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && loadImage(e.target.files[0])} />
+          <div className="flex items-end gap-2">
+            <button onClick={() => fileInputRef.current?.click()} className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-gray-300 hover:bg-white/[0.1]" title="Ajouter une image"><Plus className="h-5 w-5" /></button>
+            <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); generate(); } }} rows={2} placeholder={referenceImage ? 'Décrivez uniquement la modification à appliquer…' : 'Décrivez l’image que vous voulez créer…'} className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-3 text-sm text-white outline-none placeholder:text-gray-600" />
+            <button onClick={() => setSettingsOpen(true)} className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-gray-400 hover:text-white" title="Réglages"><Settings2 className="h-4 w-4" /></button>
+            <button onClick={generate} disabled={isGenerating || !prompt.trim()} className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-600 via-pink-600 to-blue-600 text-white disabled:opacity-40" title="Générer">{isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</button>
+          </div>
+        </div>
+      </div>
+
+      {settingsOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm" onClick={() => setSettingsOpen(false)}>
+          <aside className="h-full w-full max-w-sm border-l border-white/10 bg-[#09111f] p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between"><div><h2 className="text-lg font-black text-white">Réglages Image</h2><p className="text-xs text-gray-500">Le prompt reste le contrôle créatif principal.</p></div><button onClick={() => setSettingsOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.05]"><X className="h-4 w-4" /></button></div>
+            <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-4"><p className="text-xs font-bold text-white">Coût actuel</p><p className="mt-2 text-2xl font-black text-amber-300">{creditCost} crédits</p><p className="mt-2 text-[11px] leading-5 text-gray-500">Les styles, textes, couleurs et détails se décrivent directement dans le prompt. Aucun preset n’est imposé.</p></div>
+            <button onClick={() => setSettingsOpen(false)} className="mt-6 w-full rounded-2xl bg-white text-sm font-black text-[#08101f] py-3">Appliquer</button>
+          </aside>
+        </div>
+      )}
     </div>
   );
 };
