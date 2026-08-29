@@ -1,20 +1,22 @@
 import React from 'react';
-import { ArrowRight, Film, Image as ImageIcon, Music as MusicIcon, Sparkles } from 'lucide-react';
+import { ArrowRight, Clapperboard, Film, Image as ImageIcon, Music as MusicIcon, Sparkles } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import type { StudioType } from '../../types';
 import brandLogo from '../../assets/mungwele-brand.svg';
 import { CommunityFeed } from '../community/CommunityFeed';
 
 export const HomeView: React.FC = () => {
   const { setActiveStudio, setActiveTab, user } = useApp();
 
-  const openProjects = (studio: 'image' | 'video' | 'music') => {
+  const openProjects = (studio: StudioType) => {
     setActiveStudio(studio);
     setActiveTab(`projects-${studio}` as any);
   };
 
   const modules = [
     { id: 'image' as const, title: 'Image', subtitle: 'Créer & modifier', icon: ImageIcon, accent: 'from-purple-500/25 to-fuchsia-500/5', iconBg: 'bg-purple-500/15 border-purple-400/30 text-purple-200' },
-    { id: 'video' as const, title: 'Vidéo', subtitle: 'Veo + Omni', icon: Film, accent: 'from-pink-500/25 to-rose-500/5', iconBg: 'bg-pink-500/15 border-pink-400/30 text-pink-200' },
+    { id: 'video' as const, title: 'Vidéo', subtitle: 'Routeur vidéo IA', icon: Film, accent: 'from-pink-500/25 to-rose-500/5', iconBg: 'bg-pink-500/15 border-pink-400/30 text-pink-200' },
+    { id: 'clips' as const, title: 'Clips Vidéo', subtitle: 'Musique → clip', icon: Clapperboard, accent: 'from-fuchsia-500/25 to-violet-500/5', iconBg: 'bg-fuchsia-500/15 border-fuchsia-400/30 text-fuchsia-200' },
     { id: 'music' as const, title: 'Musique', subtitle: 'Composer avec IA', icon: MusicIcon, accent: 'from-blue-500/25 to-cyan-500/5', iconBg: 'bg-blue-500/15 border-blue-400/30 text-blue-200' },
   ];
 
@@ -28,7 +30,7 @@ export const HomeView: React.FC = () => {
         <p className="mt-1 text-[11px] text-gray-700">Bonjour {user.name || 'créateur'}.</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
         {modules.map((module) => {
           const Icon = module.icon;
           return (
@@ -47,7 +49,7 @@ export const HomeView: React.FC = () => {
         })}
       </div>
 
-      <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-center text-[11px] leading-5 text-gray-500">Vidéo : Veo 3.1 Lite, Fast, Pro et Gemini Omni Flash 1.1.</div>
+      <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-center text-[11px] leading-5 text-gray-500">MUNGWELE choisit automatiquement le moteur adapté au résultat demandé et protège les crédits selon le coût réel des fournisseurs.</div>
 
       <CommunityFeed compact />
     </div>
