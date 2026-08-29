@@ -115,7 +115,7 @@ export interface CreditPackConfig {
 export interface ApiProviderSetting {
   id: string;
   name: string;
-  providerKey: 'gemini' | 'openai' | 'veo' | 'suno';
+  providerKey: 'gemini' | 'openai' | 'veo' | 'suno' | 'elevenlabs';
   category: 'image' | 'video' | 'music' | 'text';
   enabled: boolean;
   isConfigured: boolean;

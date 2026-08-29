@@ -6,7 +6,8 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { generateVideo, type VideoModel as VeoVideoModel, type VeoAspectRatio, type VideoDuration } from './server/veo';
 import { generateOmniVideo } from './server/omni';
-import { VIDEO_CREDIT_COSTS, assertMonetizationSafe, type MonetizedVideoModel } from './server/pricing';
+import { createElevenMusicPlan, generateElevenMusicFromPlan, type ElevenMusicPlan } from './server/elevenMusic';
+import { VIDEO_CREDIT_COSTS, assertMonetizationSafe, assertMusicMonetizationSafe, musicCreditsForDurationMs, type MonetizedVideoModel } from './server/pricing';
 
 dotenv.config();
 
@@ -29,6 +30,8 @@ function getAI() {
 const now = () => new Date().toISOString();
 let generations: any[] = [];
 const technicalLogs: any[] = [];
+const musicConfigured = () => !!(process.env.ELEVENLABS_API_KEY || process.env.MUSIC_PROVIDER_API_KEY);
+const musicQuotes = new Map<string, { description: string; plan: ElevenMusicPlan; credits: number; providerCostUsd: number; expiresAt: number }>();
 
 const VIDEO_MODELS: Record<MonetizedVideoModel, { name: string; model: string; allowed: VideoDuration[]; usdPerSecond: number }> = {
   omni: { name: 'Gemini Omni 1.1 Flash', model: 'gemini-omni-1.1-flash', allowed: [4, 6, 8], usdPerSecond: 0.10 },
@@ -42,7 +45,7 @@ let appSettings = {
   slogan: 'Imaginez. Générez. Créez sans limites.',
   maintenanceMode: false,
   announcementBanner: 'MUNGWELE IA STUDIO — Image, Vidéo et Musique par prompt.',
-  creditCosts: { imageStandard: 8, imageHd: 8, video5s: 20, video10s: 40, musicTrack: 10, promptEnhance: 0 },
+  creditCosts: { imageStandard: 8, imageHd: 8, video5s: 20, video10s: 40, musicTrack: 20, promptEnhance: 0 },
 };
 
 let apiProviders: any[] = [
@@ -51,7 +54,7 @@ let apiProviders: any[] = [
   { id: 'prov-video-lite', name: 'Veo 3.1 Lite', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.lite.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.lite[4] },
   { id: 'prov-video-fast', name: 'Veo 3.1 Fast', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.fast.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.fast[4] },
   { id: 'prov-video-pro', name: 'Veo 3.1 Pro', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.pro.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.pro[4] },
-  { id: 'prov-suno-music', name: 'Suno AI Music', providerKey: 'suno', category: 'music', enabled: true, isConfigured: !!process.env.MUSIC_PROVIDER_API_KEY, isDemoFallback: false, modelName: 'suno-provider', latencyAvgMs: 0, creditCost: 10 },
+  { id: 'prov-eleven-music', name: 'ElevenLabs Music', providerKey: 'elevenlabs', category: 'music', enabled: true, isConfigured: musicConfigured(), isDemoFallback: false, modelName: 'music_v2', latencyAvgMs: 0, creditCost: 20 },
   { id: 'prov-gemini-assistant', name: 'Gemini Prompt Assistant', providerKey: 'gemini', category: 'text', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: 'gemini-3.7-flash', latencyAvgMs: 0, creditCost: 0 },
 ];
 
@@ -103,10 +106,10 @@ async function openAIImage(prompt: string, referenceImages: string[] = []) {
   return `data:image/png;base64,${payload.data[0].b64_json}`;
 }
 
-app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'MUNGWELE IA STUDIO', openAIImageConfigured: !!process.env.OPENAI_API_KEY, geminiConfigured: !!process.env.GEMINI_API_KEY, videoModels: Object.keys(VIDEO_MODELS), timestamp: now() }));
+app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'MUNGWELE IA STUDIO', openAIImageConfigured: !!process.env.OPENAI_API_KEY, geminiConfigured: !!process.env.GEMINI_API_KEY, elevenMusicConfigured: musicConfigured(), videoModels: Object.keys(VIDEO_MODELS), timestamp: now() }));
 
 app.get('/api/settings', (_req, res) => {
-  apiProviders = apiProviders.map((p) => ({ ...p, isConfigured: p.category === 'image' ? !!process.env.OPENAI_API_KEY : p.category === 'video' || p.category === 'text' ? !!process.env.GEMINI_API_KEY : p.isConfigured }));
+  apiProviders = apiProviders.map((p) => ({ ...p, isConfigured: p.category === 'image' ? !!process.env.OPENAI_API_KEY : p.category === 'video' || p.category === 'text' ? !!process.env.GEMINI_API_KEY : p.category === 'music' ? musicConfigured() : p.isConfigured }));
   res.json({ settings: appSettings, providers: apiProviders, videoModels: VIDEO_MODELS, videoCreditCosts: VIDEO_CREDIT_COSTS });
 });
 
@@ -194,10 +197,96 @@ app.post('/api/generate/video', async (req, res) => {
   }
 });
 
-app.post('/api/generate/music', (req, res) => {
-  if (!req.body?.prompt) return res.status(400).json({ error: 'La description musicale est requise.' });
-  if (!process.env.MUSIC_PROVIDER_API_KEY) return res.status(503).json({ error: "Le fournisseur musical n'est pas encore connecté.", code: 'MUSIC_PROVIDER_NOT_CONFIGURED' });
-  return res.status(501).json({ error: 'Le pipeline musical doit encore être connecté.', code: 'MUSIC_PROVIDER_NOT_IMPLEMENTED' });
+app.post('/api/music/quote', async (req, res) => {
+  const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
+  if (!description) return res.status(400).json({ error: 'La description musicale est requise.' });
+  if (!musicConfigured()) return res.status(503).json({ error: "ElevenLabs Music n'est pas encore connecté côté serveur.", code: 'ELEVEN_MUSIC_NOT_CONFIGURED' });
+
+  try {
+    const plan = await createElevenMusicPlan(description);
+    const pricing = musicCreditsForDurationMs(plan.durationMs);
+    assertMusicMonetizationSafe(plan.durationMs, pricing.credits);
+    const quoteId = `music-quote-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    musicQuotes.set(quoteId, { description, plan, credits: pricing.credits, providerCostUsd: pricing.providerCostUsd, expiresAt: Date.now() + 10 * 60 * 1000 });
+    return res.json({
+      quoteId,
+      creditCost: pricing.credits,
+      estimatedDurationSeconds: pricing.durationSeconds,
+      expiresInSeconds: 600,
+    });
+  } catch (error: any) {
+    const status = Number(error?.status || 500);
+    const message = String(error?.message || 'Impossible de calculer le coût de cette musique.');
+    addLog('error', 'Studio Musique', `Devis: ${message}`);
+    return res.status(status === 400 || status === 401 || status === 402 || status === 403 || status === 422 || status === 429 || status === 503 ? status : 500).json({ error: message, code: error?.code || 'ELEVEN_MUSIC_QUOTE_FAILED' });
+  }
+});
+
+app.post('/api/generate/music', async (req, res) => {
+  const title = typeof req.body?.title === 'string' ? req.body.title.trim().slice(0, 120) : '';
+  const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
+  const quoteId = typeof req.body?.quoteId === 'string' ? req.body.quoteId : '';
+  const userId = req.body?.userId;
+  if (!title) return res.status(400).json({ error: 'Le titre du morceau est requis.' });
+  if (!description) return res.status(400).json({ error: 'La description musicale est requise.' });
+  if (!quoteId) return res.status(400).json({ error: 'Le devis musique est requis.', code: 'MUSIC_QUOTE_REQUIRED' });
+  if (!musicConfigured()) return res.status(503).json({ error: "ElevenLabs Music n'est pas encore connecté côté serveur.", code: 'ELEVEN_MUSIC_NOT_CONFIGURED' });
+
+  const quote = musicQuotes.get(quoteId);
+  if (!quote || quote.expiresAt < Date.now() || quote.description !== description) {
+    musicQuotes.delete(quoteId);
+    return res.status(400).json({ error: 'Le devis musique a expiré ou ne correspond plus à la description. Relancez la génération.', code: 'MUSIC_QUOTE_INVALID' });
+  }
+
+  const creditsUsed = quote.credits;
+  assertMusicMonetizationSafe(quote.plan.durationMs, creditsUsed);
+  musicQuotes.delete(quoteId);
+
+  try {
+    const startedAt = Date.now();
+    const result = await generateElevenMusicFromPlan(quote.plan);
+    const generation = {
+      id: `gen-music-${Date.now()}`,
+      userId: userId || 'usr-current',
+      type: 'music',
+      title,
+      prompt: description,
+      enhancedPrompt: description,
+      provider: result.provider,
+      model: result.model,
+      status: 'completed',
+      progress: 100,
+      resultUrl: result.resultUrl,
+      thumbnailUrl: '',
+      creditsUsed,
+      isPublic: false,
+      audioDuration: result.durationSeconds,
+      settings: {
+        genre: 'custom',
+        mood: 'inspiring',
+        voice: quote.plan.instrumental ? 'instrumental' : 'duet',
+        isInstrumental: quote.plan.instrumental,
+        durationSeconds: result.durationSeconds,
+      },
+      providerSongId: result.songId,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+
+    generations.unshift(generation);
+    const provider = apiProviders.find((p) => p.id === 'prov-eleven-music');
+    if (provider) provider.latencyAvgMs = Date.now() - startedAt;
+    addLog('success', 'Studio Musique', `Eleven Music v2 a généré ${result.durationSeconds}s pour ${creditsUsed} crédits MUNGWELE.`);
+    return res.json({ success: true, generation, creditCost: creditsUsed });
+  } catch (error: any) {
+    const status = Number(error?.status || 500);
+    const message = String(error?.message || 'Erreur Eleven Music inconnue.');
+    addLog('error', 'Studio Musique', message);
+    return res.status(status === 400 || status === 401 || status === 402 || status === 403 || status === 422 || status === 429 || status === 503 ? status : 500).json({
+      error: quotaError(error) ? 'Quota ou limite ElevenLabs Music atteint. Vérifiez votre abonnement et votre solde ElevenLabs.' : message,
+      code: error?.code || 'ELEVEN_MUSIC_GENERATION_FAILED',
+    });
+  }
 });
 
 app.get('/api/generations', (_req, res) => res.json({ generations }));
