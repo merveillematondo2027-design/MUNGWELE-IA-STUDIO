@@ -1,5 +1,5 @@
 export type StudioType = 'image' | 'video' | 'music';
-export type NavigationTab = 'home' | 'community' | 'projects-image' | 'projects-video' | 'projects-music' | 'studio-image' | 'studio-video' | 'studio-music' | 'creations' | 'subscription' | 'profile' | 'help' | 'admin';
+export type NavigationTab = 'home' | 'community' | 'projects-image' | 'projects-video' | 'projects-music' | 'studio-image' | 'studio-video' | 'studio-music' | 'creations' | 'subscription' | 'profile' | 'help' | 'admin' | 'admin-home' | 'admin-users' | 'admin-credits' | 'admin-subscriptions' | 'admin-library' | 'admin-logs' | 'admin-usage';
 export type GenerationStatus = 'draft' | 'queued' | 'processing' | 'completed' | 'failed';
 export type UserPlan = 'free' | 'creator' | 'pro';
 

@@ -11,6 +11,7 @@ import { CreationsView } from './components/views/CreationsView';
 import { SubscriptionView } from './components/views/SubscriptionView';
 import { ProfileView } from './components/views/ProfileView';
 import { AdminView } from './components/views/AdminView';
+import { AdminWorkspaceView } from './components/views/AdminWorkspaceView';
 import { HelpView } from './components/views/HelpView';
 import { NotificationToast } from './components/common/NotificationToast';
 import { MediaViewerModal } from './components/common/MediaViewerModal';
@@ -22,6 +23,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import brandLogo from './assets/mungwele-brand.svg';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
+type AdminSection = 'home' | 'users' | 'credits' | 'subscriptions' | 'library' | 'logs' | 'usage';
 
 const MainLayout: React.FC = () => {
   const { activeTab, activeMediaModal, setActiveMediaModal, appSettings, user, setUser, resetUser, addNotification } = useApp();
@@ -79,6 +81,7 @@ const MainLayout: React.FC = () => {
 
   const isStudioTab = activeTab === 'studio-image' || activeTab === 'studio-video' || activeTab === 'studio-music';
   const canOpenAdmin = user.role === 'admin' && Boolean(user.id);
+  const renderAdmin = (section: AdminSection) => canOpenAdmin ? <AdminWorkspaceView section={section} /> : <ProfileView />;
 
   return (
     <div className="relative min-h-screen bg-[#07101f] text-gray-100 antialiased selection:bg-purple-600 selection:text-white overflow-x-hidden">
@@ -112,6 +115,13 @@ const MainLayout: React.FC = () => {
               {activeTab === 'subscription' && <SubscriptionView />}
               {activeTab === 'profile' && <ProfileView />}
               {activeTab === 'admin' && (canOpenAdmin ? <AdminView /> : <ProfileView />)}
+              {activeTab === 'admin-home' && renderAdmin('home')}
+              {activeTab === 'admin-users' && renderAdmin('users')}
+              {activeTab === 'admin-credits' && renderAdmin('credits')}
+              {activeTab === 'admin-subscriptions' && renderAdmin('subscriptions')}
+              {activeTab === 'admin-library' && renderAdmin('library')}
+              {activeTab === 'admin-logs' && renderAdmin('logs')}
+              {activeTab === 'admin-usage' && renderAdmin('usage')}
               {activeTab === 'help' && <HelpView />}
             </motion.div>
           </AnimatePresence>
