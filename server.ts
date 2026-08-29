@@ -10,7 +10,6 @@ import { VIDEO_CREDIT_COSTS, assertMonetizationSafe, type MonetizedVideoModel } 
 
 dotenv.config();
 
-// Reference explicite pour que Google AI Studio détecte le secret
 const _TEMPORARY_AI_STUDIO_TRIGGER = process.env.GEMINI_API_KEY;
 
 const app = express();
@@ -147,7 +146,7 @@ app.post('/api/generate/image', async (req, res) => {
     : `Crée une image en suivant précisément cette demande, sans ajouter d'éléments non demandés : ${finalPrompt}`;
   try {
     const imageUrl = await openAIImage(providerPrompt, refs);
-    const generation = { id: `gen-img-${Date.now()}`, userId: userId || 'usr-current', type: 'image', title: prompt.slice(0, 60), prompt, enhancedPrompt: finalPrompt, provider: 'OpenAI', model: 'gpt-image-2', status: 'completed', progress: 100, resultUrl: imageUrl, thumbnailUrl: imageUrl, creditsUsed: 8, settings: { style: 'prompt-only', aspectRatio: 'auto', quality: 'high', quantity: 1, referenceImage: Boolean(refs.length), referenceImages: refs.length ? refs : undefined }, createdAt: now(), updatedAt: now() };
+    const generation = { id: `gen-img-${Date.now()}`, userId: userId || 'usr-current', type: 'image', title: prompt.slice(0, 60), prompt, enhancedPrompt: finalPrompt, provider: 'OpenAI', model: 'gpt-image-2', status: 'completed', progress: 100, resultUrl: imageUrl, thumbnailUrl: imageUrl, creditsUsed: 8, isPublic: false, settings: { style: 'prompt-only', aspectRatio: 'auto', quality: 'high', quantity: 1, referenceImage: Boolean(refs.length), referenceImages: refs.length ? refs : undefined }, createdAt: now(), updatedAt: now() };
     generations.unshift(generation);
     addLog('success', 'Studio Image', refs.length ? `Image modifiée avec ${refs.length} référence(s) OpenAI.` : 'Image générée avec OpenAI.');
     return res.json({ success: true, generation, images: [imageUrl] });
@@ -172,9 +171,7 @@ app.post('/api/generate/video', async (req, res) => {
     ? referenceImages.filter((item: unknown): item is string => typeof item === 'string' && item.startsWith('data:image/')).slice(0, 6)
     : [];
   if (endImage && !startImage) return res.status(400).json({ error: 'Une image de fin nécessite une image de départ.', code: 'START_IMAGE_REQUIRED' });
-  if (refs.length > 0 && safeModel !== 'omni') {
-    return res.status(400).json({ error: 'Les références multiples utilisent Gemini Omni. Sélectionnez Omni pour ce projet.', code: 'OMNI_REQUIRED_FOR_REFERENCES' });
-  }
+  if (refs.length > 0 && safeModel !== 'omni') return res.status(400).json({ error: 'Les références multiples utilisent Gemini Omni. Sélectionnez Omni pour ce projet.', code: 'OMNI_REQUIRED_FOR_REFERENCES' });
   const effectiveDuration: VideoDuration = endImage ? 8 : safeDuration;
   const creditsUsed = VIDEO_CREDIT_COSTS[safeModel][effectiveDuration];
 
@@ -182,25 +179,10 @@ app.post('/api/generate/video', async (req, res) => {
     assertMonetizationSafe(safeModel, effectiveDuration, creditsUsed);
     const startedAt = Date.now();
     const result = safeModel === 'omni'
-      ? await generateOmniVideo({
-          prompt: prompt.trim(),
-          aspectRatio: safeAspectRatio,
-          duration: effectiveDuration,
-          resolution: '720p',
-          startImage: typeof startImage === 'string' ? startImage : null,
-          endImage: typeof endImage === 'string' ? endImage : null,
-          referenceImages: refs,
-        })
-      : await generateVideo(client, {
-          model: safeModel as VeoVideoModel,
-          prompt: prompt.trim(),
-          aspectRatio: safeAspectRatio,
-          duration: effectiveDuration,
-          startImage: typeof startImage === 'string' ? startImage : null,
-          endImage: typeof endImage === 'string' ? endImage : null,
-        });
+      ? await generateOmniVideo({ prompt: prompt.trim(), aspectRatio: safeAspectRatio, duration: effectiveDuration, resolution: '720p', startImage: typeof startImage === 'string' ? startImage : null, endImage: typeof endImage === 'string' ? endImage : null, referenceImages: refs })
+      : await generateVideo(client, { model: safeModel as VeoVideoModel, prompt: prompt.trim(), aspectRatio: safeAspectRatio, duration: effectiveDuration, startImage: typeof startImage === 'string' ? startImage : null, endImage: typeof endImage === 'string' ? endImage : null });
 
-    const generation = { id: `gen-video-${Date.now()}`, userId: userId || 'usr-current', type: 'video', title: prompt.trim().slice(0, 60), prompt: prompt.trim(), enhancedPrompt: prompt.trim(), provider: 'Google', model: result.model, status: 'completed', progress: 100, resultUrl: result.resultUrl, thumbnailUrl: '', creditsUsed, settings: { style: 'prompt-only', videoModel: safeModel, aspectRatio: safeAspectRatio, duration: result.duration, enableAudio: true, startImage: Boolean(startImage), endImage: Boolean(endImage), referenceImages: refs.length ? refs : undefined, resolution: '720p' }, createdAt: now(), updatedAt: now() };
+    const generation = { id: `gen-video-${Date.now()}`, userId: userId || 'usr-current', type: 'video', title: prompt.trim().slice(0, 60), prompt: prompt.trim(), enhancedPrompt: prompt.trim(), provider: 'Google', model: result.model, status: 'completed', progress: 100, resultUrl: result.resultUrl, thumbnailUrl: '', creditsUsed, isPublic: false, settings: { style: 'prompt-only', videoModel: safeModel, aspectRatio: safeAspectRatio, duration: result.duration, enableAudio: true, startImage: Boolean(startImage), endImage: Boolean(endImage), referenceImages: refs.length ? refs : undefined, resolution: '720p' }, createdAt: now(), updatedAt: now() };
     generations.unshift(generation);
     addLog('success', 'Studio Vidéo', `${VIDEO_MODELS[safeModel].name} a généré ${result.duration}s en ${Math.round((Date.now() - startedAt) / 1000)}s.`);
     return res.json({ success: true, generation });
@@ -219,6 +201,24 @@ app.post('/api/generate/music', (req, res) => {
 });
 
 app.get('/api/generations', (_req, res) => res.json({ generations }));
+app.get('/api/community', (_req, res) => {
+  const published = generations
+    .filter((g) => g.isPublic === true && g.status === 'completed')
+    .sort((a, b) => String(b.publicAt || b.updatedAt).localeCompare(String(a.publicAt || a.updatedAt)));
+  res.json({ generations: published });
+});
+app.post('/api/generations/:id/publish', (req, res) => {
+  const generation = generations.find((g) => g.id === req.params.id);
+  if (!generation) return res.status(404).json({ error: 'Création introuvable.' });
+  if (!req.body?.userId || generation.userId !== req.body.userId) return res.status(403).json({ error: 'Vous ne pouvez publier que vos propres créations.' });
+  const isPublic = req.body?.isPublic === true;
+  generation.isPublic = isPublic;
+  generation.publicAt = isPublic ? now() : undefined;
+  generation.authorName = typeof req.body?.authorName === 'string' && req.body.authorName.trim() ? req.body.authorName.trim().slice(0, 80) : generation.authorName || 'Créateur MUNGWELE';
+  generation.updatedAt = now();
+  addLog('info', 'Communauté', isPublic ? `Publication de ${generation.id}` : `Retrait de ${generation.id}`);
+  return res.json({ success: true, generation });
+});
 app.delete('/api/generations/:id', (req, res) => { generations = generations.filter((g) => g.id !== req.params.id); res.json({ success: true }); });
 app.get('/api/admin/stats', (_req, res) => {
   const breakdown = { image: generations.filter((g) => g.type === 'image').length, video: generations.filter((g) => g.type === 'video').length, music: generations.filter((g) => g.type === 'music').length };
@@ -233,15 +233,7 @@ async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       appType: 'spa',
-      server: {
-        middlewareMode: true,
-        hmr: {
-          server: httpServer,
-          protocol: 'wss',
-          clientPort: 443,
-          overlay: false,
-        },
-      },
+      server: { middlewareMode: true, hmr: { server: httpServer, protocol: 'wss', clientPort: 443, overlay: false } },
     });
     app.use(vite.middlewares);
   } else {
