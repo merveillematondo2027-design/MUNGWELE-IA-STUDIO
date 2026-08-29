@@ -1,35 +1,20 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { StudioType, GenerationRecord } from '../../types';
-import { 
-  FolderOpen, 
-  Search, 
-  Filter, 
-  Image as ImageIcon, 
-  Film, 
-  Music as MusicIcon, 
-  Download, 
-  Trash2, 
-  Share2, 
-  Maximize2, 
-  Copy, 
-  Check, 
-  Sparkles,
-  SlidersHorizontal
-} from 'lucide-react';
+import type { StudioType } from '../../types';
+import { FolderOpen, Search, Image as ImageIcon, Film, Music as MusicIcon, Download, Trash2, Maximize2, Copy, Sparkles } from 'lucide-react';
 
 export const CreationsView: React.FC = () => {
-  const { generations, removeGeneration, setActiveMediaModal, addNotification, setActiveStudio, setActiveTab } = useApp();
+  const { user, generations, removeGeneration, setActiveMediaModal, addNotification, setActiveStudio, setActiveTab } = useApp();
   const [filterType, setFilterType] = useState<StudioType | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest');
 
-  const filtered = generations
+  const ownGenerations = generations.filter((item) => !user.id || item.userId === user.id);
+  const filtered = ownGenerations
     .filter((item) => {
       const matchesType = filterType === 'all' || item.type === filterType;
-      const matchesSearch =
-        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.prompt.toLowerCase().includes(searchQuery.toLowerCase());
+      const q = searchQuery.trim().toLowerCase();
+      const matchesSearch = !q || item.title.toLowerCase().includes(q) || item.prompt.toLowerCase().includes(q);
       return matchesType && matchesSearch;
     })
     .sort((a, b) => {
@@ -38,224 +23,111 @@ export const CreationsView: React.FC = () => {
       return sortBy === 'newest' ? dateB - dateA : dateA - dateB;
     });
 
-  const countImages = generations.filter((g) => g.type === 'image').length;
-  const countVideos = generations.filter((g) => g.type === 'video').length;
-  const countMusics = generations.filter((g) => g.type === 'music').length;
+  const countImages = ownGenerations.filter((g) => g.type === 'image').length;
+  const countVideos = ownGenerations.filter((g) => g.type === 'video').length;
+  const countMusics = ownGenerations.filter((g) => g.type === 'music').length;
+
+  const download = (item: (typeof generations)[number]) => {
+    if (item.type === 'video' && user.plan === 'free') {
+      addNotification('info', 'Abonnement requis', 'Le téléchargement vidéo HD nécessite un abonnement Creator ou Pro.');
+      setActiveTab('subscription');
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = item.resultUrl;
+    a.download = `mungwele-${item.type}-${item.id}`;
+    a.click();
+  };
 
   return (
-    <div id="creations-view-container" className="w-full max-w-6xl mx-auto space-y-8 pb-20">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
+    <div className="mx-auto w-full max-w-6xl space-y-6 pb-20">
+      <div className="flex flex-col gap-4 border-b border-white/10 pb-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-display font-extrabold text-white flex items-center space-x-3">
-            <span className="p-2.5 rounded-2xl bg-purple-600/20 text-purple-300 border border-purple-500/30">
-              <FolderOpen className="w-6 h-6" />
-            </span>
-            <span>Bibliothèque de Créations</span>
+          <h2 className="flex items-center gap-3 text-2xl font-extrabold text-white sm:text-3xl">
+            <span className="rounded-2xl border border-purple-500/30 bg-purple-600/20 p-2.5 text-purple-300"><FolderOpen className="h-6 w-6" /></span>
+            Bibliothèque de créations
           </h2>
-          <p className="text-xs sm:text-sm text-gray-400 mt-1">
-            Gérez, téléchargez et prévisualisez toutes vos réalisations IA en un seul endroit.
-          </p>
+          <p className="mt-2 text-xs text-gray-500 sm:text-sm">Retrouvez vos images et vidéos générées dans MUNGWELE IA STUDIO.</p>
         </div>
-
-        {/* Quick studio launcher */}
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => {
-              setActiveStudio('image');
-              setActiveTab('studio-image');
-            }}
-            className="px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white flex items-center space-x-1.5 shadow-lg border border-white/20 transition-all"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Nouvelle création</span>
-          </button>
-        </div>
+        <button onClick={() => { setActiveStudio('image'); setActiveTab('studio-image'); }} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg">
+          <Sparkles className="h-3.5 w-3.5" /> Nouvelle création
+        </button>
       </div>
 
-      {/* Filter & Search Toolbar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-2xl bg-white/[0.04] backdrop-blur-2xl border border-white/10 shadow-xl">
-        {/* Type Tabs */}
-        <div className="flex items-center space-x-1 overflow-x-auto no-scrollbar">
-          <button
-            onClick={() => setFilterType('all')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-              filterType === 'all'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            Tout ({generations.length})
-          </button>
-          <button
-            onClick={() => setFilterType('image')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 whitespace-nowrap transition-all ${
-              filterType === 'image'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <ImageIcon className="w-3.5 h-3.5" />
-            <span>Images ({countImages})</span>
-          </button>
-          <button
-            onClick={() => setFilterType('video')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 whitespace-nowrap transition-all ${
-              filterType === 'video'
-                ? 'bg-pink-600 text-white shadow-md'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Film className="w-3.5 h-3.5" />
-            <span>Vidéos ({countVideos})</span>
-          </button>
-          <button
-            onClick={() => setFilterType('music')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 whitespace-nowrap transition-all ${
-              filterType === 'music'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <MusicIcon className="w-3.5 h-3.5" />
-            <span>Musiques ({countMusics})</span>
-          </button>
+      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-1 overflow-x-auto">
+          {([
+            ['all', `Tout (${ownGenerations.length})`],
+            ['image', `Images (${countImages})`],
+            ['video', `Vidéos (${countVideos})`],
+            ['music', `Musiques (${countMusics})`],
+          ] as const).map(([id, label]) => (
+            <button key={id} onClick={() => setFilterType(id)} className={`whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-semibold ${filterType === id ? 'bg-purple-600 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>{label}</button>
+          ))}
         </div>
-
-        {/* Search Input & Sort */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
           <div className="relative flex-1 sm:w-64">
-            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Rechercher par mot-clé..."
-              className="w-full pl-8 pr-3 py-2 rounded-xl bg-white/[0.04] backdrop-blur-md border border-white/10 text-xs text-white placeholder-gray-400 outline-none focus:border-purple-500"
-            />
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-500" />
+            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Rechercher…" className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-8 pr-3 text-xs text-white outline-none placeholder:text-gray-600" />
           </div>
-
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
-            className="px-3 py-2 rounded-xl bg-white/[0.04] backdrop-blur-md border border-white/10 text-xs text-gray-200 outline-none focus:border-purple-500"
-          >
-            <option value="newest" className="bg-[#081226] text-white">Plus récent</option>
-            <option value="oldest" className="bg-[#081226] text-white">Plus ancien</option>
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as 'newest' | 'oldest')} className="rounded-xl border border-white/10 bg-[#0b1426] px-3 py-2 text-xs text-gray-200 outline-none">
+            <option value="newest">Plus récent</option>
+            <option value="oldest">Plus ancien</option>
           </select>
         </div>
       </div>
 
-      {/* Grid of creations */}
       {filtered.length === 0 ? (
-        <div className="text-center py-20 px-4 rounded-3xl bg-white/[0.02] backdrop-blur-xl border border-white/10 space-y-3">
-          <FolderOpen className="w-14 h-14 text-gray-600 mx-auto" />
-          <h3 className="text-base font-bold text-gray-300">Aucune création trouvée</h3>
-          <p className="text-xs text-gray-500 max-w-sm mx-auto">
-            {searchQuery
-              ? 'Aucun résultat ne correspond à votre recherche.'
-              : 'Commencez à explorer les studios pour générer du contenu.'}
-          </p>
+        <div className="rounded-3xl border border-white/10 bg-white/[0.02] px-4 py-20 text-center">
+          <FolderOpen className="mx-auto h-14 w-14 text-gray-700" />
+          <h3 className="mt-3 text-base font-bold text-gray-300">Aucune création trouvée</h3>
+          <p className="mt-1 text-xs text-gray-600">Commencez une génération ou modifiez votre recherche.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((item) => {
             const isImage = item.type === 'image';
             const isVideo = item.type === 'video';
             const isMusic = item.type === 'music';
-
             return (
-              <div
-                key={item.id}
-                id={`gallery-item-${item.id}`}
-                className="group relative rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 hover:border-purple-500/40 hover:bg-white/[0.06] overflow-hidden shadow-xl transition-all duration-200 flex flex-col justify-between"
-              >
-                {/* Media Preview Box */}
-                <div 
-                  className="relative aspect-video bg-black/40 overflow-hidden cursor-pointer"
-                  onClick={() => setActiveMediaModal(item)}
-                >
-                  <img
-                    src={item.thumbnailUrl || item.resultUrl}
-                    alt={item.title}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
+              <article key={item.id} className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-xl transition hover:border-purple-500/40 hover:bg-white/[0.05]">
+                <div className="relative aspect-video overflow-hidden bg-black/40" onClick={() => setActiveMediaModal(item)}>
+                  {isImage ? (
+                    <img src={item.thumbnailUrl || item.resultUrl} alt={item.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                  ) : isVideo ? (
+                    <video src={item.resultUrl} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-950/50 to-purple-950/50"><MusicIcon className="h-10 w-10 text-blue-300" /></div>
+                  )}
 
-                  {/* Badge */}
-                  <div className="absolute top-2.5 left-2.5">
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider text-white shadow-md ${
-                      isImage ? 'bg-purple-600' : isVideo ? 'bg-pink-600' : 'bg-blue-600'
-                    }`}>
-                      {item.type}
-                    </span>
-                  </div>
-
-                  {/* Hover Overlay */}
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMediaModal(item);
-                      }}
-                      className="p-2 rounded-xl bg-white/20 hover:bg-white/30 text-white backdrop-blur-md transition-colors"
-                      title="Plein écran"
-                    >
-                      <Maximize2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const a = document.createElement('a');
-                        a.href = item.resultUrl;
-                        a.download = `mungwele-${item.type}-${item.id}`;
-                        a.click();
-                      }}
-                      className="p-2 rounded-xl bg-white/20 hover:bg-white/30 text-white backdrop-blur-md transition-colors"
-                      title="Télécharger"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
+                  <span className={`absolute left-2.5 top-2.5 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white ${isImage ? 'bg-purple-600' : isVideo ? 'bg-pink-600' : 'bg-blue-600'}`}>{item.type}</span>
+                  <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button onClick={(e) => { e.stopPropagation(); setActiveMediaModal(item); }} className="rounded-xl bg-white/20 p-2 text-white" title="Plein écran"><Maximize2 className="h-4 w-4" /></button>
+                    <button onClick={(e) => { e.stopPropagation(); download(item); }} className="rounded-xl bg-white/20 p-2 text-white" title="Télécharger"><Download className="h-4 w-4" /></button>
                   </div>
                 </div>
 
-                {/* Metadata & Actions */}
-                <div className="p-4 space-y-3">
+                <div className="space-y-3 p-4">
                   <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-white line-clamp-1">
-                      {item.title}
-                    </h4>
-                    <p className="text-[11px] text-gray-400 line-clamp-2 mt-1 leading-relaxed">
-                      {item.prompt}
-                    </p>
+                    <h4 className="line-clamp-1 text-sm font-bold text-white">{item.title}</h4>
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-gray-500">{item.prompt}</p>
                   </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-gray-500 pt-2 border-t border-gray-800">
+                  {isVideo && (
+                    <div className="flex flex-wrap gap-1.5 text-[9px] font-bold text-gray-500">
+                      <span className="rounded-full border border-white/10 px-2 py-1">{String((item.settings as any).videoModel || 'veo').toUpperCase()}</span>
+                      <span className="rounded-full border border-white/10 px-2 py-1">{(item.settings as any).duration || '?'}s</span>
+                      <span className="rounded-full border border-white/10 px-2 py-1">{(item.settings as any).aspectRatio || '16:9'}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between border-t border-white/10 pt-3 text-[11px] text-gray-600">
                     <span>{new Date(item.createdAt).toLocaleDateString('fr-FR')}</span>
-
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(item.prompt);
-                          addNotification('info', 'Prompt copié', 'Le prompt a été copié.');
-                        }}
-                        className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-                        title="Copier le prompt"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-
-                      <button
-                        onClick={() => removeGeneration(item.id)}
-                        className="p-1.5 rounded-lg hover:bg-rose-900/40 text-gray-400 hover:text-rose-400 transition-colors"
-                        title="Supprimer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => { navigator.clipboard.writeText(item.prompt); addNotification('info', 'Prompt copié', 'Le prompt a été copié.'); }} className="rounded-lg p-1.5 text-gray-500 hover:bg-white/10 hover:text-white" title="Copier le prompt"><Copy className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => removeGeneration(item.id)} className="rounded-lg p-1.5 text-gray-500 hover:bg-rose-900/40 hover:text-rose-400" title="Supprimer"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>
