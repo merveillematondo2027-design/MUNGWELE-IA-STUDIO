@@ -1,95 +1,176 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, Copy, Download, Film, Lock, RefreshCw, Sparkles, Trash2, Upload, X, Zap } from 'lucide-react';
+import { Download, Film, Loader2, Plus, Send, Settings2, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import type { GenerationRecord, VideoDuration, VideoGenerationSettings, VideoModel } from '../../types';
+import type { VideoDuration, VideoModel } from '../../types';
 
-const MODEL_CONFIG: Record<VideoModel, { label: string; subtitle: string; description: string }> = {
-  lite: { label: 'Veo 3.1 Lite', subtitle: 'Économique', description: 'Faible coût pour essais et contenus sociaux.' },
-  fast: { label: 'Veo 3.1 Fast', subtitle: 'Recommandé', description: 'Rapide, audio natif et excellent rapport qualité/coût.' },
-  pro: { label: 'Veo 3.1 Pro', subtitle: 'Premium', description: 'Veo 3.1 Standard pour les rendus cinématographiques haut de gamme.' },
-};
-
-const CREDIT_TABLE: Record<VideoModel, Record<VideoDuration, number>> = {
+const VIDEO_COSTS: Record<VideoModel, Record<VideoDuration, number>> = {
   lite: { 4: 15, 6: 23, 8: 30 },
   fast: { 4: 30, 6: 45, 8: 60 },
   pro: { 4: 120, 6: 180, 8: 240 },
 };
 
+const MODEL_LABELS: Record<VideoModel, string> = {
+  lite: 'Veo 3.1 Lite',
+  fast: 'Veo 3.1 Fast',
+  pro: 'Veo 3.1 Pro',
+};
+
+type PersistedSettings = { model: VideoModel; duration: VideoDuration; aspectRatio: '16:9' | '9:16' };
+const SETTINGS_KEY = 'mungwele.video.settings.v1';
+
 export const VideoStudio: React.FC = () => {
-  const { user, appSettings, useCredits, refundCredits, addGeneration, removeGeneration, addNotification, imageToVideoTransfer, setImageToVideoTransfer, triggerCelebration, generations, setActiveTab } = useApp();
+  const { user, useCredits, refundCredits, addGeneration, addNotification, triggerCelebration, imageToVideoTransfer, setImageToVideoTransfer, generations, setActiveTab } = useApp();
   const [prompt, setPrompt] = useState('');
-  const [videoModel, setVideoModel] = useState<VideoModel>('fast');
-  const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>('16:9');
-  const [duration, setDuration] = useState<VideoDuration>(8);
   const [startImage, setStartImage] = useState<string | null>(null);
   const [endImage, setEndImage] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState('');
-  const startInputRef = useRef<HTMLInputElement | null>(null);
-  const endInputRef = useRef<HTMLInputElement | null>(null);
+  const [model, setModel] = useState<VideoModel>('fast');
+  const [duration, setDuration] = useState<VideoDuration>(8);
+  const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>('16:9');
+  const startInput = useRef<HTMLInputElement | null>(null);
+  const endInput = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => { if (imageToVideoTransfer) { setStartImage(imageToVideoTransfer); setImageToVideoTransfer(null); } }, [imageToVideoTransfer, setImageToVideoTransfer]);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null') as PersistedSettings | null;
+      if (saved) {
+        if (saved.model === 'lite' || saved.model === 'fast' || saved.model === 'pro') setModel(saved.model);
+        if (saved.duration === 4 || saved.duration === 6 || saved.duration === 8) setDuration(saved.duration);
+        if (saved.aspectRatio === '16:9' || saved.aspectRatio === '9:16') setAspectRatio(saved.aspectRatio);
+      }
+    } catch {}
+  }, []);
 
-  const creditCost = CREDIT_TABLE[videoModel][duration];
-  const videoCreations = generations.filter((g) => g.type === 'video');
-  const plan = appSettings.subscriptionPlans.find((p) => p.id === user.plan);
-  const canDownloadHd = plan?.maxDownloadResolution === '720p' || plan?.maxDownloadResolution === '1080p';
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ model, duration, aspectRatio }));
+  }, [model, duration, aspectRatio]);
+
+  useEffect(() => {
+    if (imageToVideoTransfer) {
+      setStartImage(imageToVideoTransfer);
+      setImageToVideoTransfer(null);
+    }
+  }, [imageToVideoTransfer, setImageToVideoTransfer]);
+
+  useEffect(() => {
+    if (endImage && duration !== 8) setDuration(8);
+  }, [endImage, duration]);
+
+  const latest = generations.find((g) => g.type === 'video');
+  const creditCost = VIDEO_COSTS[model][duration];
 
   const loadImage = (file: File, target: 'start' | 'end') => {
-    if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) { addNotification('error', 'Image invalide', 'PNG/JPG/WEBP, 10 Mo maximum.'); return; }
+    if (!file.type.startsWith('image/')) return addNotification('error', 'Format invalide', 'Utilisez PNG, JPG ou WEBP.');
+    if (file.size > 10 * 1024 * 1024) return addNotification('error', 'Fichier trop lourd', '10 Mo maximum.');
     const reader = new FileReader();
     reader.onload = () => target === 'start' ? setStartImage(reader.result as string) : setEndImage(reader.result as string);
     reader.readAsDataURL(file);
   };
 
-  const clearWorkspace = () => { setPrompt(''); setStartImage(null); setEndImage(null); setDuration(8); if (startInputRef.current) startInputRef.current.value = ''; if (endInputRef.current) endInputRef.current.value = ''; };
-
-  const handleGenerate = async () => {
-    if (!prompt.trim()) { addNotification('warning', 'Prompt requis', 'Décrivez précisément la vidéo.'); return; }
-    if (endImage && !startImage) { addNotification('warning', 'Image de départ requise', 'Une image de fin nécessite une image de départ.'); return; }
-    const label = MODEL_CONFIG[videoModel].label;
-    const reason = `Génération ${label} ${duration}s`;
+  const generate = async () => {
+    if (!prompt.trim()) return addNotification('warning', 'Prompt requis', 'Décrivez la vidéo que vous voulez créer.');
+    if (endImage && !startImage) return addNotification('warning', 'Image de départ requise', 'Ajoutez une image de départ avant une image de fin.');
+    const reason = `Génération vidéo ${MODEL_LABELS[model]} (${duration}s)`;
     if (!useCredits(creditCost, reason)) return;
-    setIsGenerating(true); setProgress(8); setStatus(`Envoi à ${label}…`);
-    const timer = window.setInterval(() => setProgress((v) => Math.min(92, v + (v < 50 ? 5 : 2))), 4000);
+    setIsGenerating(true);
     try {
-      const response = await fetch('/api/generate/video', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: videoModel, prompt: prompt.trim(), aspectRatio, duration, startImage, endImage, userId: user.id }) });
+      const response = await fetch('/api/generate/video', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, prompt: prompt.trim(), aspectRatio, duration, startImage, endImage }),
+      });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.generation) throw new Error(data.error || 'La génération vidéo a échoué.');
-      setProgress(100); setStatus('Vidéo prête.'); addGeneration(data.generation); triggerCelebration(); clearWorkspace();
-      addNotification('success', 'Vidéo prête', `${label} a généré votre vidéo de ${duration}s.`);
+      addGeneration(data.generation);
+      triggerCelebration();
+      setPrompt('');
+      setStartImage(null);
+      setEndImage(null);
+      if (startInput.current) startInput.current.value = '';
+      if (endInput.current) endInput.current.value = '';
+      addNotification('success', 'Vidéo prête', `${MODEL_LABELS[model]} a terminé votre rendu.`);
     } catch (error: any) {
       refundCredits(creditCost, reason);
-      addNotification('error', 'Génération impossible', error?.message || 'Vos crédits ont été remboursés.');
-    } finally { window.clearInterval(timer); setIsGenerating(false); window.setTimeout(() => { setProgress(0); setStatus(''); }, 500); }
+      addNotification('error', 'Génération impossible', error?.message || 'Erreur Veo. Vos crédits ont été remboursés.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  const downloadVideo = (gen: GenerationRecord) => {
-    if (!canDownloadHd) {
-      addNotification('warning', 'Abonnement requis', 'La génération reste disponible en aperçu. Abonnez-vous à Creator ou Pro pour télécharger la version HD.');
+  const download = () => {
+    if (!latest?.resultUrl) return;
+    if (user.plan === 'free') {
+      addNotification('info', 'Abonnement requis', 'Le téléchargement HD nécessite un abonnement Creator ou Pro.');
       setActiveTab('subscription');
       return;
     }
-    const a = document.createElement('a'); a.href = gen.resultUrl; a.download = `mungwele-video-${gen.id}.mp4`; a.click();
+    const a = document.createElement('a');
+    a.href = latest.resultUrl;
+    a.download = `mungwele-video-${latest.id}.mp4`;
+    a.click();
   };
 
-  const reusePrompt = (gen: GenerationRecord) => {
-    setPrompt(gen.prompt); const s = gen.settings as VideoGenerationSettings;
-    if (s.videoModel) setVideoModel(s.videoModel); if (s.duration) setDuration(s.duration); if (s.aspectRatio) setAspectRatio(s.aspectRatio);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  return (
+    <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-5xl flex-col">
+      <div className="mb-5 flex items-center justify-between px-1">
+        <div><h1 className="text-xl font-black text-white sm:text-2xl">Studio Vidéo Veo</h1><p className="mt-1 text-xs text-gray-500">Prompt au centre. Réglages à droite. Vos choix restent mémorisés.</p></div>
+        <span className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-bold text-amber-300">{creditCost} crédits</span>
+      </div>
 
-  return <div className="w-full max-w-6xl mx-auto space-y-8 pb-16">
-    <section className="bg-white/[0.04] border border-white/10 rounded-3xl p-5 sm:p-7 space-y-6">
-      <div className="flex justify-between gap-4 border-b border-white/10 pb-5"><div><h2 className="text-2xl font-extrabold text-white flex items-center gap-2"><Film className="text-pink-400" />Studio Vidéo Veo</h2><p className="text-xs text-gray-400 mt-1">Lite, Fast ou Pro. 4, 6 ou 8 secondes. Audio natif.</p></div><span className="text-sm font-bold text-amber-400 flex items-center gap-1"><Zap className="w-4 h-4" />{creditCost} crédits</span></div>
-      <div><label className="text-xs font-bold uppercase text-gray-300">1. Modèle</label><div className="grid md:grid-cols-3 gap-3 mt-2">{(Object.keys(MODEL_CONFIG) as VideoModel[]).map((model) => <button key={model} onClick={() => setVideoModel(model)} className={`relative p-4 rounded-2xl border text-left ${videoModel === model ? 'border-pink-500 bg-pink-600/15' : 'border-white/10 bg-white/[0.02]'}`}>{videoModel === model && <Check className="absolute top-3 right-3 w-4 h-4 text-pink-300" />}<p className="font-bold text-white">{MODEL_CONFIG[model].label}</p><p className="text-[11px] text-pink-300">{MODEL_CONFIG[model].subtitle}</p><p className="text-[11px] text-gray-400 mt-2">{MODEL_CONFIG[model].description}</p><p className="text-[10px] text-amber-300 mt-3">4s {CREDIT_TABLE[model][4]}cr • 6s {CREDIT_TABLE[model][6]}cr • 8s {CREDIT_TABLE[model][8]}cr</p></button>)}</div></div>
-      <div><label className="text-sm font-bold text-gray-200">2. Prompt détaillé</label><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={6} className="mt-2 w-full px-4 py-4 rounded-2xl bg-white/[0.04] border border-white/10 text-white outline-none focus:border-pink-500" placeholder="Décrivez scène, caméra, mouvements, personnages, dialogue exact, bruitages, musique et lumière…" /></div>
-      <div className="grid sm:grid-cols-2 gap-4"><div><label className="text-xs font-bold uppercase text-gray-300">Format</label><div className="grid grid-cols-2 gap-2 mt-2">{(['16:9','9:16'] as const).map((r) => <button key={r} onClick={() => setAspectRatio(r)} className={`py-3 rounded-xl border ${aspectRatio === r ? 'border-pink-500 text-pink-200 bg-pink-600/15' : 'border-white/10 text-gray-400'}`}>{r}</button>)}</div></div><div><label className="text-xs font-bold uppercase text-gray-300">Durée</label><div className="grid grid-cols-3 gap-2 mt-2">{([4,6,8] as VideoDuration[]).map((d) => <button key={d} onClick={() => setDuration(d)} className={`py-3 rounded-xl border ${duration === d ? 'border-pink-500 text-pink-200 bg-pink-600/15' : 'border-white/10 text-gray-400'}`}>{d}s</button>)}</div></div></div>
-      <div className="grid sm:grid-cols-2 gap-4">{(['start','end'] as const).map((target) => { const value = target === 'start' ? startImage : endImage; const ref = target === 'start' ? startInputRef : endInputRef; return <div key={target}><label className="text-xs font-bold uppercase text-gray-300">Image de {target === 'start' ? 'départ' : 'fin'} — optionnelle</label><input ref={ref} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && loadImage(e.target.files[0], target)} />{value ? <div className="relative mt-2 rounded-2xl border border-white/10 overflow-hidden"><img src={value} className="w-full h-40 object-contain bg-black/20" /><button onClick={() => target === 'start' ? setStartImage(null) : setEndImage(null)} className="absolute top-2 right-2 p-2 rounded-full bg-black/70"><X className="w-4 h-4" /></button></div> : <button onClick={() => ref.current?.click()} className="mt-2 w-full h-40 rounded-2xl border border-dashed border-white/15 text-gray-400 flex flex-col items-center justify-center gap-2"><Upload className="w-5 h-5" />Importer</button>}</div>; })}</div>
-      {isGenerating && <div className="p-4 rounded-2xl border border-pink-500/30 bg-white/[0.03]"><div className="flex justify-between text-xs text-pink-200"><span className="flex gap-2"><RefreshCw className="w-4 h-4 animate-spin" />{status}</span><span>{progress}%</span></div><div className="h-2 bg-white/10 rounded-full mt-2 overflow-hidden"><div className="h-full bg-gradient-to-r from-pink-500 to-blue-500" style={{ width: `${progress}%` }} /></div></div>}
-      <button disabled={isGenerating || !prompt.trim()} onClick={handleGenerate} className="w-full py-4 rounded-2xl bg-gradient-to-r from-pink-600 via-purple-600 to-blue-600 text-white font-extrabold flex justify-center gap-2 disabled:opacity-50"><Sparkles className="w-5 h-5" />Générer avec {MODEL_CONFIG[videoModel].label} — {creditCost} crédits</button>
-    </section>
-    <section className="space-y-4"><div className="flex justify-between items-center"><h3 className="text-lg font-bold text-white">Galerie vidéo ({videoCreations.length})</h3><span className={`text-[11px] px-3 py-1 rounded-full border ${canDownloadHd ? 'text-emerald-300 border-emerald-500/30' : 'text-amber-300 border-amber-500/30'}`}>{canDownloadHd ? `Téléchargement HD : ${plan?.maxDownloadResolution}` : 'HD verrouillée sans abonnement'}</span></div>{videoCreations.length === 0 ? <div className="py-12 text-center rounded-3xl border border-white/10 text-gray-500">Aucune vidéo générée.</div> : <div className="grid md:grid-cols-2 gap-5">{videoCreations.map((gen) => { const s = gen.settings as VideoGenerationSettings; return <article key={gen.id} className="rounded-2xl border border-white/10 overflow-hidden bg-white/[0.03]"><video src={gen.resultUrl} controls playsInline className="w-full aspect-video bg-black" /><div className="p-4 space-y-3"><div className="flex justify-between text-[10px]"><span className="text-pink-300 font-bold">{s.videoModel ? MODEL_CONFIG[s.videoModel].label : gen.model}</span><span className="text-gray-500">{s.duration}s • {s.aspectRatio} • {s.resolution || '720p'}</span></div><p className="text-xs text-gray-300 line-clamp-2">{gen.prompt}</p><div className="grid grid-cols-3 gap-2"><button onClick={() => downloadVideo(gen)} className="py-2 rounded-lg bg-white/[0.06] text-[10px] text-gray-200 flex justify-center gap-1">{canDownloadHd ? <Download className="w-3 h-3" /> : <Lock className="w-3 h-3" />}Télécharger</button><button onClick={() => reusePrompt(gen)} className="py-2 rounded-lg bg-white/[0.06] text-[10px] text-gray-200 flex justify-center gap-1"><Copy className="w-3 h-3" />Prompt</button><button onClick={() => removeGeneration(gen.id)} className="py-2 rounded-lg bg-rose-950/30 text-[10px] text-rose-300 flex justify-center gap-1"><Trash2 className="w-3 h-3" />Supprimer</button></div></div></article>; })}</div>}</section>
-  </div>;
+      <div className="flex flex-1 flex-col justify-end rounded-[28px] border border-white/10 bg-white/[0.025] p-3 sm:p-5">
+        <div className="flex-1 overflow-y-auto pb-6">
+          {latest?.resultUrl ? (
+            <div className="mx-auto max-w-4xl">
+              <div className="overflow-hidden rounded-3xl border border-white/10 bg-black/30"><video src={latest.resultUrl} controls playsInline className="max-h-[58vh] w-full bg-black object-contain" /></div>
+              <div className="mt-3 flex items-center gap-2">
+                <button onClick={download} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-bold text-gray-200"><Download className="h-3.5 w-3.5" /> {user.plan === 'free' ? 'Débloquer téléchargement HD' : 'Télécharger HD'}</button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex min-h-[42vh] flex-col items-center justify-center text-center">
+              <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-pink-500/20 bg-pink-500/10"><Film className="h-5 w-5 text-pink-200" /></span>
+              <p className="text-sm font-bold text-gray-300">Décrivez la vidéo. Veo s’occupe du reste.</p>
+              <p className="mt-1 max-w-md text-xs leading-5 text-gray-600">Caméra, mouvements, dialogue, musique, ambiance et lumière peuvent être précisés directement dans le prompt.</p>
+            </div>
+          )}
+        </div>
+
+        {(startImage || endImage) && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 px-1">
+            {startImage && <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-pink-400/30"><img src={startImage} alt="Départ" className="h-full w-full object-cover" /><button onClick={() => setStartImage(null)} className="absolute right-1 top-1 rounded-full bg-black/70 p-1"><X className="h-3 w-3" /></button></div>}
+            {endImage && <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-blue-400/30"><img src={endImage} alt="Fin" className="h-full w-full object-cover" /><button onClick={() => setEndImage(null)} className="absolute right-1 top-1 rounded-full bg-black/70 p-1"><X className="h-3 w-3" /></button></div>}
+          </div>
+        )}
+
+        <div className="rounded-3xl border border-white/10 bg-[#0b1426]/95 p-2 shadow-2xl">
+          <input ref={startInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && loadImage(e.target.files[0], 'start')} />
+          <input ref={endInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && loadImage(e.target.files[0], 'end')} />
+          <div className="flex items-end gap-2">
+            <button onClick={() => startInput.current?.click()} className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-gray-300 hover:bg-white/[0.1]" title="Ajouter une image de départ"><Plus className="h-5 w-5" /></button>
+            <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); generate(); } }} rows={2} placeholder="Décrivez la vidéo que vous voulez créer…" className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-3 text-sm text-white outline-none placeholder:text-gray-600" />
+            <button onClick={() => setSettingsOpen(true)} className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-gray-400 hover:text-white" title="Réglages"><Settings2 className="h-4 w-4" /></button>
+            <button onClick={generate} disabled={isGenerating || !prompt.trim()} className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-600 via-pink-600 to-blue-600 text-white disabled:opacity-40" title="Générer">{isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</button>
+          </div>
+          <div className="flex items-center justify-between px-3 pb-1 pt-2 text-[10px] text-gray-600"><span>{MODEL_LABELS[model]} • {duration}s • {aspectRatio}</span><span>{creditCost} crédits</span></div>
+        </div>
+      </div>
+
+      {settingsOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm" onClick={() => setSettingsOpen(false)}>
+          <aside className="h-full w-full max-w-md overflow-y-auto border-l border-white/10 bg-[#09111f] p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between"><div><h2 className="text-lg font-black text-white">Réglages Vidéo</h2><p className="text-xs text-gray-500">Conservés automatiquement jusqu’à votre prochaine modification.</p></div><button onClick={() => setSettingsOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.05]"><X className="h-4 w-4" /></button></div>
+
+            <div className="mt-8 space-y-7">
+              <section><p className="mb-3 text-[11px] font-black uppercase tracking-[0.12em] text-gray-500">Modèle</p><div className="space-y-2">{(['lite','fast','pro'] as VideoModel[]).map((m) => <button key={m} onClick={() => setModel(m)} className={`w-full rounded-2xl border p-4 text-left ${model===m?'border-pink-500 bg-pink-500/10':'border-white/10 bg-white/[0.025]'}`}><div className="flex items-center justify-between"><span className="text-sm font-black text-white">{MODEL_LABELS[m]}</span><span className="text-[10px] text-amber-300">4s {VIDEO_COSTS[m][4]} • 6s {VIDEO_COSTS[m][6]} • 8s {VIDEO_COSTS[m][8]} cr</span></div></button>)}</div></section>
+              <section><p className="mb-3 text-[11px] font-black uppercase tracking-[0.12em] text-gray-500">Durée</p><div className="grid grid-cols-3 gap-2">{([4,6,8] as VideoDuration[]).map((d) => <button key={d} disabled={Boolean(endImage) && d!==8} onClick={() => setDuration(d)} className={`rounded-2xl border py-3 text-sm font-black disabled:opacity-30 ${duration===d?'border-pink-500 bg-pink-500/10 text-white':'border-white/10 bg-white/[0.025] text-gray-400'}`}>{d}s</button>)}</div>{endImage && <p className="mt-2 text-[10px] text-amber-300">Une image de fin impose 8 secondes.</p>}</section>
+              <section><p className="mb-3 text-[11px] font-black uppercase tracking-[0.12em] text-gray-500">Format</p><div className="grid grid-cols-2 gap-2">{(['16:9','9:16'] as const).map((r) => <button key={r} onClick={() => setAspectRatio(r)} className={`rounded-2xl border py-3 text-sm font-black ${aspectRatio===r?'border-pink-500 bg-pink-500/10 text-white':'border-white/10 bg-white/[0.025] text-gray-400'}`}>{r}</button>)}</div></section>
+              <section><p className="mb-3 text-[11px] font-black uppercase tracking-[0.12em] text-gray-500">Images avancées</p><button onClick={() => endInput.current?.click()} className="w-full rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-left text-xs font-bold text-gray-300">Ajouter / remplacer l’image de fin</button></section>
+              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="text-xs text-gray-400">Cette génération</p><p className="mt-1 text-2xl font-black text-amber-300">{creditCost} crédits</p></div>
+            </div>
+            <button onClick={() => setSettingsOpen(false)} className="mt-8 w-full rounded-2xl bg-white py-3 text-sm font-black text-[#08101f]">Appliquer</button>
+          </aside>
+        </div>
+      )}
+    </div>
+  );
 };
