@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
@@ -27,14 +27,15 @@ const technicalLogs: any[] = [];
 
 const VIDEO_MODELS: Record<VideoModel, { name: string; model: string; allowed: VideoDuration[]; usdPerSecond: number }> = {
   lite: { name: 'Veo 3.1 Lite', model: 'veo-3.1-lite-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.05 },
-  omni: { name: 'Gemini Omni Fast', model: 'gemini-omni-1.1-flash', allowed: [4, 6, 8, 10], usdPerSecond: 0.10 },
+  fast: { name: 'Veo 3.1 Fast', model: 'veo-3.1-fast-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.10 },
   pro: { name: 'Veo 3.1 Pro', model: 'veo-3.1-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.40 },
 };
 
-function videoCreditCost(model: VideoModel, duration: VideoDuration) {
-  const base = model === 'lite' ? 10 : model === 'omni' ? 20 : 40;
-  return Math.ceil(base * (duration / 4));
-}
+const VIDEO_CREDIT_COSTS: Record<VideoModel, Record<VideoDuration, number>> = {
+  lite: { 4: 15, 6: 23, 8: 30 },
+  fast: { 4: 30, 6: 45, 8: 60 },
+  pro: { 4: 120, 6: 180, 8: 240 },
+};
 
 let appSettings = {
   siteName: 'MUNGWELE IA STUDIO',
@@ -46,9 +47,9 @@ let appSettings = {
 
 let apiProviders: any[] = [
   { id: 'prov-openai-image', name: 'OpenAI GPT-Image', providerKey: 'openai', category: 'image', enabled: true, isConfigured: !!process.env.OPENAI_API_KEY, isDemoFallback: false, modelName: 'gpt-image-2', latencyAvgMs: 0, creditCost: 8 },
-  { id: 'prov-video-lite', name: 'Veo 3.1 Lite', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.lite.model, latencyAvgMs: 0, creditCost: 10 },
-  { id: 'prov-video-omni', name: 'Gemini Omni Fast', providerKey: 'gemini', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.omni.model, latencyAvgMs: 0, creditCost: 20 },
-  { id: 'prov-video-pro', name: 'Veo 3.1 Pro', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.pro.model, latencyAvgMs: 0, creditCost: 40 },
+  { id: 'prov-video-lite', name: 'Veo 3.1 Lite', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.lite.model, latencyAvgMs: 0, creditCost: 15 },
+  { id: 'prov-video-fast', name: 'Veo 3.1 Fast', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.fast.model, latencyAvgMs: 0, creditCost: 30 },
+  { id: 'prov-video-pro', name: 'Veo 3.1 Pro', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.pro.model, latencyAvgMs: 0, creditCost: 120 },
   { id: 'prov-suno-music', name: 'Suno AI Music', providerKey: 'suno', category: 'music', enabled: true, isConfigured: !!process.env.MUSIC_PROVIDER_API_KEY, isDemoFallback: false, modelName: 'suno-provider', latencyAvgMs: 0, creditCost: 10 },
   { id: 'prov-gemini-assistant', name: 'Gemini Prompt Assistant', providerKey: 'gemini', category: 'text', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: 'gemini-3.7-flash', latencyAvgMs: 0, creditCost: 0 },
 ];
@@ -88,7 +89,8 @@ async function openAIImage(prompt: string, referenceImage?: string | null) {
   }
 
   const response = await fetch('https://api.openai.com/v1/images/generations', {
-    method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: 'gpt-image-2', prompt }),
   });
   const payload: any = await response.json().catch(() => ({}));
@@ -101,7 +103,7 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'MUNGWELE IA
 
 app.get('/api/settings', (_req, res) => {
   apiProviders = apiProviders.map((p) => ({ ...p, isConfigured: p.category === 'image' ? !!process.env.OPENAI_API_KEY : p.category === 'video' || p.category === 'text' ? !!process.env.GEMINI_API_KEY : p.isConfigured }));
-  res.json({ settings: appSettings, providers: apiProviders, videoModels: VIDEO_MODELS });
+  res.json({ settings: appSettings, providers: apiProviders, videoModels: VIDEO_MODELS, videoCreditCosts: VIDEO_CREDIT_COSTS });
 });
 
 app.post('/api/ai/enhance-prompt', async (req, res) => {
@@ -112,9 +114,7 @@ app.post('/api/ai/enhance-prompt', async (req, res) => {
   try {
     const response = await client.models.generateContent({ model: 'gemini-3.7-flash', contents: `Réécris ce prompt pour une génération ${type} professionnelle sans changer l'intention. Prompt: ${prompt}`, config: { temperature: 0.35 } });
     return res.json({ enhancedPrompt: response.text || prompt, tags: [], explanation: 'Prompt détaillé sans modifier l’intention.' });
-  } catch {
-    return res.json({ enhancedPrompt: prompt, tags: [], explanation: 'Prompt conservé tel quel.' });
-  }
+  } catch { return res.json({ enhancedPrompt: prompt, tags: [], explanation: 'Prompt conservé tel quel.' }); }
 });
 
 app.post('/api/ai/generate-lyrics', async (req, res) => {
@@ -125,9 +125,7 @@ app.post('/api/ai/generate-lyrics', async (req, res) => {
   try {
     const response = await client.models.generateContent({ model: 'gemini-3.7-flash', contents: `Écris des paroles originales en français. Genre: ${genre || 'Afrobeat'}. Ambiance: ${mood || 'énergique'}. Thème: ${topic || 'créativité'}.` });
     return res.json({ lyrics: response.text || '' });
-  } catch (error: any) {
-    return res.status(quotaError(error) ? 429 : 500).json({ error: quotaError(error) ? 'Quota Gemini atteint.' : 'Erreur paroles.' });
-  }
+  } catch (error: any) { return res.status(quotaError(error) ? 429 : 500).json({ error: quotaError(error) ? 'Quota Gemini atteint.' : 'Erreur paroles.' }); }
 });
 
 app.post('/api/generate/image', async (req, res) => {
@@ -152,29 +150,25 @@ app.post('/api/generate/image', async (req, res) => {
 });
 
 app.post('/api/generate/video', async (req, res) => {
-  const { prompt, model = 'omni', aspectRatio = '16:9', duration = 8, startImage, endImage, userId } = req.body || {};
+  const { prompt, model = 'fast', aspectRatio = '16:9', duration = 8, startImage, endImage, userId } = req.body || {};
   if (!prompt || typeof prompt !== 'string' || !prompt.trim()) return res.status(400).json({ error: 'Le prompt vidéo est requis.' });
   const client = getAI();
   if (!client) return res.status(503).json({ error: 'La génération vidéo nécessite GEMINI_API_KEY.', code: 'VIDEO_NOT_CONFIGURED' });
 
-  const safeModel: VideoModel = model === 'lite' || model === 'pro' ? model : 'omni';
+  const safeModel: VideoModel = model === 'lite' || model === 'pro' ? model : 'fast';
   const numeric = Number(duration);
-  const safeDuration: VideoDuration = numeric === 4 || numeric === 6 || numeric === 10 ? numeric : 8;
+  const safeDuration: VideoDuration = numeric === 4 || numeric === 6 ? numeric : 8;
   const safeAspectRatio: VeoAspectRatio = aspectRatio === '9:16' ? '9:16' : '16:9';
-  if (!VIDEO_MODELS[safeModel].allowed.includes(safeDuration)) {
-    return res.status(400).json({ error: `${VIDEO_MODELS[safeModel].name} n'accepte pas ${safeDuration}s. Durées disponibles : ${VIDEO_MODELS[safeModel].allowed.join(', ')} secondes.`, code: 'VIDEO_DURATION_UNSUPPORTED' });
-  }
   if (endImage && !startImage) return res.status(400).json({ error: 'Une image de fin nécessite une image de départ.', code: 'START_IMAGE_REQUIRED' });
+  const effectiveDuration: VideoDuration = endImage ? 8 : safeDuration;
+  const creditsUsed = VIDEO_CREDIT_COSTS[safeModel][effectiveDuration];
 
-  const effectiveDuration: VideoDuration = endImage && safeModel !== 'omni' ? 8 : safeDuration;
-  const creditsUsed = videoCreditCost(safeModel, effectiveDuration);
   try {
     const startedAt = Date.now();
     const result = await generateVideo(client, { model: safeModel, prompt: prompt.trim(), aspectRatio: safeAspectRatio, duration: effectiveDuration, startImage: typeof startImage === 'string' ? startImage : null, endImage: typeof endImage === 'string' ? endImage : null });
     const generation = { id: `gen-video-${Date.now()}`, userId: userId || 'usr-current', type: 'video', title: prompt.trim().slice(0, 60), prompt: prompt.trim(), enhancedPrompt: prompt.trim(), provider: 'Google', model: result.model, status: 'completed', progress: 100, resultUrl: result.resultUrl, thumbnailUrl: '', creditsUsed, settings: { style: 'prompt-only', videoModel: safeModel, aspectRatio: safeAspectRatio, duration: result.duration, enableAudio: true, startImage: Boolean(startImage), endImage: Boolean(endImage), resolution: '720p' }, createdAt: now(), updatedAt: now() };
     generations.unshift(generation);
-    const elapsed = Date.now() - startedAt;
-    addLog('success', 'Studio Vidéo', `${VIDEO_MODELS[safeModel].name} a généré ${result.duration}s en ${Math.round(elapsed / 1000)}s.`);
+    addLog('success', 'Studio Vidéo', `${VIDEO_MODELS[safeModel].name} a généré ${result.duration}s en ${Math.round((Date.now() - startedAt) / 1000)}s.`);
     return res.json({ success: true, generation });
   } catch (error: any) {
     const status = Number(error?.status || 0);
