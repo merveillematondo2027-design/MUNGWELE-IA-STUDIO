@@ -85,15 +85,32 @@ export const MusicStudio: React.FC = () => {
 
   const createVisualClip = () => {
     if (!latest?.resultUrl) return;
-    localStorage.setItem('mungwele.music-to-video', JSON.stringify({
+    const transfer = {
       generationId: latest.id,
       audioUrl: latest.resultUrl,
       title: latest.title,
       description: latest.prompt,
       audioDuration: latest.audioDuration || null,
+    };
+    localStorage.setItem('mungwele.music-to-video', JSON.stringify(transfer));
+    localStorage.setItem('mungwele.resume.project', JSON.stringify({
+      id: `clip-${latest.id}`,
+      userId: latest.userId,
+      type: 'video',
+      title: `Clip — ${latest.title}`,
+      prompt: `Créer un clip visuel pour la chanson « ${latest.title} ». Direction visuelle inspirée de : ${latest.prompt}. La chanson source est déjà attachée au projet MUNGWELE et devra être synchronisée par le futur fournisseur audio→vidéo.`,
+      provider: 'pending-audio-to-video',
+      model: 'pending',
+      status: 'draft',
+      resultUrl: '',
+      thumbnailUrl: '',
+      creditsUsed: 0,
+      settings: { aspectRatio: '16:9', duration: 8, videoModel: 'fast' },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     }));
     setActiveTab('studio-video');
-    addNotification('info', 'Chanson envoyée au Studio Vidéo', 'Le mode Clip visuel est prêt. Le fournisseur audio→vidéo sera connecté séparément.');
+    addNotification('info', 'Chanson envoyée au Studio Vidéo', 'Le projet Clip visuel est ouvert. La piste audio reste réservée jusqu’à la connexion d’un fournisseur audio→vidéo compatible.');
   };
 
   return (
