@@ -4,9 +4,13 @@ export type MonetizedMusicDuration = 30 | 60 | 120;
 
 // MUNGWELE's least valuable paid credit currently comes from the Pro plan:
 // $25 / 1600 credits = $0.015625 revenue per credit.
-// We price provider cost against that worst case so every paid plan remains profitable.
+// All provider-cost checks use this worst-case credit value.
 const MIN_USD_REVENUE_PER_CREDIT = 25 / 1600;
-const TARGET_PROVIDER_COST_SHARE = 0.65; // ~35% gross margin before payment/tax/hosting overhead.
+const VIDEO_TARGET_PROVIDER_COST_SHARE = 0.65;
+
+// For Eleven Music we target a 50% gross margin before taxes, payment fees and hosting.
+// In other words, provider cost must represent no more than 50% of MUNGWELE revenue.
+const MUSIC_TARGET_PROVIDER_COST_SHARE = 0.50;
 
 // Google public paid-tier 720p reference prices, USD/second.
 const USD_PER_SECOND: Record<MonetizedVideoModel, number> = {
@@ -16,12 +20,12 @@ const USD_PER_SECOND: Record<MonetizedVideoModel, number> = {
   pro: 0.40,
 };
 
-// ElevenLabs public API reference price for Music: $0.15/minute.
-const ELEVEN_MUSIC_USD_PER_MINUTE = 0.15;
+// ElevenLabs public Eleven Music API reference price: $0.15/minute, taxes excluded.
+export const ELEVEN_MUSIC_USD_PER_MINUTE = 0.15;
 
 export function minimumSafeVideoCredits(model: MonetizedVideoModel, duration: MonetizedDuration) {
   const providerCost = USD_PER_SECOND[model] * duration;
-  const requiredRevenue = providerCost / TARGET_PROVIDER_COST_SHARE;
+  const requiredRevenue = providerCost / VIDEO_TARGET_PROVIDER_COST_SHARE;
   return Math.ceil(requiredRevenue / MIN_USD_REVENUE_PER_CREDIT);
 }
 
@@ -32,15 +36,17 @@ export const VIDEO_CREDIT_COSTS: Record<MonetizedVideoModel, Record<MonetizedDur
   pro: { 4: 160, 6: 240, 8: 320 },
 };
 
+// Rounded commercial prices that preserve at least ~50% gross margin at the
+// current worst-case MUNGWELE paid-credit value.
 export const MUSIC_CREDIT_COSTS: Record<MonetizedMusicDuration, number> = {
   30: 10,
-  60: 18,
-  120: 34,
+  60: 20,
+  120: 40,
 };
 
 export function minimumSafeMusicCredits(duration: MonetizedMusicDuration) {
   const providerCost = ELEVEN_MUSIC_USD_PER_MINUTE * (duration / 60);
-  const requiredRevenue = providerCost / TARGET_PROVIDER_COST_SHARE;
+  const requiredRevenue = providerCost / MUSIC_TARGET_PROVIDER_COST_SHARE;
   return Math.ceil(requiredRevenue / MIN_USD_REVENUE_PER_CREDIT);
 }
 
