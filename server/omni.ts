@@ -47,10 +47,9 @@ export async function generateOmniVideo(options: {
     input.push({ type: 'image', data: parsed.data, mime_type: parsed.mimeType });
   }
 
-  const timedPrompt = `[0-${options.duration}s] ${options.prompt.trim()}\nCreate exactly one coherent video lasting about ${options.duration} seconds with native synchronized audio when appropriate.`;
+  const timedPrompt = `[0-${options.duration}s] ${options.prompt.trim()}\nCreate exactly one coherent video lasting ${options.duration} seconds with native synchronized audio when appropriate.`;
   input.push({ type: 'text', text: timedPrompt });
 
-  // Multiple reference images use Omni's reference workflow. A single anchor image uses image-to-video.
   const task = refs.length ? 'reference_to_video' : first || last ? 'image_to_video' : 'text_to_video';
   const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
     method: 'POST',
@@ -58,7 +57,7 @@ export async function generateOmniVideo(options: {
     body: JSON.stringify({
       model: 'gemini-omni-1.1-flash',
       input: input.length === 1 ? timedPrompt : input,
-      response_format: { type: 'video', aspect_ratio: options.aspectRatio, resolution: options.resolution || '720p' },
+      response_format: { type: 'video', aspect_ratio: options.aspectRatio, resolution: options.resolution || '720p', duration: `${options.duration}s` },
       generation_config: { video_config: { task } },
     }),
   });
