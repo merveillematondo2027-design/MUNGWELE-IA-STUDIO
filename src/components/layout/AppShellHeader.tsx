@@ -36,7 +36,7 @@ export const AppShellHeader: React.FC<{ studioMode?: boolean }> = ({ studioMode 
               </button>
             )}
             <button onClick={goHome} className="flex min-w-0 items-center gap-2 text-left">
-              <img src="/mungwele-logo.svg" alt="MUNGWELE IA STUDIO" className="h-10 w-10 rounded-xl object-contain shadow-lg" />
+              <img src="/branding/mungwele-ia-logo.png" alt="MUNGWELE IA STUDIO" className="h-10 w-10 rounded-xl object-contain shadow-lg" />
               <div className="hidden min-w-0 sm:block">
                 <p className="truncate text-sm font-black tracking-wide text-white">MUNGWELE IA STUDIO</p>
                 <p className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-purple-300">Create with AI</p>

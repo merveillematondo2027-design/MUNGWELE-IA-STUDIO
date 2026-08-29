@@ -58,7 +58,7 @@ const MainLayout: React.FC = () => {
   if (authStatus === 'loading') {
     return (
       <div className="min-h-screen bg-[#050b18] text-white flex flex-col items-center justify-center gap-4 px-6 text-center">
-        <img src="/mungwele-logo.svg" alt="MUNGWELE IA STUDIO" className="h-20 w-20 rounded-2xl object-contain shadow-2xl" />
+        <img src="/branding/mungwele-ia-logo.png" alt="MUNGWELE IA STUDIO" className="h-20 w-20 rounded-2xl object-contain shadow-2xl" />
         <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
         <p className="text-sm text-gray-400">Vérification de votre session sécurisée…</p>
       </div>

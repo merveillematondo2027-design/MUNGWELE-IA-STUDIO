@@ -47,7 +47,7 @@ export const HomeView: React.FC = () => {
     <div className="mx-auto flex min-h-[calc(100vh-10rem)] w-full max-w-6xl flex-col justify-center py-8 sm:py-12">
       <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
         <div className="mb-5 flex justify-center">
-          <img src="/mungwele-logo.svg" alt="MUNGWELE IA STUDIO" className="h-24 w-24 rounded-3xl object-contain shadow-2xl sm:h-28 sm:w-28" />
+          <img src="/branding/mungwele-ia-logo.png" alt="MUNGWELE IA STUDIO" className="h-24 w-24 rounded-3xl object-contain shadow-2xl sm:h-28 sm:w-28" />
         </div>
         <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-purple-200">
           <Sparkles className="h-3.5 w-3.5 text-pink-300" /> MUNGWELE IA STUDIO
