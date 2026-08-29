@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Loader2, Music, Pause, Play, Send } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import type { GenerationRecord, MusicGenerationSettings } from '../../types';
+import type { GenerationRecord } from '../../types';
 
 type MusicDuration = 30 | 60 | 120;
 const MUSIC_COSTS: Record<MusicDuration, number> = { 30: 10, 60: 20, 120: 40 };
