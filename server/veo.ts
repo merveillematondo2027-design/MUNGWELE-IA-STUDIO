@@ -37,11 +37,7 @@ async function readJson(response: Response) {
 }
 
 function apiError(payload: any, fallback: string, status: number) {
-  const message =
-    payload?.error?.message ||
-    payload?.message ||
-    payload?.raw ||
-    fallback;
+  const message = payload?.error?.message || payload?.message || payload?.raw || fallback;
   return Object.assign(new Error(String(message)), {
     status,
     code: payload?.error?.status || payload?.error?.code || 'VEO_API_ERROR',
@@ -77,9 +73,7 @@ export async function generateVideo(
   }
 
   const effectiveDuration: VideoDuration = last ? 8 : options.duration;
-  const instance: Record<string, any> = {
-    prompt: options.prompt,
-  };
+  const instance: Record<string, any> = { prompt: options.prompt };
 
   if (first) {
     instance.image = {
@@ -93,7 +87,6 @@ export async function generateVideo(
     durationSeconds: effectiveDuration,
     resolution: '720p',
     generateAudio: true,
-    numberOfVideos: 1,
   };
 
   if (last) {
