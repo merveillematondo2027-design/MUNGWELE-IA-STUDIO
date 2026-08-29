@@ -3,14 +3,14 @@ import { Image as ImageIcon, Plus, Send, Settings2, X, Loader2, Film, Download }
 import { useApp } from '../../context/AppContext';
 
 export const ImageStudio: React.FC = () => {
-  const { useCredits, refundCredits, addGeneration, addNotification, triggerCelebration, generations, setImageToVideoTransfer, setActiveStudio, setActiveTab } = useApp();
+  const { user, useCredits, refundCredits, addGeneration, addNotification, triggerCelebration, generations, setImageToVideoTransfer, setActiveStudio, setActiveTab } = useApp();
   const [prompt, setPrompt] = useState('');
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const creditCost = 8;
-  const latest = generations.find((g) => g.type === 'image');
+  const latest = generations.find((g) => g.type === 'image' && (!user.id || g.userId === user.id));
 
   const loadImage = (file: File) => {
     if (!file.type.startsWith('image/')) return addNotification('error', 'Format invalide', 'Utilisez PNG, JPG ou WEBP.');
@@ -28,7 +28,7 @@ export const ImageStudio: React.FC = () => {
     try {
       const response = await fetch('/api/generate/image', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.trim(), enhancedPrompt: prompt.trim(), referenceImage }),
+        body: JSON.stringify({ userId: user.id, prompt: prompt.trim(), enhancedPrompt: prompt.trim(), referenceImage }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.generation) throw new Error(data.error || 'La génération a échoué.');
