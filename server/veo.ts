@@ -83,19 +83,23 @@ export async function generateVideo(
 
   if (first) {
     instance.image = {
-      inlineData: {
-        mimeType: first.mimeType,
-        data: first.data,
-      },
+      imageBytes: first.data,
+      mimeType: first.mimeType,
     };
   }
 
+  const parameters: Record<string, any> = {
+    aspectRatio: options.aspectRatio,
+    durationSeconds: effectiveDuration,
+    resolution: '720p',
+    generateAudio: true,
+    numberOfVideos: 1,
+  };
+
   if (last) {
-    instance.lastFrame = {
-      inlineData: {
-        mimeType: last.mimeType,
-        data: last.data,
-      },
+    parameters.lastFrame = {
+      imageBytes: last.data,
+      mimeType: last.mimeType,
     };
   }
 
@@ -108,13 +112,7 @@ export async function generateVideo(
     },
     body: JSON.stringify({
       instances: [instance],
-      parameters: {
-        aspectRatio: options.aspectRatio,
-        durationSeconds: effectiveDuration,
-        resolution: '720p',
-        generateAudio: true,
-        numberOfVideos: 1,
-      },
+      parameters,
     }),
   });
 
