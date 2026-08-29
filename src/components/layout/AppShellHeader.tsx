@@ -46,6 +46,12 @@ export const AppShellHeader: React.FC<{ studioMode?: boolean }> = ({ studioMode 
           </div>
 
           <div className="flex items-center gap-2">
+            {user.role === 'admin' && (
+              <button onClick={() => go('admin-home')} className="inline-flex h-10 items-center gap-2 rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 text-xs font-black text-rose-200 hover:bg-rose-500/15" title="Ouvrir l'administration">
+                <Shield className="h-4 w-4" />
+                <span className="hidden sm:inline">Admin</span>
+              </button>
+            )}
             <button onClick={() => { setMenuOpen(true); setProfileOpen(false); }} className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-xs font-bold text-gray-200 hover:bg-white/[0.08]"><Menu className="h-4 w-4" /><span className="hidden sm:inline">Menu</span></button>
             <div className="relative z-50">
               <button onClick={() => { setProfileOpen((v) => !v); setMenuOpen(false); }} className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-2 text-left hover:bg-white/[0.08]">
@@ -59,7 +65,7 @@ export const AppShellHeader: React.FC<{ studioMode?: boolean }> = ({ studioMode 
                     <div className="mb-1 border-b border-white/10 px-3 py-2"><p className="truncate text-xs font-bold text-white">{user.name || 'Compte MUNGWELE'}</p><p className="truncate text-[10px] text-gray-500">{user.email}</p><p className="mt-2 text-[11px] font-black text-amber-300">{user.credits} crédits disponibles</p></div>
                     <button onClick={() => go('profile')} className="w-full rounded-xl px-3 py-2 text-left text-xs text-gray-300 hover:bg-white/[0.06]">Mon profil</button>
                     <button onClick={() => go('subscription')} className="w-full rounded-xl px-3 py-2 text-left text-xs text-gray-300 hover:bg-white/[0.06]">Mes crédits & abonnement</button>
-                    {user.role === 'admin' && <button onClick={() => go('admin')} className="w-full rounded-xl px-3 py-2 text-left text-xs text-purple-300 hover:bg-purple-500/10">Administration</button>}
+                    {user.role === 'admin' && <button onClick={() => go('admin-home')} className="w-full rounded-xl px-3 py-2 text-left text-xs text-purple-300 hover:bg-purple-500/10">Centre d’administration</button>}
                     <button onClick={logout} className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs text-rose-300 hover:bg-rose-500/10"><LogOut className="h-3.5 w-3.5" /> Se déconnecter</button>
                   </div>
                 </>
@@ -85,7 +91,7 @@ export const AppShellHeader: React.FC<{ studioMode?: boolean }> = ({ studioMode 
               <button onClick={() => go('subscription')} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm text-gray-200 hover:bg-white/[0.06]"><CreditCard className="h-4 w-4 text-pink-300" /> Abonnements & crédits</button>
               <button onClick={() => go('profile')} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm text-gray-200 hover:bg-white/[0.06]"><Settings className="h-4 w-4 text-blue-300" /> Profil & paramètres</button>
               <button onClick={() => go('help')} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm text-gray-200 hover:bg-white/[0.06]"><CircleHelp className="h-4 w-4 text-cyan-300" /> Aide</button>
-              {user.role === 'admin' && <button onClick={() => go('admin')} className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-purple-500/20 bg-purple-500/10 px-4 py-3 text-sm font-bold text-purple-200 hover:bg-purple-500/15"><Shield className="h-4 w-4" /> Administration générale</button>}
+              {user.role === 'admin' && <button onClick={() => go('admin-home')} className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-purple-500/20 bg-purple-500/10 px-4 py-3 text-sm font-bold text-purple-200 hover:bg-purple-500/15"><Shield className="h-4 w-4" /> Centre d’administration</button>}
             </div>
           </aside>
         </div>
