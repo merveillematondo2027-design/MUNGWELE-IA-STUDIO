@@ -1,5 +1,5 @@
-import React from 'react';
-import { ArrowLeft, Film, Image as ImageIcon, Music2, Plus, Play } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowLeft, Film, Globe2, Image as ImageIcon, Music2, Plus, Play } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { GenerationRecord, StudioType } from '../../types';
 
@@ -10,7 +10,8 @@ const META = {
 } as const;
 
 export const ProjectsHubView: React.FC<{ type: StudioType }> = ({ type }) => {
-  const { generations, user, setActiveStudio, setActiveTab } = useApp();
+  const { generations, user, updateGeneration, addNotification, setActiveStudio, setActiveTab } = useApp();
+  const [publishingId, setPublishingId] = useState<string | null>(null);
   const meta = META[type];
   const Icon = meta.icon;
   const projects = generations.filter((g) => g.type === type && (!user.id || g.userId === user.id));
@@ -25,6 +26,28 @@ export const ProjectsHubView: React.FC<{ type: StudioType }> = ({ type }) => {
     localStorage.setItem('mungwele.resume.project', JSON.stringify(project));
     setActiveStudio(type);
     setActiveTab(`studio-${type}` as any);
+  };
+
+  const togglePublish = async (event: React.MouseEvent, project: GenerationRecord) => {
+    event.stopPropagation();
+    if (publishingId) return;
+    setPublishingId(project.id);
+    const nextPublic = !project.isPublic;
+    try {
+      const response = await fetch(`/api/generations/${project.id}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPublic: nextPublic, userId: user.id, authorName: user.name || 'Créateur MUNGWELE' }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.generation) throw new Error(data.error || 'Publication impossible.');
+      updateGeneration(project.id, data.generation);
+      addNotification('success', nextPublic ? 'Publié dans la Communauté' : 'Publication retirée', nextPublic ? 'Votre création est maintenant visible par la communauté.' : 'Votre création n’est plus publique.');
+    } catch (error: any) {
+      addNotification('error', 'Publication impossible', error?.message || 'Réessayez dans quelques instants.');
+    } finally {
+      setPublishingId(null);
+    }
   };
 
   return (
@@ -57,9 +80,18 @@ export const ProjectsHubView: React.FC<{ type: StudioType }> = ({ type }) => {
                   <img src={project.thumbnailUrl || project.resultUrl} alt={project.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" />
                 )}
                 <span className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white"><Play className="h-3.5 w-3.5" /></span>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => togglePublish(e, project)}
+                  className={`absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-xl border backdrop-blur-md transition ${project.isPublic ? 'border-cyan-300/40 bg-cyan-500/25 text-cyan-100' : 'border-white/15 bg-black/55 text-white'}`}
+                  title={project.isPublic ? 'Retirer de la communauté' : 'Publier dans la communauté'}
+                >
+                  <Globe2 className={`h-4 w-4 ${publishingId === project.id ? 'animate-pulse' : ''}`} />
+                </span>
               </div>
               <div className="p-3.5">
-                <h2 className="line-clamp-1 text-sm font-black text-white">{project.title || 'Projet sans titre'}</h2>
+                <div className="flex items-center gap-2"><h2 className="line-clamp-1 flex-1 text-sm font-black text-white">{project.title || 'Projet sans titre'}</h2>{project.isPublic && <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[9px] font-bold text-cyan-300">Public</span>}</div>
                 <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-gray-500">{project.prompt}</p>
                 <div className="mt-3 flex items-center justify-between text-[10px] text-gray-600"><span>{new Date(project.updatedAt || project.createdAt).toLocaleDateString('fr-FR')}</span><span className="font-bold text-gray-300">Continuer</span></div>
               </div>
