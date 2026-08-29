@@ -1,39 +1,25 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 
-export type MusicDurationSeconds = 30 | 60 | 120;
-
-export interface ElevenMusicOptions {
-  prompt: string;
-  genre?: string;
-  mood?: string;
-  durationSeconds: MusicDurationSeconds;
-  instrumental?: boolean;
-  lyrics?: string;
+export interface ElevenMusicPlan {
+  compositionPlan: Record<string, unknown>;
+  durationMs: number;
+  instrumental: boolean;
 }
 
 function apiKey() {
   return process.env.ELEVENLABS_API_KEY || process.env.MUSIC_PROVIDER_API_KEY || '';
 }
 
-function buildPrompt(options: ElevenMusicOptions) {
-  const description = options.prompt.trim();
-  const parts = [
-    'Create one original, production-ready music track from the following user description.',
-    description,
-    `Target duration: ${options.durationSeconds} seconds.`,
-  ];
-
-  if (options.instrumental) {
-    parts.push('The user explicitly requests an instrumental track. Do not add singing, spoken words, or vocal ad-libs.');
+function requireApiKey() {
+  const key = apiKey();
+  if (!key) {
+    throw Object.assign(new Error('Clé ElevenLabs Music absente côté serveur.'), {
+      status: 503,
+      code: 'ELEVEN_MUSIC_NOT_CONFIGURED',
+    });
   }
-
-  if (options.lyrics?.trim()) {
-    parts.push('Use these original lyrics when appropriate:');
-    parts.push(options.lyrics.trim());
-  }
-
-  return parts.join('\n').slice(0, 4100);
+  return key;
 }
 
 async function providerError(response: Response) {
@@ -46,16 +32,61 @@ async function providerError(response: Response) {
   }
 }
 
-export async function generateElevenMusic(options: ElevenMusicOptions) {
-  const key = apiKey();
-  if (!key) {
-    throw Object.assign(new Error('Clé ElevenLabs Music absente côté serveur.'), {
-      status: 503,
-      code: 'ELEVEN_MUSIC_NOT_CONFIGURED',
+function durationFromPlan(plan: any) {
+  if (Array.isArray(plan?.chunks)) {
+    return plan.chunks.reduce((total: number, chunk: any) => total + Math.max(0, Number(chunk?.duration_ms || 0)), 0);
+  }
+  if (Array.isArray(plan?.sections)) {
+    return plan.sections.reduce((total: number, section: any) => total + Math.max(0, Number(section?.duration_ms || 0)), 0);
+  }
+  return 0;
+}
+
+function detectsInstrumental(description: string) {
+  return /\b(instrumental|sans\s+voix|no\s+vocals?|beat\s+only|instrumentale?)\b/i.test(description);
+}
+
+export async function createElevenMusicPlan(description: string): Promise<ElevenMusicPlan> {
+  const key = requireApiKey();
+  const prompt = description.trim().slice(0, 4100);
+  if (!prompt) throw Object.assign(new Error('La description musicale est requise.'), { status: 400 });
+
+  const response = await fetch('https://api.elevenlabs.io/v1/music/plan', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'xi-api-key': key,
+      'User-Agent': 'mungwele-ia-studio/1.0',
+    },
+    body: JSON.stringify({ prompt, model_id: 'music_v2' }),
+  });
+
+  if (!response.ok) {
+    const message = await providerError(response);
+    throw Object.assign(new Error(message), {
+      status: response.status,
+      code: response.status === 429 ? 'ELEVEN_MUSIC_RATE_LIMIT' : 'ELEVEN_MUSIC_PLAN_ERROR',
     });
   }
 
-  const prompt = buildPrompt(options);
+  const compositionPlan = await response.json() as Record<string, unknown>;
+  const durationMs = durationFromPlan(compositionPlan);
+  if (!durationMs) {
+    throw Object.assign(new Error("Eleven Music n'a pas pu déterminer la structure du morceau."), {
+      status: 502,
+      code: 'ELEVEN_MUSIC_INVALID_PLAN',
+    });
+  }
+
+  return {
+    compositionPlan,
+    durationMs,
+    instrumental: detectsInstrumental(prompt),
+  };
+}
+
+export async function generateElevenMusicFromPlan(plan: ElevenMusicPlan) {
+  const key = requireApiKey();
   const url = new URL('https://api.elevenlabs.io/v1/music');
   url.searchParams.set('output_format', 'mp3_48000_192');
 
@@ -67,10 +98,8 @@ export async function generateElevenMusic(options: ElevenMusicOptions) {
       'User-Agent': 'mungwele-ia-studio/1.0',
     },
     body: JSON.stringify({
-      prompt,
-      music_length_ms: options.durationSeconds * 1000,
+      composition_plan: plan.compositionPlan,
       model_id: 'music_v2',
-      force_instrumental: options.instrumental === true,
       store_for_inpainting: false,
       sign_with_c2pa: true,
     }),
@@ -101,7 +130,7 @@ export async function generateElevenMusic(options: ElevenMusicOptions) {
     provider: 'ElevenLabs',
     model: 'music_v2',
     songId: response.headers.get('song-id') || undefined,
-    durationSeconds: options.durationSeconds,
+    durationSeconds: Math.max(1, Math.round(plan.durationMs / 1000)),
     resultUrl: `/generated/music/${filename}`,
   };
 }
