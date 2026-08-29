@@ -1,7 +1,8 @@
 import React from 'react';
-import { ArrowRight, Film, Globe2, Image as ImageIcon, Music as MusicIcon, Sparkles } from 'lucide-react';
+import { ArrowRight, Film, Image as ImageIcon, Music as MusicIcon, Sparkles } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import brandLogo from '../../assets/mungwele-brand.svg';
+import { CommunityFeed } from '../community/CommunityFeed';
 
 export const HomeView: React.FC = () => {
   const { setActiveStudio, setActiveTab, user } = useApp();
@@ -46,17 +47,9 @@ export const HomeView: React.FC = () => {
         })}
       </div>
 
-      <button onClick={() => setActiveTab('community')} className="group mt-4 flex w-full items-center justify-between rounded-2xl border border-cyan-400/15 bg-gradient-to-r from-cyan-500/10 via-blue-500/8 to-purple-500/10 px-4 py-4 text-left transition hover:border-cyan-400/30 hover:bg-white/[0.045]">
-        <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-500/10 text-cyan-300"><Globe2 className="h-5 w-5" /></span>
-          <div><h2 className="text-sm font-black text-white sm:text-base">Communauté</h2><p className="mt-0.5 text-[10px] text-gray-500 sm:text-xs">Découvrez les créations que les utilisateurs rendent publiques.</p></div>
-        </div>
-        <ArrowRight className="h-4 w-4 text-cyan-300 transition-transform group-hover:translate-x-1" />
-      </button>
+      <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-center text-[11px] leading-5 text-gray-500">Vidéo : Veo 3.1 Lite, Fast, Pro et Gemini Omni Flash 1.1.</div>
 
-      <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-center text-[11px] leading-5 text-gray-500">
-        Vidéo : Veo 3.1 Lite, Fast, Pro et Gemini Omni Flash 1.1.
-      </div>
+      <CommunityFeed compact />
     </div>
   );
 };
