@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="m-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="50%" stop-color="#7C3AED" />
+      <stop offset="100%" stop-color="#EC4899" />
+    </linearGradient>
+    <radialGradient id="star-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <g stroke="url(#m-grad)" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 100 400 L 100 150 L 256 300 L 412 150 L 412 400" />
+    <circle cx="256" cy="300" r="10" fill="url(#m-grad)" stroke="none" />
+  </g>
+  
+  <g transform="translate(256, 120)">
+    <circle cx="0" cy="0" r="16" fill="url(#star-glow)" />
+    <path d="M 0 -20 L 5 -5 L 20 0 L 5 5 L 0 20 L -5 5 L -20 0 L -5 -5 Z" fill="#ffffff" />
+  </g>
+</svg>

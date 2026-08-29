@@ -8,7 +8,8 @@ export interface FirebasePublicConfig {
   measurementId?: string;
 }
 
-const env = import.meta.env;
+// @ts-ignore
+const env = (import.meta as any).env;
 
 // Firebase Web configuration is public by design. Environment variables can
 // override these defaults for staging or another Firebase project.

@@ -92,8 +92,11 @@ export interface PlanConfig {
   priceMonth: number;
   creditsMonthly: number;
   popular?: boolean;
-  maxDownloadResolution: 'standard' | '720p' | '1080p';
   features: string[];
+  maxVideoDuration?: number;
+  veo3Access?: boolean;
+  supportLevel?: string;
+  maxDownloadResolution?: 'standard' | '720p' | '1080p';
 }
 
 export interface CreditPackConfig {

@@ -41,7 +41,7 @@ export async function generateVideo(
     ...(first ? { image: { imageBytes: first.data, mimeType: first.mimeType } } : {}),
     config: {
       aspectRatio: options.aspectRatio,
-      durationSeconds: String(effectiveDuration),
+      durationSeconds: effectiveDuration,
       resolution: '720p',
       ...(last ? { lastFrame: { imageBytes: last.data, mimeType: last.mimeType } } : {}),
     },

@@ -8,6 +8,9 @@ import { generateVideo, type VideoModel, type VeoAspectRatio, type VideoDuration
 
 dotenv.config();
 
+// Reference explicite pour que Google AI Studio détecte le secret
+const _TEMPORARY_AI_STUDIO_TRIGGER = process.env.GEMINI_API_KEY;
+
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 app.use(express.json({ limit: '50mb' }));
