@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import brandLogo from './assets/mungwele-brand.svg';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
+type AdminSection = 'home' | 'users' | 'credits' | 'subscriptions' | 'library' | 'logs' | 'usage';
 
 const MainLayout: React.FC = () => {
   const { activeTab, activeMediaModal, setActiveMediaModal, appSettings, user, setUser, resetUser, addNotification } = useApp();
@@ -80,7 +81,7 @@ const MainLayout: React.FC = () => {
 
   const isStudioTab = activeTab === 'studio-image' || activeTab === 'studio-video' || activeTab === 'studio-music';
   const canOpenAdmin = user.role === 'admin' && Boolean(user.id);
-  const renderAdmin = (section: Parameters<typeof AdminWorkspaceView>[0]['section']) => canOpenAdmin ? <AdminWorkspaceView section={section} /> : <ProfileView />;
+  const renderAdmin = (section: AdminSection) => canOpenAdmin ? <AdminWorkspaceView section={section} /> : <ProfileView />;
 
   return (
     <div className="relative min-h-screen bg-[#07101f] text-gray-100 antialiased selection:bg-purple-600 selection:text-white overflow-x-hidden">
