@@ -2,174 +2,58 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import type { GoogleGenAI } from '@google/genai';
 
-export type VideoModel = 'lite' | 'omni' | 'pro';
+export type VideoModel = 'lite' | 'fast' | 'pro';
 export type VeoAspectRatio = '16:9' | '9:16';
-export type VideoDuration = 4 | 6 | 8 | 10;
+export type VideoDuration = 4 | 6 | 8;
+export type VideoResolution = '720p' | '1080p' | '4k';
 
 const MODEL_IDS: Record<VideoModel, string> = {
   lite: 'veo-3.1-lite-generate-preview',
-  omni: 'gemini-omni-1.1-flash',
+  fast: 'veo-3.1-fast-generate-preview',
   pro: 'veo-3.1-generate-preview',
 };
 
 function dataUrlToImage(dataUrl?: string | null) {
   if (!dataUrl) return undefined;
   const match = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl);
-  if (!match) {
-    throw Object.assign(new Error("L'image vidéo fournie est invalide."), {
-      status: 400,
-      code: 'INVALID_VIDEO_IMAGE',
-    });
-  }
+  if (!match) throw Object.assign(new Error("L'image vidéo fournie est invalide."), { status: 400, code: 'INVALID_VIDEO_IMAGE' });
   return { mimeType: match[1], data: match[2] };
 }
 
-async function saveVideoBytes(bytes: Buffer, prefix: string) {
-  const outputDir = path.join(process.cwd(), 'generated', 'videos');
-  await fs.mkdir(outputDir, { recursive: true });
-  const filename = `${prefix}-${Date.now()}.mp4`;
-  await fs.writeFile(path.join(outputDir, filename), bytes);
-  return `/generated/videos/${filename}`;
-}
-
-async function generateWithVeo(
-  ai: GoogleGenAI,
-  options: {
-    model: 'lite' | 'pro';
-    prompt: string;
-    aspectRatio: VeoAspectRatio;
-    duration: VideoDuration;
-    startImage?: string | null;
-    endImage?: string | null;
-  },
-) {
-  if (options.duration === 10) {
-    throw Object.assign(
-      new Error('Veo 3.1 Lite et Veo 3.1 Pro acceptent directement 4, 6 ou 8 secondes. Le mode 10 secondes direct est réservé à Omni Fast.'),
-      { status: 400, code: 'VIDEO_DURATION_UNSUPPORTED' },
-    );
-  }
-
+export async function generateVideo(ai: GoogleGenAI, options: { model: VideoModel; prompt: string; aspectRatio: VeoAspectRatio; duration: VideoDuration; resolution?: VideoResolution; startImage?: string | null; endImage?: string | null; }) {
   const first = dataUrlToImage(options.startImage);
   const last = dataUrlToImage(options.endImage);
-  if (last && !first) {
-    throw Object.assign(new Error('Une image de fin nécessite une image de départ.'), {
-      status: 400,
-      code: 'START_IMAGE_REQUIRED',
-    });
-  }
+  if (last && !first) throw Object.assign(new Error('Une image de fin nécessite une image de départ.'), { status: 400, code: 'START_IMAGE_REQUIRED' });
 
-  // Veo 3.1 exige 8 s lorsque lastFrame est utilisé.
-  const effectiveDuration: 4 | 6 | 8 = last ? 8 : options.duration;
-  const modelId = MODEL_IDS[options.model];
+  const resolution: VideoResolution = options.resolution || '720p';
+  if (options.model === 'lite' && resolution === '4k') throw Object.assign(new Error('Veo 3.1 Lite ne prend pas en charge la sortie 4K.'), { status: 400, code: 'VIDEO_RESOLUTION_UNSUPPORTED' });
+  if ((resolution === '1080p' || resolution === '4k') && options.duration !== 8) throw Object.assign(new Error(`${resolution} nécessite une vidéo de 8 secondes avec Veo 3.1.`), { status: 400, code: 'VIDEO_RESOLUTION_DURATION_UNSUPPORTED' });
 
+  const effectiveDuration: VideoDuration = last ? 8 : options.duration;
   let operation = await ai.models.generateVideos({
-    model: modelId,
+    model: MODEL_IDS[options.model],
     prompt: options.prompt,
     ...(first ? { image: { imageBytes: first.data, mimeType: first.mimeType } } : {}),
     config: {
       aspectRatio: options.aspectRatio,
       durationSeconds: String(effectiveDuration),
-      resolution: '720p',
+      resolution,
       ...(last ? { lastFrame: { imageBytes: last.data, mimeType: last.mimeType } } : {}),
     },
   });
 
   const deadline = Date.now() + 8 * 60 * 1000;
   while (!operation.done) {
-    if (Date.now() > deadline) {
-      throw Object.assign(new Error('La génération Veo a dépassé le délai maximal de 8 minutes.'), {
-        status: 504,
-        code: 'VIDEO_TIMEOUT',
-      });
-    }
+    if (Date.now() > deadline) throw Object.assign(new Error('La génération Veo a dépassé le délai maximal de 8 minutes.'), { status: 504, code: 'VIDEO_TIMEOUT' });
     await new Promise((resolve) => setTimeout(resolve, 10000));
     operation = await ai.operations.getVideosOperation({ operation });
   }
 
   const video = operation.response?.generatedVideos?.[0]?.video;
   if (!video) throw new Error("Veo n'a retourné aucune vidéo exploitable.");
-
   const outputDir = path.join(process.cwd(), 'generated', 'videos');
   await fs.mkdir(outputDir, { recursive: true });
-  const filename = `${options.model}-${Date.now()}.mp4`;
+  const filename = `${options.model}-${resolution}-${Date.now()}.mp4`;
   await ai.files.download({ file: video, downloadPath: path.join(outputDir, filename) });
-
-  return {
-    model: modelId,
-    duration: effectiveDuration,
-    resultUrl: `/generated/videos/${filename}`,
-  };
-}
-
-async function generateWithOmni(
-  ai: GoogleGenAI,
-  options: {
-    prompt: string;
-    aspectRatio: VeoAspectRatio;
-    duration: VideoDuration;
-    startImage?: string | null;
-    endImage?: string | null;
-  },
-) {
-  const first = dataUrlToImage(options.startImage);
-  const last = dataUrlToImage(options.endImage);
-  if (last && !first) {
-    throw Object.assign(new Error('Une image de fin nécessite une image de départ.'), {
-      status: 400,
-      code: 'START_IMAGE_REQUIRED',
-    });
-  }
-
-  const timedPrompt = `${options.prompt}\nDurée cible : ${options.duration} secondes. Termine naturellement la scène, les dialogues et l'audio dans cette durée.`;
-  const input: any = first
-    ? [
-        { type: 'image', data: first.data, mime_type: first.mimeType },
-        ...(last ? [{ type: 'image', data: last.data, mime_type: last.mimeType }] : []),
-        {
-          type: 'text',
-          text: `${last ? 'La première image est le départ et la seconde est une référence visuelle pour la fin. ' : ''}${timedPrompt}`,
-        },
-      ]
-    : timedPrompt;
-
-  const interaction: any = await (ai as any).interactions.create({
-    model: MODEL_IDS.omni,
-    input,
-    response_format: {
-      type: 'video',
-      aspect_ratio: options.aspectRatio,
-    },
-    generationConfig: {
-      videoConfig: {
-        task: first ? 'image_to_video' : 'text_to_video',
-      },
-    },
-  });
-
-  const outputVideo = interaction?.output_video || interaction?.outputVideo;
-  if (!outputVideo?.data) {
-    throw new Error("Gemini Omni Fast n'a retourné aucune vidéo exploitable.");
-  }
-
-  return {
-    model: MODEL_IDS.omni,
-    duration: options.duration,
-    resultUrl: await saveVideoBytes(Buffer.from(outputVideo.data, 'base64'), 'omni'),
-  };
-}
-
-export async function generateVideo(
-  ai: GoogleGenAI,
-  options: {
-    model: VideoModel;
-    prompt: string;
-    aspectRatio: VeoAspectRatio;
-    duration: VideoDuration;
-    startImage?: string | null;
-    endImage?: string | null;
-  },
-) {
-  if (options.model === 'omni') return generateWithOmni(ai, options);
-  return generateWithVeo(ai, { ...options, model: options.model });
+  return { model: MODEL_IDS[options.model], duration: effectiveDuration, resolution, resultUrl: `/generated/videos/${filename}` };
 }
