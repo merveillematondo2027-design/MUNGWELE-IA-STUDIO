@@ -45,15 +45,15 @@ let appSettings = {
 
 let apiProviders = [
   {
-    id: "prov-gemini-image",
-    name: "Google Gemini Image",
-    providerKey: "gemini",
+    id: "prov-openai-image",
+    name: "OpenAI GPT-Image",
+    providerKey: "openai",
     category: "image",
     enabled: true,
-    isConfigured: !!process.env.GEMINI_API_KEY,
+    isConfigured: !!process.env.OPENAI_API_KEY,
     isDemoFallback: false,
-    modelName: "gemini-3.1-flash-lite-image",
-    latencyAvgMs: 2400,
+    modelName: "gpt-image-2",
+    latencyAvgMs: 0,
     creditCost: 8,
   },
   {
@@ -99,22 +99,109 @@ function addLog(type: string, module: string, message: string) {
   if (technicalLogs.length > 100) technicalLogs.length = 100;
 }
 
-function dataUrlToInlineData(dataUrl: string) {
+function dataUrlToBinary(dataUrl: string) {
   const match = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl || "");
   if (!match) return null;
-  return { mimeType: match[1], data: match[2] };
+  return {
+    mimeType: match[1],
+    bytes: Buffer.from(match[2], "base64"),
+  };
 }
 
 function quotaError(error: any) {
-  const message = String(error?.message || error || "");
-  return error?.status === "RESOURCE_EXHAUSTED" || error?.code === 429 || message.includes("429") || message.includes("quota");
+  const message = String(error?.message || error || "").toLowerCase();
+  return (
+    error?.status === "RESOURCE_EXHAUSTED" ||
+    error?.status === 429 ||
+    error?.code === 429 ||
+    message.includes("429") ||
+    message.includes("quota") ||
+    message.includes("rate limit")
+  );
+}
+
+function getOpenAIErrorMessage(payload: any, status: number) {
+  return payload?.error?.message || payload?.message || `OpenAI image request failed (${status}).`;
+}
+
+async function generateOpenAIImage(prompt: string): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw Object.assign(new Error("OPENAI_API_KEY absente."), { code: "OPENAI_NOT_CONFIGURED" });
+
+  const response = await fetch("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-image-2",
+      prompt,
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw Object.assign(new Error(getOpenAIErrorMessage(payload, response.status)), {
+      status: response.status,
+      code: payload?.error?.code || payload?.error?.type,
+    });
+  }
+
+  const b64 = payload?.data?.[0]?.b64_json;
+  if (!b64) throw new Error("OpenAI n'a retourné aucune image.");
+  return `data:image/png;base64,${b64}`;
+}
+
+async function editOpenAIImage(prompt: string, referenceImage: string): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw Object.assign(new Error("OPENAI_API_KEY absente."), { code: "OPENAI_NOT_CONFIGURED" });
+
+  const binary = dataUrlToBinary(referenceImage);
+  if (!binary) throw Object.assign(new Error("L'image de référence est invalide."), { code: "INVALID_REFERENCE_IMAGE" });
+
+  const form = new FormData();
+  form.append("model", "gpt-image-2");
+  form.append("prompt", prompt);
+  form.append("image", new Blob([binary.bytes], { type: binary.mimeType }), "reference.png");
+
+  const response = await fetch("https://api.openai.com/v1/images/edits", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: form,
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw Object.assign(new Error(getOpenAIErrorMessage(payload, response.status)), {
+      status: response.status,
+      code: payload?.error?.code || payload?.error?.type,
+    });
+  }
+
+  const b64 = payload?.data?.[0]?.b64_json;
+  if (!b64) throw new Error("OpenAI n'a retourné aucune image modifiée.");
+  return `data:image/png;base64,${b64}`;
 }
 
 app.get("/api/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok", app: "MUNGWELE IA STUDIO", geminiConfigured: !!process.env.GEMINI_API_KEY, timestamp: now() });
+  res.json({
+    status: "ok",
+    app: "MUNGWELE IA STUDIO",
+    openAIImageConfigured: !!process.env.OPENAI_API_KEY,
+    geminiConfigured: !!process.env.GEMINI_API_KEY,
+    timestamp: now(),
+  });
 });
 
 app.get("/api/settings", (_req: Request, res: Response) => {
+  apiProviders = apiProviders.map((provider) =>
+    provider.id === "prov-openai-image"
+      ? { ...provider, isConfigured: !!process.env.OPENAI_API_KEY }
+      : provider,
+  );
   res.json({ settings: appSettings, providers: apiProviders });
 });
 
@@ -127,7 +214,7 @@ app.post("/api/ai/enhance-prompt", async (req: Request, res: Response) => {
     return res.json({
       enhancedPrompt: prompt,
       tags: [],
-      explanation: "Assistant Gemini indisponible : prompt conservé tel quel.",
+      explanation: "Assistant de prompt indisponible : prompt conservé tel quel.",
     });
   }
 
@@ -139,7 +226,7 @@ app.post("/api/ai/enhance-prompt", async (req: Request, res: Response) => {
     });
     res.json({ enhancedPrompt: response.text || prompt, tags: [], explanation: "Prompt détaillé sans modifier l'intention." });
   } catch (error: any) {
-    addLog("warn", "Prompt Assistant", error?.message || "Erreur Gemini");
+    addLog("warn", "Prompt Assistant", error?.message || "Erreur assistant");
     res.json({ enhancedPrompt: prompt, tags: [], explanation: "Prompt conservé tel quel." });
   }
 });
@@ -162,44 +249,29 @@ app.post("/api/ai/generate-lyrics", async (req: Request, res: Response) => {
 
 app.post("/api/generate/image", async (req: Request, res: Response) => {
   const { prompt, enhancedPrompt, referenceImage, userId } = req.body || {};
-  if (!prompt || typeof prompt !== "string" || !prompt.trim()) return res.status(400).json({ error: "Le prompt image est requis." });
 
-  const client = getAI();
-  if (!client) {
+  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+    return res.status(400).json({ error: "Le prompt image est requis." });
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
     return res.status(503).json({
-      error: "La génération d'image réelle n'est pas disponible : GEMINI_API_KEY absente.",
-      code: "IMAGE_PROVIDER_NOT_CONFIGURED",
+      error: "La génération d'image nécessite OPENAI_API_KEY.",
+      code: "OPENAI_IMAGE_PROVIDER_NOT_CONFIGURED",
     });
   }
 
   const finalPrompt = String(enhancedPrompt || prompt).trim();
-  const parts: any[] = [];
-  const inline = typeof referenceImage === "string" ? dataUrlToInlineData(referenceImage) : null;
+  const hasReference = typeof referenceImage === "string" && referenceImage.startsWith("data:image/");
 
-  if (inline) {
-    parts.push({ inlineData: inline });
-    parts.push({
-      text: `MODIFICATION D'IMAGE. Utilise impérativement l'image fournie comme base. Préserve les personnes, visages, objets, cadrage, couleurs, décor et composition sauf si le prompt demande explicitement de les changer. N'effectue QUE la modification demandée. Respecte exactement les textes, noms et orthographe demandés. Instruction utilisateur : ${finalPrompt}`,
-    });
-  } else {
-    parts.push({ text: `Génère une image en suivant précisément ce prompt, sans ajouter d'éléments non demandés : ${finalPrompt}` });
-  }
+  const imagePrompt = hasReference
+    ? `MODIFICATION D'IMAGE. Utilise l'image fournie comme base. Préserve les personnes, visages, objets, cadrage, couleurs, décor et composition sauf si l'utilisateur demande explicitement de les changer. N'effectue que la modification demandée. Respecte exactement tous les textes, noms et orthographes demandés. Instruction utilisateur : ${finalPrompt}`
+    : `Crée une image en suivant précisément cette demande. Respecte exactement les textes, noms, orthographes, composition et contraintes indiquées. N'ajoute pas d'éléments non demandés. Instruction utilisateur : ${finalPrompt}`;
 
   try {
-    const result = await client.models.generateContent({
-      model: "gemini-3.1-flash-lite-image",
-      contents: { parts },
-    });
-
-    const resultParts = result.candidates?.[0]?.content?.parts || [];
-    const images: string[] = [];
-    for (const part of resultParts) {
-      if (part.inlineData?.data) images.push(`data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`);
-    }
-
-    if (!images.length) {
-      return res.status(502).json({ error: "Le fournisseur IA n'a retourné aucune image. Aucun résultat de démonstration n'a été substitué.", code: "NO_IMAGE_RETURNED" });
-    }
+    const imageUrl = hasReference
+      ? await editOpenAIImage(imagePrompt, referenceImage)
+      : await generateOpenAIImage(imagePrompt);
 
     const newGen = {
       id: `gen-img-${Date.now()}`,
@@ -208,37 +280,65 @@ app.post("/api/generate/image", async (req: Request, res: Response) => {
       title: prompt.slice(0, 60),
       prompt,
       enhancedPrompt: finalPrompt,
-      provider: "Google Gemini Image",
-      model: "gemini-3.1-flash-lite-image",
+      provider: "OpenAI",
+      model: "gpt-image-2",
       status: "completed",
       progress: 100,
-      resultUrl: images[0],
-      thumbnailUrl: images[0],
+      resultUrl: imageUrl,
+      thumbnailUrl: imageUrl,
       creditsUsed: 8,
-      settings: { style: "custom", aspectRatio: "auto", quality: "high", quantity: 1, referenceImage: !!inline },
+      settings: {
+        style: "prompt-only",
+        aspectRatio: "auto",
+        quality: "high",
+        quantity: 1,
+        referenceImage: hasReference,
+      },
       createdAt: now(),
       updatedAt: now(),
     };
+
     generations.unshift(newGen);
-    addLog("success", "Studio Image", inline ? "Retouche d'image générée depuis une référence." : "Image générée depuis un prompt.");
-    return res.json({ success: true, generation: newGen, images });
+    addLog(
+      "success",
+      "Studio Image",
+      hasReference
+        ? "Image modifiée avec OpenAI GPT-Image-2."
+        : "Image générée avec OpenAI GPT-Image-2.",
+    );
+
+    return res.json({ success: true, generation: newGen, images: [imageUrl] });
   } catch (error: any) {
     const isQuota = quotaError(error);
-    addLog("error", "Studio Image", isQuota ? "Quota Gemini image atteint." : String(error?.message || error));
-    return res.status(isQuota ? 429 : 500).json({
-      error: isQuota
-        ? "Quota Gemini Image atteint. Aucun visuel aléatoire n'a été utilisé. Réessayez lorsque le quota est disponible ou configurez une facturation/API disposant d'un quota image."
-        : "La génération d'image a échoué. Aucun visuel de démonstration n'a été substitué.",
-      code: isQuota ? "AI_QUOTA_EXHAUSTED" : "IMAGE_GENERATION_FAILED",
+    const status = Number(error?.status || 0);
+    const unauthorized = status === 401;
+    const forbidden = status === 403;
+
+    addLog("error", "Studio Image", String(error?.message || error));
+
+    return res.status(unauthorized ? 401 : forbidden ? 403 : isQuota ? 429 : 500).json({
+      error: unauthorized
+        ? "Clé OpenAI invalide ou non autorisée. Vérifiez OPENAI_API_KEY."
+        : forbidden
+          ? "Le projet OpenAI n'a pas accès au modèle d'image demandé."
+          : isQuota
+            ? "Quota ou limite OpenAI Image atteint. Vérifiez la facturation et les limites de votre projet OpenAI."
+            : `La génération OpenAI Image a échoué : ${String(error?.message || "erreur inconnue")}`,
+      code: unauthorized
+        ? "OPENAI_INVALID_API_KEY"
+        : forbidden
+          ? "OPENAI_MODEL_ACCESS_DENIED"
+          : isQuota
+            ? "OPENAI_QUOTA_EXHAUSTED"
+            : "OPENAI_IMAGE_GENERATION_FAILED",
     });
   }
 });
 
 app.post("/api/generate/video", async (req: Request, res: Response) => {
-  const { prompt, enhancedPrompt, duration = 5, enableAudio, dialogue, userId } = req.body || {};
+  const { prompt } = req.body || {};
   if (!prompt) return res.status(400).json({ error: "Le prompt vidéo est requis." });
 
-  // Tant que le connecteur Veo réel n'est pas branché, on signale explicitement le mode démo.
   if (!process.env.VEO_API_KEY) {
     return res.status(503).json({ error: "Veo 3 n'est pas encore connecté à une clé/API de production.", code: "VEO_NOT_CONFIGURED" });
   }
