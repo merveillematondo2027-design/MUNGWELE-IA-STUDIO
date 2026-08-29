@@ -1,6 +1,7 @@
 import React from 'react';
-import { ArrowRight, Film, Image as ImageIcon, Music as MusicIcon, Sparkles } from 'lucide-react';
+import { ArrowRight, Film, Globe2, Image as ImageIcon, Music as MusicIcon, Sparkles } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import brandLogo from '../../assets/mungwele-brand.svg';
 
 export const HomeView: React.FC = () => {
   const { setActiveStudio, setActiveTab, user } = useApp();
@@ -19,7 +20,7 @@ export const HomeView: React.FC = () => {
   return (
     <div className="mx-auto w-full max-w-6xl pb-12 pt-2 sm:pt-6">
       <div className="mx-auto mb-6 max-w-2xl text-center sm:mb-8">
-        <div className="mb-3 flex justify-center"><img src="/branding/mungwele-ia-logo.png" alt="MUNGWELE IA STUDIO" className="h-14 w-14 rounded-2xl object-contain shadow-xl sm:h-16 sm:w-16" /></div>
+        <div className="mb-2 flex justify-center"><img src={brandLogo} alt="MUNGWELE IA STUDIO" className="h-20 w-28 object-contain drop-shadow-2xl sm:h-24 sm:w-36" /></div>
         <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-purple-200"><Sparkles className="h-3 w-3 text-pink-300" /> MUNGWELE IA STUDIO</div>
         <h1 className="text-2xl font-black tracking-tight text-white sm:text-4xl">Que voulez-vous créer ?</h1>
         <p className="mt-2 text-xs text-gray-500 sm:text-sm">Choisissez un studio, retrouvez vos projets, puis continuez ou créez-en un nouveau.</p>
@@ -45,8 +46,16 @@ export const HomeView: React.FC = () => {
         })}
       </div>
 
-      <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-center text-[11px] leading-5 text-gray-500">
-        Vidéo : Veo 3.1 Lite, Fast, Pro et Gemini Omni Flash. Les coûts sont contrôlés côté serveur avant monétisation.
+      <button onClick={() => setActiveTab('community')} className="group mt-4 flex w-full items-center justify-between rounded-2xl border border-cyan-400/15 bg-gradient-to-r from-cyan-500/10 via-blue-500/8 to-purple-500/10 px-4 py-4 text-left transition hover:border-cyan-400/30 hover:bg-white/[0.045]">
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-500/10 text-cyan-300"><Globe2 className="h-5 w-5" /></span>
+          <div><h2 className="text-sm font-black text-white sm:text-base">Communauté</h2><p className="mt-0.5 text-[10px] text-gray-500 sm:text-xs">Découvrez les créations que les utilisateurs rendent publiques.</p></div>
+        </div>
+        <ArrowRight className="h-4 w-4 text-cyan-300 transition-transform group-hover:translate-x-1" />
+      </button>
+
+      <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-center text-[11px] leading-5 text-gray-500">
+        Vidéo : Veo 3.1 Lite, Fast, Pro et Gemini Omni Flash 1.1.
       </div>
     </div>
   );
