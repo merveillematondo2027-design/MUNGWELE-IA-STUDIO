@@ -1,37 +1,17 @@
 import React from 'react';
 import { StudioType } from '../../types';
 import { useApp } from '../../context/AppContext';
-import { Image as ImageIcon, Film, Music as MusicIcon, Sparkles } from 'lucide-react';
+import { Image as ImageIcon, Film, Clapperboard, Music as MusicIcon } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const StudioTabsHeader: React.FC = () => {
   const { activeStudio, setActiveStudio, setActiveTab } = useApp();
 
-  const tabs: { id: StudioType; label: string; subLabel: string; icon: any; color: string; gradient: string }[] = [
-    {
-      id: 'image',
-      label: 'Studio Image',
-      subLabel: 'Google Imagen 3 & 4K',
-      icon: ImageIcon,
-      color: '#7C3AED',
-      gradient: 'from-purple-600 to-indigo-600',
-    },
-    {
-      id: 'video',
-      label: 'Studio Vidéo',
-      subLabel: 'Google Veo 3 Cinématique',
-      icon: Film,
-      color: '#EC4899',
-      gradient: 'from-pink-600 to-rose-600',
-    },
-    {
-      id: 'music',
-      label: 'Studio Musique',
-      subLabel: 'Suno AI & Lyria Stéréo',
-      icon: MusicIcon,
-      color: '#2563EB',
-      gradient: 'from-blue-600 to-cyan-600',
-    },
+  const tabs: { id: StudioType; label: string; subLabel: string; icon: any; gradient: string }[] = [
+    { id: 'image', label: 'Image', subLabel: 'OpenAI Image', icon: ImageIcon, gradient: 'from-purple-600 to-indigo-600' },
+    { id: 'video', label: 'Vidéo', subLabel: 'Routeur multi-moteurs', icon: Film, gradient: 'from-pink-600 to-rose-600' },
+    { id: 'clips', label: 'Clips', subLabel: 'Musique vers vidéo', icon: Clapperboard, gradient: 'from-fuchsia-600 to-violet-600' },
+    { id: 'music', label: 'Musique', subLabel: 'Eleven Music', icon: MusicIcon, gradient: 'from-blue-600 to-cyan-600' },
   ];
 
   const handleSelect = (id: StudioType) => {
@@ -40,43 +20,16 @@ export const StudioTabsHeader: React.FC = () => {
   };
 
   return (
-    <div id="studio-tabs-header" className="w-full max-w-4xl mx-auto mb-6 px-2">
-      <div className="grid grid-cols-3 gap-2 sm:gap-3 p-1.5 rounded-2xl bg-white/[0.04] border border-white/10 backdrop-blur-2xl shadow-xl shadow-black/40">
+    <div id="studio-tabs-header" className="mx-auto mb-6 w-full max-w-5xl px-2">
+      <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-white/10 bg-white/[0.04] p-1.5 shadow-xl shadow-black/40 backdrop-blur-2xl sm:gap-3">
         {tabs.map((tab) => {
           const isActive = activeStudio === tab.id;
           const Icon = tab.icon;
-
           return (
-            <button
-              key={tab.id}
-              id={`tab-select-${tab.id}`}
-              onClick={() => handleSelect(tab.id)}
-              className={`relative flex flex-col sm:flex-row items-center justify-center sm:space-x-3 py-2.5 sm:py-3.5 px-3 rounded-xl transition-all duration-200 outline-none select-none ${
-                isActive
-                  ? 'text-white shadow-lg'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-              }`}
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="activeStudioTabIndicator"
-                  className={`absolute inset-0 rounded-xl bg-gradient-to-r ${tab.gradient} shadow-lg shadow-purple-950/40 border border-white/20`}
-                  transition={{ type: 'spring', stiffness: 450, damping: 35 }}
-                />
-              )}
-
-              <div className="relative z-10 flex items-center justify-center mb-1 sm:mb-0">
-                <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} />
-              </div>
-
-              <div className="relative z-10 text-center sm:text-left">
-                <div className="text-xs sm:text-sm font-bold leading-tight">
-                  {tab.label}
-                </div>
-                <div className={`text-[10px] hidden sm:block font-medium ${isActive ? 'text-white/80' : 'text-gray-500'}`}>
-                  {tab.subLabel}
-                </div>
-              </div>
+            <button key={tab.id} id={`tab-select-${tab.id}`} onClick={() => handleSelect(tab.id)} className={`relative flex flex-col items-center justify-center rounded-xl px-2 py-2.5 transition-all duration-200 sm:flex-row sm:gap-3 sm:py-3.5 ${isActive ? 'text-white shadow-lg' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}>
+              {isActive && <motion.div layoutId="activeStudioTabIndicator" className={`absolute inset-0 rounded-xl border border-white/20 bg-gradient-to-r ${tab.gradient}`} transition={{ type: 'spring', stiffness: 450, damping: 35 }} />}
+              <Icon className="relative z-10 mb-1 h-4 w-4 sm:mb-0 sm:h-5 sm:w-5" />
+              <div className="relative z-10 text-center sm:text-left"><div className="text-[10px] font-bold leading-tight sm:text-sm">{tab.label}</div><div className={`hidden text-[10px] font-medium sm:block ${isActive ? 'text-white/80' : 'text-gray-500'}`}>{tab.subLabel}</div></div>
             </button>
           );
         })}

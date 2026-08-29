@@ -3,6 +3,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import { AppShellHeader } from './components/layout/AppShellHeader';
 import { ImageStudio } from './components/studios/ImageStudio';
 import { VideoStudio } from './components/studios/VideoStudio';
+import { ClipStudio } from './components/studios/ClipStudio';
 import { MusicStudio } from './components/studios/MusicStudio';
 import { HomeView } from './components/views/HomeView';
 import { ProjectsHubView } from './components/views/ProjectsHubView';
@@ -79,7 +80,7 @@ const MainLayout: React.FC = () => {
     );
   }
 
-  const isStudioTab = activeTab === 'studio-image' || activeTab === 'studio-video' || activeTab === 'studio-music';
+  const isStudioTab = activeTab === 'studio-image' || activeTab === 'studio-video' || activeTab === 'studio-clips' || activeTab === 'studio-music';
   const canOpenAdmin = user.role === 'admin' && Boolean(user.id);
   const renderAdmin = (section: AdminSection) => canOpenAdmin ? <AdminWorkspaceView section={section} /> : <ProfileView />;
 
@@ -107,9 +108,11 @@ const MainLayout: React.FC = () => {
               {activeTab === 'community' && <CommunityView />}
               {activeTab === 'projects-image' && <ProjectsHubView type="image" />}
               {activeTab === 'projects-video' && <ProjectsHubView type="video" />}
+              {activeTab === 'projects-clips' && <ProjectsHubView type="clips" />}
               {activeTab === 'projects-music' && <ProjectsHubView type="music" />}
               {activeTab === 'studio-image' && <ImageStudio />}
               {activeTab === 'studio-video' && <VideoStudio />}
+              {activeTab === 'studio-clips' && <ClipStudio />}
               {activeTab === 'studio-music' && <MusicStudio />}
               {activeTab === 'creations' && <CreationsView />}
               {activeTab === 'subscription' && <SubscriptionView />}
