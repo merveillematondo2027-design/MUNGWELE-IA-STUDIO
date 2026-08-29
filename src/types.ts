@@ -1,5 +1,5 @@
-export type StudioType = 'image' | 'video' | 'music';
-export type NavigationTab = 'home' | 'community' | 'projects-image' | 'projects-video' | 'projects-music' | 'studio-image' | 'studio-video' | 'studio-music' | 'creations' | 'subscription' | 'profile' | 'help' | 'admin' | 'admin-home' | 'admin-users' | 'admin-credits' | 'admin-subscriptions' | 'admin-library' | 'admin-logs' | 'admin-usage';
+export type StudioType = 'image' | 'video' | 'clips' | 'music';
+export type NavigationTab = 'home' | 'community' | 'projects-image' | 'projects-video' | 'projects-clips' | 'projects-music' | 'studio-image' | 'studio-video' | 'studio-clips' | 'studio-music' | 'creations' | 'subscription' | 'profile' | 'help' | 'admin' | 'admin-home' | 'admin-users' | 'admin-credits' | 'admin-subscriptions' | 'admin-library' | 'admin-logs' | 'admin-usage';
 export type GenerationStatus = 'draft' | 'queued' | 'processing' | 'completed' | 'failed';
 export type UserPlan = 'free' | 'creator' | 'pro';
 
@@ -29,12 +29,18 @@ export interface ImageGenerationSettings {
 
 export type VideoModel = 'omni' | 'lite' | 'fast' | 'pro';
 export type VideoDuration = 4 | 6 | 8;
+export type ExtendedVideoDuration = 4 | 5 | 6 | 8 | 10 | 15 | 30;
 export type VideoResolution = '720p' | '1080p' | '4k';
+export type VideoType = 'cinematic' | 'action' | 'commercial' | 'realistic' | 'comedy' | '3d' | 'anime' | 'social' | 'talking' | 'effects' | 'music_clip' | 'custom';
+export type VideoEngineKey = 'veo-lite' | 'veo-fast' | 'veo-pro' | 'omni' | 'runway-gen45' | 'minimax-h3' | 'kling-v3-pro' | 'seedance-25';
+
 export interface VideoGenerationSettings {
   style?: 'cinematic' | 'commercial' | 'realistic' | '3d_animation' | 'social_media' | 'music_clip' | 'prompt-only';
+  videoType?: VideoType;
+  engineKey?: VideoEngineKey;
   videoModel?: VideoModel;
   aspectRatio: '16:9' | '9:16';
-  duration: VideoDuration;
+  duration: VideoDuration | ExtendedVideoDuration;
   enableAudio?: boolean;
   dialogue?: string;
   multiScenes?: boolean;
@@ -46,14 +52,24 @@ export interface VideoGenerationSettings {
 }
 
 export interface MusicGenerationSettings {
-  genre: 'afrobeat' | 'gospel' | 'rap' | 'rumba' | 'pop' | 'amapiano' | 'electronic' | 'cinematic' | 'custom';
+  genre?: 'afrobeat' | 'gospel' | 'rap' | 'rumba' | 'pop' | 'amapiano' | 'electronic' | 'cinematic' | 'custom';
   customGenre?: string;
-  mood: 'joyful' | 'romantic' | 'energetic' | 'sad' | 'inspiring' | 'relaxing';
-  voice: 'male' | 'female' | 'duet' | 'instrumental';
-  isInstrumental: boolean;
-  durationSeconds: 30 | 60 | 120;
+  mood?: 'joyful' | 'romantic' | 'energetic' | 'sad' | 'inspiring' | 'relaxing';
+  voice?: 'male' | 'female' | 'duet' | 'instrumental';
+  isInstrumental?: boolean;
+  durationSeconds?: number;
   lyrics?: string;
   bpm?: number;
+}
+
+export interface ClipGenerationSettings {
+  sourceAudioUrl?: string;
+  sourceMusicGenerationId?: string;
+  clipMode?: 'auto' | 'performance' | 'story' | 'lyrics' | '3d' | 'social';
+  aspectRatio: '16:9' | '9:16';
+  referenceImages?: string[];
+  enginePreference?: VideoEngineKey | 'auto';
+  providerStatus?: 'ready' | 'not_configured';
 }
 
 export interface GenerationRecord {
@@ -71,7 +87,7 @@ export interface GenerationRecord {
   thumbnailUrl: string;
   creditsUsed: number;
   errorMessage?: string;
-  settings: ImageGenerationSettings | VideoGenerationSettings | MusicGenerationSettings;
+  settings: ImageGenerationSettings | VideoGenerationSettings | MusicGenerationSettings | ClipGenerationSettings;
   createdAt: string;
   updatedAt: string;
   audioDuration?: number;
@@ -115,8 +131,8 @@ export interface CreditPackConfig {
 export interface ApiProviderSetting {
   id: string;
   name: string;
-  providerKey: 'gemini' | 'openai' | 'veo' | 'suno' | 'elevenlabs';
-  category: 'image' | 'video' | 'music' | 'text';
+  providerKey: 'gemini' | 'openai' | 'veo' | 'suno' | 'elevenlabs' | 'runway' | 'minimax' | 'kling' | 'seedance';
+  category: 'image' | 'video' | 'clips' | 'music' | 'text';
   enabled: boolean;
   isConfigured: boolean;
   isDemoFallback: boolean;
