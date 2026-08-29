@@ -3,6 +3,7 @@ import path from "path";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
+import { generateVeoVideo, type VeoAspectRatio, type VeoDuration } from "./server/veo";
 
 dotenv.config();
 
@@ -11,6 +12,7 @@ const PORT = Number(process.env.PORT || 3000);
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use("/generated", express.static(path.join(process.cwd(), "generated")));
 
 let ai: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI | null {
@@ -58,14 +60,14 @@ let apiProviders = [
   },
   {
     id: "prov-gemini-veo",
-    name: "Google Veo 3",
+    name: "Google Veo 3.1 Fast",
     providerKey: "veo",
     category: "video",
     enabled: true,
-    isConfigured: !!process.env.VEO_API_KEY || !!process.env.GEMINI_API_KEY,
-    isDemoFallback: !process.env.VEO_API_KEY,
-    modelName: "veo-3.1-generate-preview",
-    latencyAvgMs: 8500,
+    isConfigured: !!process.env.GEMINI_API_KEY,
+    isDemoFallback: false,
+    modelName: "veo-3.1-fast-generate-preview",
+    latencyAvgMs: 0,
     creditCost: 25,
   },
   {
@@ -154,11 +156,15 @@ async function editOpenAIImage(prompt: string, referenceImage: string): Promise<
 }
 
 app.get("/api/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok", app: "MUNGWELE IA STUDIO", openAIImageConfigured: !!process.env.OPENAI_API_KEY, geminiConfigured: !!process.env.GEMINI_API_KEY, timestamp: now() });
+  res.json({ status: "ok", app: "MUNGWELE IA STUDIO", openAIImageConfigured: !!process.env.OPENAI_API_KEY, geminiConfigured: !!process.env.GEMINI_API_KEY, veoConfigured: !!process.env.GEMINI_API_KEY, timestamp: now() });
 });
 
 app.get("/api/settings", (_req: Request, res: Response) => {
-  apiProviders = apiProviders.map((provider) => provider.id === "prov-openai-image" ? { ...provider, isConfigured: !!process.env.OPENAI_API_KEY } : provider);
+  apiProviders = apiProviders.map((provider) => {
+    if (provider.id === "prov-openai-image") return { ...provider, isConfigured: !!process.env.OPENAI_API_KEY };
+    if (provider.id === "prov-gemini-veo") return { ...provider, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false };
+    return provider;
+  });
   res.json({ settings: appSettings, providers: apiProviders });
 });
 
@@ -230,10 +236,73 @@ app.post("/api/generate/image", async (req: Request, res: Response) => {
 });
 
 app.post("/api/generate/video", async (req: Request, res: Response) => {
-  const { prompt } = req.body || {};
-  if (!prompt) return res.status(400).json({ error: "Le prompt vidéo est requis." });
-  if (!process.env.VEO_API_KEY) return res.status(503).json({ error: "Veo 3 n'est pas encore connecté à une clé/API de production.", code: "VEO_NOT_CONFIGURED" });
-  return res.status(501).json({ error: "Le pipeline Veo 3 de production est prêt à être branché, mais n'est pas encore implémenté.", code: "VEO_NOT_IMPLEMENTED" });
+  const { prompt, aspectRatio = "16:9", duration = 8, startImage, endImage, userId } = req.body || {};
+  if (!prompt || typeof prompt !== "string" || !prompt.trim()) return res.status(400).json({ error: "Le prompt vidéo est requis." });
+
+  const client = getAI();
+  if (!client) return res.status(503).json({ error: "Veo 3.1 nécessite GEMINI_API_KEY.", code: "VEO_NOT_CONFIGURED" });
+
+  const safeAspectRatio: VeoAspectRatio = aspectRatio === "9:16" ? "9:16" : "16:9";
+  const numericDuration = Number(duration);
+  const safeDuration: VeoDuration = numericDuration === 4 || numericDuration === 6 ? numericDuration : 8;
+  const creditCost = safeDuration === 4 ? 15 : safeDuration === 6 ? 20 : 25;
+
+  try {
+    const startedAt = Date.now();
+    const result = await generateVeoVideo(client, {
+      prompt: prompt.trim(),
+      aspectRatio: safeAspectRatio,
+      duration: safeDuration,
+      startImage: typeof startImage === "string" ? startImage : null,
+      endImage: typeof endImage === "string" ? endImage : null,
+    });
+
+    const newGen = {
+      id: `gen-video-${Date.now()}`,
+      userId: userId || "usr-current",
+      type: "video",
+      title: prompt.trim().slice(0, 60),
+      prompt: prompt.trim(),
+      enhancedPrompt: prompt.trim(),
+      provider: "Google",
+      model: result.model,
+      status: "completed",
+      progress: 100,
+      resultUrl: result.resultUrl,
+      thumbnailUrl: "",
+      creditsUsed: result.duration === 4 ? 15 : result.duration === 6 ? 20 : 25,
+      settings: {
+        style: "prompt-only",
+        aspectRatio: safeAspectRatio,
+        duration: result.duration,
+        enableAudio: true,
+        startImage: Boolean(startImage),
+        endImage: Boolean(endImage),
+        resolution: "720p",
+      },
+      createdAt: now(),
+      updatedAt: now(),
+    };
+
+    generations.unshift(newGen);
+    const elapsed = Date.now() - startedAt;
+    apiProviders = apiProviders.map((provider) => provider.id === "prov-gemini-veo" ? { ...provider, latencyAvgMs: elapsed } : provider);
+    addLog("success", "Studio Vidéo", `Vidéo Veo 3.1 Fast générée en ${Math.round(elapsed / 1000)}s.`);
+    return res.json({ success: true, generation: newGen });
+  } catch (error: any) {
+    const status = Number(error?.status || 0);
+    const isQuota = quotaError(error);
+    const message = String(error?.message || "Erreur Veo inconnue.");
+    addLog("error", "Studio Vidéo", message);
+    return res.status(status === 400 ? 400 : status === 401 || status === 403 ? status : isQuota ? 429 : status === 504 ? 504 : 500).json({
+      error: status === 401 || status === 403
+        ? "La clé Gemini n'a pas accès à Veo 3.1. Vérifiez le projet, la facturation et les autorisations."
+        : isQuota
+          ? "Quota ou limite Veo atteinte. Vérifiez la facturation et les limites Gemini API."
+          : message,
+      code: error?.code || (isQuota ? "VEO_QUOTA_EXHAUSTED" : "VEO_GENERATION_FAILED"),
+    });
+  }
 });
 
 app.post("/api/generate/music", async (req: Request, res: Response) => {
