@@ -11,9 +11,17 @@ export default defineConfig(() => ({
     },
   },
   server: {
-    // Google AI Studio runs the app behind an embedded proxy where the Vite
-    // HMR websocket is not reliable. The server already restarts after edits,
-    // so disabling HMR removes false websocket errors without affecting the app.
-    hmr: false,
+    host: '0.0.0.0',
+    port: 3000,
+    strictPort: true,
+    // Google AI Studio exposes the preview through HTTPS. Keep HMR on the
+    // same public origin and force the browser-side socket to use WSS/443.
+    // The actual websocket server is attached to our Node HTTP server in
+    // server.ts, so HTTP and HMR share the same proxied endpoint.
+    hmr: {
+      protocol: 'wss',
+      clientPort: 443,
+      overlay: false,
+    },
   },
 }));
