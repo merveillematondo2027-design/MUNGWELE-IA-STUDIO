@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import { createServer as createHttpServer } from 'node:http';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
@@ -194,15 +195,34 @@ app.post('/api/admin/providers/toggle', (req, res) => { const provider = apiProv
 app.post('/api/admin/settings', (req, res) => { const { creditCosts, announcementBanner, maintenanceMode } = req.body || {}; if (creditCosts) appSettings.creditCosts = { ...appSettings.creditCosts, ...creditCosts }; if (typeof announcementBanner === 'string') appSettings.announcementBanner = announcementBanner; if (typeof maintenanceMode === 'boolean') appSettings.maintenanceMode = maintenanceMode; res.json({ success: true, settings: appSettings }); });
 
 async function startServer() {
+  // In Google AI Studio the preview is exposed through an HTTPS reverse proxy.
+  // Use one real HTTP server for Express + Vite so websocket upgrade requests
+  // travel through the same endpoint instead of Vite opening a second socket.
+  const httpServer = createHttpServer(app);
+
   if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({ appType: 'spa', server: { middlewareMode: true, hmr: false } });
+    const vite = await createViteServer({
+      appType: 'spa',
+      server: {
+        middlewareMode: true,
+        hmr: {
+          server: httpServer,
+          protocol: 'wss',
+          clientPort: 443,
+          overlay: false,
+        },
+      },
+    });
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }
-  app.listen(PORT, '0.0.0.0', () => console.log(`[MUNGWELE IA STUDIO] Server running on http://0.0.0.0:${PORT}`));
+
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`[MUNGWELE IA STUDIO] Server running on http://0.0.0.0:${PORT}`);
+  });
 }
 
 startServer();
