@@ -16,7 +16,7 @@ import { HelpView } from './components/views/HelpView';
 import { NotificationToast } from './components/common/NotificationToast';
 import { MediaViewerModal } from './components/common/MediaViewerModal';
 import { AuthModal } from './components/views/AuthModal';
-import { completeRedirectLogin, subscribeToFirebaseUser } from './services/authService';
+import { subscribeToFirebaseUser } from './services/authService';
 import { auth } from './lib/firebase';
 import { Sparkles, AlertTriangle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -39,52 +39,35 @@ const MainLayout: React.FC = () => {
 
   useEffect(() => {
     let mounted = true;
-    let unsubscribe = () => {};
 
-    const startAuth = async () => {
-      try {
-        const redirectProfile = await completeRedirectLogin();
-        if (redirectProfile && mounted) {
-          setUser(redirectProfile);
+    const unsubscribe = subscribeToFirebaseUser(
+      (profile) => {
+        if (!mounted) return;
+        if (profile) {
+          setUser(profile);
           setAuthStatus('authenticated');
+        } else {
+          resetUser();
+          setAuthStatus('unauthenticated');
         }
-      } catch (error) {
-        console.warn('Firebase redirect result error:', error);
-      }
+      },
+      (error) => {
+        if (!mounted) return;
+        console.warn('Firebase profile/session sync warning:', error);
 
-      unsubscribe = subscribeToFirebaseUser(
-        (profile) => {
-          if (!mounted) return;
-          if (profile) {
-            setUser(profile);
-            setAuthStatus('authenticated');
-          } else {
-            resetUser();
-            setAuthStatus('unauthenticated');
-          }
-        },
-        (error) => {
-          if (!mounted) return;
-          console.warn('Firebase profile/session sync warning:', error);
-
-          if (auth.currentUser) {
-            // The Firebase session is valid. Do not send the user back to login
-            // only because Firestore profile synchronization failed.
-            setAuthStatus('authenticated');
-            addNotification(
-              'warning',
-              'Profil à synchroniser',
-              'Votre connexion Firebase est active, mais le profil Firestore doit encore être synchronisé.',
-            );
-          } else {
-            resetUser();
-            setAuthStatus('unauthenticated');
-          }
-        },
-      );
-    };
-
-    startAuth();
+        if (auth.currentUser) {
+          setAuthStatus('authenticated');
+          addNotification(
+            'warning',
+            'Profil à synchroniser',
+            'Votre connexion Firebase est active, mais le profil Firestore doit encore être synchronisé.',
+          );
+        } else {
+          resetUser();
+          setAuthStatus('unauthenticated');
+        }
+      },
+    );
 
     return () => {
       mounted = false;
