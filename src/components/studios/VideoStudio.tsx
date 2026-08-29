@@ -1,7 +1,40 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Copy, Download, Film, RefreshCw, Sparkles, Trash2, Upload, X } from 'lucide-react';
-import type { GenerationRecord, VideoGenerationSettings } from '../../types';
+import { Check, Copy, Download, Film, RefreshCw, Sparkles, Trash2, Upload, X, Zap } from 'lucide-react';
+import type { GenerationRecord, VideoDuration, VideoGenerationSettings, VideoModel } from '../../types';
+
+const MODEL_CONFIG: Record<VideoModel, {
+  label: string;
+  subtitle: string;
+  description: string;
+  allowedDurations: VideoDuration[];
+  baseCredits: number;
+}> = {
+  lite: {
+    label: 'Veo 3.1 Lite',
+    subtitle: 'Économique',
+    description: 'Pour les essais, réseaux sociaux et productions à petit budget.',
+    allowedDurations: [4, 6, 8],
+    baseCredits: 10,
+  },
+  omni: {
+    label: 'Omni Fast',
+    subtitle: 'Recommandé',
+    description: 'Gemini Omni 1.1 Flash : rapide, flexible, audio natif et jusqu’à 10 secondes.',
+    allowedDurations: [4, 6, 8, 10],
+    baseCredits: 20,
+  },
+  pro: {
+    label: 'Veo 3.1 Pro',
+    subtitle: 'Qualité maximale',
+    description: 'Veo 3.1 Standard côté Google, présenté comme Pro dans MUNGWELE pour les rendus premium.',
+    allowedDurations: [4, 6, 8],
+    baseCredits: 40,
+  },
+};
+
+const modelCreditCost = (model: VideoModel, duration: VideoDuration) =>
+  Math.ceil(MODEL_CONFIG[model].baseCredits * (duration / 4));
 
 export const VideoStudio: React.FC = () => {
   const {
@@ -17,8 +50,9 @@ export const VideoStudio: React.FC = () => {
   } = useApp();
 
   const [prompt, setPrompt] = useState('');
+  const [videoModel, setVideoModel] = useState<VideoModel>('omni');
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>('16:9');
-  const [duration, setDuration] = useState<4 | 6 | 8>(8);
+  const [duration, setDuration] = useState<VideoDuration>(8);
   const [startImage, setStartImage] = useState<string | null>(null);
   const [endImage, setEndImage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -36,8 +70,17 @@ export const VideoStudio: React.FC = () => {
   }, [imageToVideoTransfer, setImageToVideoTransfer]);
 
   const videoCreations = generations.filter((g) => g.type === 'video');
-  const effectiveDuration: 4 | 6 | 8 = endImage ? 8 : duration;
-  const creditCost = effectiveDuration === 4 ? 15 : effectiveDuration === 6 ? 20 : 25;
+  const allowedDurations = MODEL_CONFIG[videoModel].allowedDurations;
+  const effectiveDuration: VideoDuration = endImage && videoModel !== 'omni' ? 8 : duration;
+  const creditCost = modelCreditCost(videoModel, effectiveDuration);
+
+  const chooseModel = (model: VideoModel) => {
+    setVideoModel(model);
+    const allowed = MODEL_CONFIG[model].allowedDurations;
+    if (!allowed.includes(duration) || (endImage && model !== 'omni')) {
+      setDuration(8);
+    }
+  };
 
   const loadImage = (file: File, target: 'start' | 'end') => {
     if (!file.type.startsWith('image/')) {
@@ -52,10 +95,11 @@ export const VideoStudio: React.FC = () => {
     const reader = new FileReader();
     reader.onload = () => {
       const value = reader.result as string;
-      if (target === 'start') setStartImage(value);
-      else {
+      if (target === 'start') {
+        setStartImage(value);
+      } else {
         setEndImage(value);
-        setDuration(8);
+        if (videoModel !== 'omni') setDuration(8);
       }
     };
     reader.readAsDataURL(file);
@@ -75,27 +119,27 @@ export const VideoStudio: React.FC = () => {
       addNotification('warning', 'Prompt requis', 'Décrivez précisément la vidéo à créer.');
       return;
     }
-
     if (endImage && !startImage) {
-      addNotification('warning', 'Image de départ requise', 'Une image de fin Veo doit être utilisée avec une image de départ.');
+      addNotification('warning', 'Image de départ requise', 'Une image de fin doit être utilisée avec une image de départ.');
       return;
     }
 
-    const reason = `Génération vidéo Veo 3.1 Fast (${effectiveDuration}s)`;
+    const modelLabel = MODEL_CONFIG[videoModel].label;
+    const reason = `Génération vidéo ${modelLabel} (${effectiveDuration}s)`;
     if (!useCredits(creditCost, reason)) return;
 
     setIsGenerating(true);
     setProgress(8);
-    setStatus('Envoi de la demande à Google Veo 3.1…');
+    setStatus(`Envoi de la demande à ${modelLabel}…`);
 
     const timer = window.setInterval(() => {
       setProgress((value) => {
         if (value < 35) {
-          setStatus('Veo prépare les plans et les mouvements…');
+          setStatus(`${modelLabel} prépare les plans, mouvements et audio…`);
           return value + 5;
         }
         if (value < 70) {
-          setStatus('Génération vidéo et audio natif en cours…');
+          setStatus('Génération vidéo en cours…');
           return value + 3;
         }
         if (value < 92) {
@@ -111,6 +155,7 @@ export const VideoStudio: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          model: videoModel,
           prompt: prompt.trim(),
           aspectRatio,
           duration: effectiveDuration,
@@ -121,18 +166,26 @@ export const VideoStudio: React.FC = () => {
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.generation) {
-        throw new Error(data.error || 'La génération Veo a échoué.');
+        throw new Error(data.error || 'La génération vidéo a échoué.');
       }
 
       setProgress(100);
       setStatus('Vidéo prête.');
       addGeneration(data.generation);
       triggerCelebration();
-      addNotification('success', 'Vidéo Veo 3.1 prête', `Votre vidéo de ${effectiveDuration}s a été générée avec audio natif.`);
+      addNotification(
+        'success',
+        'Vidéo prête',
+        `${modelLabel} a généré votre vidéo de ${data.generation.settings?.duration || effectiveDuration}s.`
+      );
       clearWorkspace();
     } catch (error: any) {
       refundCredits(creditCost, reason);
-      addNotification('error', 'Génération vidéo impossible', error?.message || 'Erreur Veo. Vos crédits ont été remboursés.');
+      addNotification(
+        'error',
+        'Génération vidéo impossible',
+        error?.message || 'Erreur du fournisseur vidéo. Vos crédits MUNGWELE ont été remboursés.'
+      );
     } finally {
       window.clearInterval(timer);
       setIsGenerating(false);
@@ -146,9 +199,17 @@ export const VideoStudio: React.FC = () => {
   const reusePrompt = (generation: GenerationRecord) => {
     setPrompt(generation.prompt);
     const settings = generation.settings as VideoGenerationSettings;
+    if (settings.videoModel && MODEL_CONFIG[settings.videoModel]) setVideoModel(settings.videoModel);
     if (settings.aspectRatio === '16:9' || settings.aspectRatio === '9:16') setAspectRatio(settings.aspectRatio);
-    if ([4, 6, 8].includes(Number(settings.duration))) setDuration(Number(settings.duration) as 4 | 6 | 8);
+    if ([4, 6, 8, 10].includes(Number(settings.duration))) setDuration(Number(settings.duration) as VideoDuration);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const labelForGeneration = (generation: GenerationRecord) => {
+    const settings = generation.settings as VideoGenerationSettings;
+    return settings.videoModel && MODEL_CONFIG[settings.videoModel]
+      ? MODEL_CONFIG[settings.videoModel].label
+      : generation.model;
   };
 
   return (
@@ -158,29 +219,60 @@ export const VideoStudio: React.FC = () => {
           <div>
             <h2 className="text-xl sm:text-2xl font-display font-extrabold text-white flex items-center gap-2">
               <span className="p-2 rounded-xl bg-pink-600/20 text-pink-300 border border-pink-500/30"><Film className="w-5 h-5" /></span>
-              Studio Vidéo — Veo 3.1 Fast
+              Studio Vidéo IA
             </h2>
-            <p className="text-xs sm:text-sm text-gray-400 mt-1">Texte vers vidéo et image vers vidéo avec audio natif. Décrivez les scènes, dialogues, mouvements et sons directement dans le prompt.</p>
+            <p className="text-xs sm:text-sm text-gray-400 mt-1">
+              Choisissez le moteur, puis décrivez toute la réalisation dans votre prompt. Audio natif inclus.
+            </p>
           </div>
-          <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-white/[0.05] border border-pink-500/30 text-pink-200">{creditCost} crédits / vidéo</span>
+          <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-white/[0.05] border border-pink-500/30 text-pink-200 flex items-center gap-1.5">
+            <Zap className="w-3.5 h-3.5 text-amber-400" /> {creditCost} crédits
+          </span>
         </div>
 
         <div className="space-y-6 pt-5">
           <div>
-            <label className="block text-sm font-bold text-gray-200 mb-2">Prompt vidéo détaillé</label>
+            <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">1. Modèle vidéo</label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {(Object.keys(MODEL_CONFIG) as VideoModel[]).map((model) => {
+                const config = MODEL_CONFIG[model];
+                const selected = videoModel === model;
+                return (
+                  <button
+                    key={model}
+                    type="button"
+                    onClick={() => chooseModel(model)}
+                    className={`relative text-left p-4 rounded-2xl border transition-all ${selected ? 'bg-pink-600/15 border-pink-500 shadow-lg shadow-pink-950/20' : 'bg-white/[0.025] border-white/10 hover:border-white/25'}`}
+                  >
+                    {selected && <span className="absolute top-3 right-3 w-6 h-6 rounded-full bg-pink-500 flex items-center justify-center"><Check className="w-4 h-4 text-white" /></span>}
+                    <p className="text-sm font-extrabold text-white pr-8">{config.label}</p>
+                    <p className="text-[11px] font-semibold text-pink-300 mt-1">{config.subtitle}</p>
+                    <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">{config.description}</p>
+                    <p className="text-[10px] text-gray-500 mt-3">Durées : {config.allowedDurations.map((d) => `${d}s`).join(' • ')}</p>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-amber-300/90 mt-2">
+              Important : l’API Veo 3.1 Lite/Pro est limitée à 4, 6 ou 8 secondes. Le mode Omni Fast permet une cible jusqu’à 10 secondes.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-200 mb-2">2. Prompt vidéo détaillé</label>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={6}
-              placeholder="Ex : Plan cinématographique d’une voiture noire traversant Kinshasa la nuit sous la pluie, travelling latéral fluide, reflets néon, moteur audible, ambiance urbaine réaliste, voix masculine en français : « La ville ne dort jamais. »"
+              placeholder="Ex : Publicité cinématographique premium à Kinshasa, plan continu, caméra basse, lumière nocturne, mouvements précis, ambiance sonore réaliste. Voix masculine en français : « Imaginez plus loin. »"
               className="w-full px-4 py-4 rounded-2xl bg-white/[0.04] border border-white/10 focus:border-pink-500/80 text-white placeholder-gray-500 text-sm outline-none resize-y shadow-inner"
             />
-            <p className="mt-2 text-[11px] text-gray-500">Indiquez directement dans le prompt le style, la caméra, les dialogues, les bruitages, la musique et le rythme souhaités.</p>
+            <p className="mt-2 text-[11px] text-gray-500">Décrivez directement : scène, caméra, personnages, mouvements, dialogues exacts, musique, bruitages, lumière et rythme.</p>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">Format</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">3. Format</label>
               <div className="grid grid-cols-2 gap-2">
                 {(['16:9', '9:16'] as const).map((ratio) => (
                   <button key={ratio} type="button" onClick={() => setAspectRatio(ratio)} className={`py-3 rounded-xl border text-sm font-bold ${aspectRatio === ratio ? 'bg-pink-600/20 border-pink-500 text-pink-200' : 'bg-white/[0.03] border-white/10 text-gray-400'}`}>{ratio}</button>
@@ -188,13 +280,21 @@ export const VideoStudio: React.FC = () => {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">Durée Veo</label>
-              <div className="grid grid-cols-3 gap-2">
-                {([4, 6, 8] as const).map((seconds) => (
-                  <button key={seconds} type="button" disabled={Boolean(endImage) && seconds !== 8} onClick={() => setDuration(seconds)} className={`py-3 rounded-xl border text-sm font-bold disabled:opacity-30 ${effectiveDuration === seconds ? 'bg-pink-600/20 border-pink-500 text-pink-200' : 'bg-white/[0.03] border-white/10 text-gray-400'}`}>{seconds}s</button>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">4. Durée</label>
+              <div className={`grid ${allowedDurations.length === 4 ? 'grid-cols-4' : 'grid-cols-3'} gap-2`}>
+                {allowedDurations.map((seconds) => (
+                  <button
+                    key={seconds}
+                    type="button"
+                    disabled={Boolean(endImage) && videoModel !== 'omni' && seconds !== 8}
+                    onClick={() => setDuration(seconds)}
+                    className={`py-3 rounded-xl border text-sm font-bold disabled:opacity-30 ${effectiveDuration === seconds ? 'bg-pink-600/20 border-pink-500 text-pink-200' : 'bg-white/[0.03] border-white/10 text-gray-400'}`}
+                  >
+                    {seconds}s
+                  </button>
                 ))}
               </div>
-              {endImage && <p className="text-[10px] text-amber-300 mt-2">Avec une image de fin, la durée est fixée à 8 secondes.</p>}
+              {endImage && videoModel !== 'omni' && <p className="text-[10px] text-amber-300 mt-2">Avec une image de fin sur Veo 3.1, la durée est fixée à 8 secondes.</p>}
             </div>
           </div>
 
@@ -205,7 +305,7 @@ export const VideoStudio: React.FC = () => {
               {startImage ? (
                 <div className="relative rounded-2xl overflow-hidden border border-pink-500/40 bg-black/20"><img src={startImage} alt="Départ" className="w-full h-44 object-contain" /><button type="button" onClick={() => setStartImage(null)} className="absolute top-3 right-3 p-2 rounded-full bg-black/70 hover:bg-rose-600"><X className="w-4 h-4" /></button></div>
               ) : (
-                <button type="button" onClick={() => startInputRef.current?.click()} className="w-full h-44 rounded-2xl border border-dashed border-white/15 hover:border-pink-500/60 bg-white/[0.02] flex flex-col items-center justify-center gap-2 text-gray-400"><Upload className="w-5 h-5 text-pink-400" /><span className="text-xs font-semibold">Importer une image de départ</span><span className="text-[10px] text-gray-500">ou envoyer une image depuis Studio Image</span></button>
+                <button type="button" onClick={() => startInputRef.current?.click()} className="w-full h-44 rounded-2xl border border-dashed border-white/15 hover:border-pink-500/60 bg-white/[0.02] flex flex-col items-center justify-center gap-2 text-gray-400"><Upload className="w-5 h-5 text-pink-400" /><span className="text-xs font-semibold">Importer une image de départ</span><span className="text-[10px] text-gray-500">ou envoyer depuis Studio Image</span></button>
               )}
             </div>
 
@@ -220,17 +320,25 @@ export const VideoStudio: React.FC = () => {
             </div>
           </div>
 
+          <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-bold text-white">{MODEL_CONFIG[videoModel].label} • {effectiveDuration}s • {aspectRatio} • 720p</p>
+              <p className="text-[10px] text-gray-500 mt-1">Coût MUNGWELE calculé avant lancement : aucun débit supplémentaire dans l’application si la génération échoue.</p>
+            </div>
+            <span className="text-sm font-black text-pink-300">{creditCost} crédits</span>
+          </div>
+
           {isGenerating && (
             <div className="p-4 rounded-2xl bg-white/[0.04] border border-pink-500/40 space-y-2">
               <div className="flex justify-between gap-3 text-xs"><span className="text-pink-200 flex items-center gap-2"><RefreshCw className="w-4 h-4 animate-spin" />{status}</span><span className="font-mono text-pink-300">{progress}%</span></div>
               <div className="h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 transition-all duration-500" style={{ width: `${progress}%` }} /></div>
-              <p className="text-[10px] text-gray-500">Une génération Veo peut prendre de quelques secondes à plusieurs minutes.</p>
+              <p className="text-[10px] text-gray-500">Une génération vidéo peut prendre de quelques secondes à plusieurs minutes.</p>
             </div>
           )}
 
           <button type="button" disabled={isGenerating || !prompt.trim()} onClick={handleGenerate} className="w-full py-4 rounded-2xl font-display font-extrabold text-base bg-gradient-to-r from-pink-600 via-purple-600 to-blue-600 text-white flex items-center justify-center gap-3 shadow-xl disabled:opacity-50">
             {isGenerating ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-            Générer avec Veo 3.1 Fast ({effectiveDuration}s)
+            Générer avec {MODEL_CONFIG[videoModel].label} ({effectiveDuration}s)
           </button>
         </div>
       </section>
@@ -241,12 +349,23 @@ export const VideoStudio: React.FC = () => {
           <div className="text-center py-12 rounded-3xl bg-white/[0.02] border border-white/10"><Film className="w-12 h-12 text-gray-600 mx-auto mb-3" /><p className="text-sm text-gray-300">Aucune vidéo générée pour l’instant.</p></div>
         ) : (
           <div className="grid md:grid-cols-2 gap-5">
-            {videoCreations.map((gen) => (
-              <article key={gen.id} className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden">
-                <video src={gen.resultUrl} controls className="w-full aspect-video bg-black" />
-                <div className="p-4 space-y-3"><p className="text-xs text-gray-300 line-clamp-3">{gen.prompt}</p><div className="grid grid-cols-3 gap-2"><a href={gen.resultUrl} download className="py-2 rounded-lg bg-white/[0.06] text-gray-200 text-[10px] flex justify-center items-center gap-1"><Download className="w-3 h-3" /> Télécharger</a><button type="button" onClick={() => reusePrompt(gen)} className="py-2 rounded-lg bg-white/[0.06] text-gray-200 text-[10px] flex justify-center items-center gap-1"><Copy className="w-3 h-3" /> Prompt</button><button type="button" onClick={() => removeGeneration(gen.id)} className="py-2 rounded-lg bg-rose-950/30 text-rose-300 text-[10px] flex justify-center items-center gap-1"><Trash2 className="w-3 h-3" /> Supprimer</button></div></div>
-              </article>
-            ))}
+            {videoCreations.map((gen) => {
+              const settings = gen.settings as VideoGenerationSettings;
+              return (
+                <article key={gen.id} className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden">
+                  <video src={gen.resultUrl} controls playsInline className="w-full aspect-video bg-black" />
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-bold text-pink-300">{labelForGeneration(gen)}</span><span className="text-[10px] text-gray-500">{settings.duration}s • {settings.aspectRatio}</span></div>
+                    <p className="text-xs text-gray-300 line-clamp-3">{gen.prompt}</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <a href={gen.resultUrl} download className="py-2 rounded-lg bg-white/[0.06] text-gray-200 text-[10px] flex justify-center items-center gap-1"><Download className="w-3 h-3" /> Télécharger</a>
+                      <button type="button" onClick={() => reusePrompt(gen)} className="py-2 rounded-lg bg-white/[0.06] text-gray-200 text-[10px] flex justify-center items-center gap-1"><Copy className="w-3 h-3" /> Prompt</button>
+                      <button type="button" onClick={() => removeGeneration(gen.id)} className="py-2 rounded-lg bg-rose-950/30 text-rose-300 text-[10px] flex justify-center items-center gap-1"><Trash2 className="w-3 h-3" /> Supprimer</button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
