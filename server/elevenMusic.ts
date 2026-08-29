@@ -5,10 +5,10 @@ export type MusicDurationSeconds = 30 | 60 | 120;
 
 export interface ElevenMusicOptions {
   prompt: string;
-  genre: string;
-  mood: string;
+  genre?: string;
+  mood?: string;
   durationSeconds: MusicDurationSeconds;
-  instrumental: boolean;
+  instrumental?: boolean;
   lyrics?: string;
 }
 
@@ -17,20 +17,20 @@ function apiKey() {
 }
 
 function buildPrompt(options: ElevenMusicOptions) {
+  const description = options.prompt.trim();
   const parts = [
-    `Create an original ${options.genre || 'modern'} song.`,
-    `Mood: ${options.mood || 'balanced'}.`,
-    `Creative direction: ${options.prompt.trim()}.`,
+    'Create one original, production-ready music track from the following user description.',
+    description,
     `Target duration: ${options.durationSeconds} seconds.`,
   ];
 
   if (options.instrumental) {
-    parts.push('Instrumental only. No singing, spoken words, or vocal ad-libs.');
-  } else if (options.lyrics?.trim()) {
-    parts.push('Use the following original lyrics. Keep the wording faithful while arranging them naturally into the song:');
+    parts.push('The user explicitly requests an instrumental track. Do not add singing, spoken words, or vocal ad-libs.');
+  }
+
+  if (options.lyrics?.trim()) {
+    parts.push('Use these original lyrics when appropriate:');
     parts.push(options.lyrics.trim());
-  } else {
-    parts.push('Include original vocals and lyrics that fit the requested theme, language, genre, and mood.');
   }
 
   return parts.join('\n').slice(0, 4100);
@@ -70,7 +70,7 @@ export async function generateElevenMusic(options: ElevenMusicOptions) {
       prompt,
       music_length_ms: options.durationSeconds * 1000,
       model_id: 'music_v2',
-      force_instrumental: options.instrumental,
+      force_instrumental: options.instrumental === true,
       store_for_inpainting: false,
       sign_with_c2pa: true,
     }),
