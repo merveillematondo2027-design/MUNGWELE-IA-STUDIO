@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Film, Globe2, Image as ImageIcon, Music2, Plus, Play } from 'lucide-react';
+import { ArrowLeft, Clapperboard, Film, Globe2, Image as ImageIcon, Music2, Plus, Play } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { GenerationRecord, StudioType } from '../../types';
 
 const META = {
   image: { title: 'Projets Image', icon: ImageIcon, accent: 'text-purple-200', button: 'from-purple-600 to-fuchsia-600' },
   video: { title: 'Projets Vidéo', icon: Film, accent: 'text-pink-200', button: 'from-pink-600 to-rose-600' },
+  clips: { title: 'Projets Clips Vidéo', icon: Clapperboard, accent: 'text-fuchsia-200', button: 'from-fuchsia-600 to-violet-600' },
   music: { title: 'Projets Musique', icon: Music2, accent: 'text-blue-200', button: 'from-blue-600 to-cyan-600' },
 } as const;
 
@@ -30,7 +31,7 @@ export const ProjectsHubView: React.FC<{ type: StudioType }> = ({ type }) => {
 
   const togglePublish = async (event: React.MouseEvent, project: GenerationRecord) => {
     event.stopPropagation();
-    if (publishingId) return;
+    if (publishingId || project.status !== 'completed') return;
     setPublishingId(project.id);
     const nextPublic = !project.isPublic;
     try {
@@ -76,22 +77,16 @@ export const ProjectsHubView: React.FC<{ type: StudioType }> = ({ type }) => {
               <div className="relative aspect-video overflow-hidden bg-black/30">
                 {type === 'music' ? (
                   <div className="flex h-full items-center justify-center"><Music2 className="h-10 w-10 text-blue-300/70" /></div>
+                ) : type === 'clips' && !project.thumbnailUrl && !project.resultUrl ? (
+                  <div className="flex h-full items-center justify-center"><Clapperboard className="h-10 w-10 text-fuchsia-300/70" /></div>
                 ) : (
                   <img src={project.thumbnailUrl || project.resultUrl} alt={project.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" />
                 )}
                 <span className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white"><Play className="h-3.5 w-3.5" /></span>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => togglePublish(e, project)}
-                  className={`absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-xl border backdrop-blur-md transition ${project.isPublic ? 'border-cyan-300/40 bg-cyan-500/25 text-cyan-100' : 'border-white/15 bg-black/55 text-white'}`}
-                  title={project.isPublic ? 'Retirer de la communauté' : 'Publier dans la communauté'}
-                >
-                  <Globe2 className={`h-4 w-4 ${publishingId === project.id ? 'animate-pulse' : ''}`} />
-                </span>
+                {project.status === 'completed' && <span role="button" tabIndex={0} onClick={(e) => togglePublish(e, project)} className={`absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-xl border backdrop-blur-md transition ${project.isPublic ? 'border-cyan-300/40 bg-cyan-500/25 text-cyan-100' : 'border-white/15 bg-black/55 text-white'}`} title={project.isPublic ? 'Retirer de la communauté' : 'Publier dans la communauté'}><Globe2 className={`h-4 w-4 ${publishingId === project.id ? 'animate-pulse' : ''}`} /></span>}
               </div>
               <div className="p-3.5">
-                <div className="flex items-center gap-2"><h2 className="line-clamp-1 flex-1 text-sm font-black text-white">{project.title || 'Projet sans titre'}</h2>{project.isPublic && <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[9px] font-bold text-cyan-300">Public</span>}</div>
+                <div className="flex items-center gap-2"><h2 className="line-clamp-1 flex-1 text-sm font-black text-white">{project.title || 'Projet sans titre'}</h2>{project.status === 'draft' && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold text-amber-300">Brouillon</span>}{project.isPublic && <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[9px] font-bold text-cyan-300">Public</span>}</div>
                 <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-gray-500">{project.prompt}</p>
                 <div className="mt-3 flex items-center justify-between text-[10px] text-gray-600"><span>{new Date(project.updatedAt || project.createdAt).toLocaleDateString('fr-FR')}</span><span className="font-bold text-gray-300">Continuer</span></div>
               </div>
