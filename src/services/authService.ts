@@ -2,13 +2,11 @@ import {
   GoogleAuthProvider,
   browserLocalPersistence,
   createUserWithEmailAndPassword,
-  getRedirectResult,
   onAuthStateChanged,
   sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
-  signInWithRedirect,
   signOut,
   updateProfile,
   type User,
@@ -90,6 +88,8 @@ export async function ensureUserProfile(user: User, preferredName?: string): Pro
     await setDoc(
       ref,
       {
+        uid: user.uid,
+        email: user.email || data.email || GENERAL_ADMIN_EMAIL,
         role: 'admin',
         adminLevel: 'general',
         updatedAt: new Date().toISOString(),
@@ -114,49 +114,15 @@ export async function loginWithEmail(email: string, password: string) {
   return ensureUserProfile(credential.user);
 }
 
-export function isEmbeddedAuthContext() {
-  try {
-    return window.self !== window.top;
-  } catch {
-    return true;
-  }
-}
-
-export async function loginWithGoogle(): Promise<UserProfile | null> {
+export async function loginWithGoogle(): Promise<UserProfile> {
   await preparePersistence();
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
-  if (isEmbeddedAuthContext()) {
-    const error = new Error('Google sign-in cannot complete inside the embedded preview.');
-    (error as any).code = 'auth/embedded-preview';
-    throw error;
-  }
-
-  try {
-    const credential = await signInWithPopup(auth, provider);
-    return ensureUserProfile(credential.user);
-  } catch (error: any) {
-    if (
-      error?.code === 'auth/popup-blocked' ||
-      error?.code === 'auth/operation-not-supported-in-this-environment'
-    ) {
-      await signInWithRedirect(auth, provider);
-      return null;
-    }
-    throw error;
-  }
-}
-
-export async function completeRedirectLogin(): Promise<UserProfile | null> {
-  try {
-    const result = await getRedirectResult(auth);
-    if (!result?.user) return null;
-    return ensureUserProfile(result.user);
-  } catch (error: any) {
-    if (error?.code === 'auth/no-auth-event') return null;
-    throw error;
-  }
+  // Use the popup flow directly from the user's click. Firebase recommends
+  // popup when redirect auth is affected by cross-origin/third-party storage.
+  const credential = await signInWithPopup(auth, provider);
+  return ensureUserProfile(credential.user);
 }
 
 export async function requestPasswordReset(email: string) {
@@ -183,8 +149,6 @@ export function subscribeToFirebaseUser(
       try {
         onProfile(await ensureUserProfile(user));
       } catch (error) {
-        // Authentication remains valid even if Firestore profile synchronization fails.
-        // Keep the user signed in with a zero-credit fallback and surface the data error.
         onProfile(fallbackProfileFromAuth(user));
         onError?.(error as Error);
       }
@@ -193,8 +157,14 @@ export function subscribeToFirebaseUser(
   );
 }
 
+export function getCurrentAuthHostname() {
+  return typeof window !== 'undefined' ? window.location.hostname : '';
+}
+
 export function friendlyAuthError(error: unknown): string {
   const code = (error as { code?: string })?.code || '';
+  const hostname = getCurrentAuthHostname();
+
   switch (code) {
     case 'auth/email-already-in-use':
       return 'Cette adresse e-mail possède déjà un compte. Utilisez « Se connecter » ou « Mot de passe oublié ».';
@@ -207,13 +177,17 @@ export function friendlyAuthError(error: unknown): string {
     case 'auth/invalid-email':
       return 'Adresse e-mail invalide.';
     case 'auth/popup-closed-by-user':
-      return 'Connexion Google annulée.';
+      return 'La fenêtre Google a été fermée avant la fin de la connexion.';
     case 'auth/popup-blocked':
-      return 'Le navigateur a bloqué la fenêtre Google.';
+      return 'Le navigateur a bloqué la fenêtre Google. Autorisez les pop-ups pour cette application puis réessayez.';
+    case 'auth/cancelled-popup-request':
+      return 'Une autre tentative Google est déjà en cours. Fermez l’autre fenêtre puis réessayez.';
     case 'auth/unauthorized-domain':
-      return 'Ce domaine n’est pas encore autorisé dans Firebase Authentication.';
-    case 'auth/embedded-preview':
-      return 'Google ne peut pas terminer la connexion dans le cadre intégré de Google AI Studio. Ouvrez le preview dans un nouvel onglet, puis utilisez « Continuer avec Google ». La connexion e-mail/mot de passe fonctionne dans le preview.';
+      return `Le domaine « ${hostname || 'actuel'} » n'est pas autorisé dans Firebase Authentication. Ajoutez-le dans Authentication > Paramètres > Domaines autorisés.`;
+    case 'auth/operation-not-allowed':
+      return 'La connexion Google n’est pas activée dans Firebase Authentication.';
+    case 'auth/operation-not-supported-in-this-environment':
+      return 'Ce navigateur intégré bloque le mécanisme Google. Testez le même bouton depuis la version publiée de MUNGWELE.';
     case 'auth/network-request-failed':
       return 'Connexion réseau indisponible. Vérifiez Internet puis réessayez.';
     case 'permission-denied':
