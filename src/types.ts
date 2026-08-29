@@ -1,14 +1,14 @@
 export type StudioType = 'image' | 'video' | 'music';
 
-export type NavigationTab = 
-  | 'home' 
-  | 'studio-image' 
-  | 'studio-video' 
-  | 'studio-music' 
-  | 'creations' 
-  | 'subscription' 
-  | 'profile' 
-  | 'help' 
+export type NavigationTab =
+  | 'home'
+  | 'studio-image'
+  | 'studio-video'
+  | 'studio-music'
+  | 'creations'
+  | 'subscription'
+  | 'profile'
+  | 'help'
   | 'admin';
 
 export type GenerationStatus = 'draft' | 'queued' | 'processing' | 'completed' | 'failed';
@@ -36,17 +36,21 @@ export interface ImageGenerationSettings {
   guidanceScale?: number;
 }
 
+export type VideoModel = 'lite' | 'omni' | 'pro';
+export type VideoDuration = 4 | 6 | 8 | 10;
+
 export interface VideoGenerationSettings {
   style?: 'cinematic' | 'commercial' | 'realistic' | '3d_animation' | 'social_media' | 'music_clip' | 'prompt-only';
+  videoModel?: VideoModel;
   aspectRatio: '16:9' | '9:16';
-  duration: 4 | 6 | 8;
+  duration: VideoDuration;
   enableAudio?: boolean;
   dialogue?: string;
   multiScenes?: boolean;
   startImage?: boolean | string;
   endImage?: boolean | string;
   cameraMotion?: 'pan' | 'zoom' | 'orbit' | 'drone' | 'static' | 'dynamic';
-  resolution?: '720p' | '1080p' | '4k';
+  resolution?: '360p' | '720p' | '1080p' | '4k';
 }
 
 export interface MusicGenerationSettings {
