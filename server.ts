@@ -4,7 +4,9 @@ import { createServer as createHttpServer } from 'node:http';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
-import { generateVideo, type VideoModel, type VeoAspectRatio, type VideoDuration } from './server/veo';
+import { generateVideo, type VideoModel as VeoVideoModel, type VeoAspectRatio, type VideoDuration } from './server/veo';
+import { generateOmniVideo } from './server/omni';
+import { VIDEO_CREDIT_COSTS, assertMonetizationSafe, type MonetizedVideoModel } from './server/pricing';
 
 dotenv.config();
 
@@ -29,16 +31,11 @@ const now = () => new Date().toISOString();
 let generations: any[] = [];
 const technicalLogs: any[] = [];
 
-const VIDEO_MODELS: Record<VideoModel, { name: string; model: string; allowed: VideoDuration[]; usdPerSecond: number }> = {
+const VIDEO_MODELS: Record<MonetizedVideoModel, { name: string; model: string; allowed: VideoDuration[]; usdPerSecond: number }> = {
+  omni: { name: 'Gemini Omni 1.1 Flash', model: 'gemini-omni-1.1-flash', allowed: [4, 6, 8], usdPerSecond: 0.10 },
   lite: { name: 'Veo 3.1 Lite', model: 'veo-3.1-lite-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.05 },
   fast: { name: 'Veo 3.1 Fast', model: 'veo-3.1-fast-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.10 },
   pro: { name: 'Veo 3.1 Pro', model: 'veo-3.1-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.40 },
-};
-
-const VIDEO_CREDIT_COSTS: Record<VideoModel, Record<VideoDuration, number>> = {
-  lite: { 4: 15, 6: 23, 8: 30 },
-  fast: { 4: 30, 6: 45, 8: 60 },
-  pro: { 4: 120, 6: 180, 8: 240 },
 };
 
 let appSettings = {
@@ -46,14 +43,15 @@ let appSettings = {
   slogan: 'Imaginez. Générez. Créez sans limites.',
   maintenanceMode: false,
   announcementBanner: 'MUNGWELE IA STUDIO — Image, Vidéo et Musique par prompt.',
-  creditCosts: { imageStandard: 8, imageHd: 8, video5s: 15, video10s: 25, musicTrack: 10, promptEnhance: 0 },
+  creditCosts: { imageStandard: 8, imageHd: 8, video5s: 20, video10s: 40, musicTrack: 10, promptEnhance: 0 },
 };
 
 let apiProviders: any[] = [
   { id: 'prov-openai-image', name: 'OpenAI GPT-Image', providerKey: 'openai', category: 'image', enabled: true, isConfigured: !!process.env.OPENAI_API_KEY, isDemoFallback: false, modelName: 'gpt-image-2', latencyAvgMs: 0, creditCost: 8 },
-  { id: 'prov-video-lite', name: 'Veo 3.1 Lite', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.lite.model, latencyAvgMs: 0, creditCost: 15 },
-  { id: 'prov-video-fast', name: 'Veo 3.1 Fast', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.fast.model, latencyAvgMs: 0, creditCost: 30 },
-  { id: 'prov-video-pro', name: 'Veo 3.1 Pro', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.pro.model, latencyAvgMs: 0, creditCost: 120 },
+  { id: 'prov-video-omni', name: 'Gemini Omni 1.1 Flash', providerKey: 'gemini', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.omni.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.omni[4] },
+  { id: 'prov-video-lite', name: 'Veo 3.1 Lite', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.lite.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.lite[4] },
+  { id: 'prov-video-fast', name: 'Veo 3.1 Fast', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.fast.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.fast[4] },
+  { id: 'prov-video-pro', name: 'Veo 3.1 Pro', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.pro.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.pro[4] },
   { id: 'prov-suno-music', name: 'Suno AI Music', providerKey: 'suno', category: 'music', enabled: true, isConfigured: !!process.env.MUSIC_PROVIDER_API_KEY, isDemoFallback: false, modelName: 'suno-provider', latencyAvgMs: 0, creditCost: 10 },
   { id: 'prov-gemini-assistant', name: 'Gemini Prompt Assistant', providerKey: 'gemini', category: 'text', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: 'gemini-3.7-flash', latencyAvgMs: 0, creditCost: 0 },
 ];
@@ -74,17 +72,20 @@ function dataUrlToBinary(dataUrl: string) {
   return { mimeType: match[1], bytes: Buffer.from(match[2], 'base64') };
 }
 
-async function openAIImage(prompt: string, referenceImage?: string | null) {
+async function openAIImage(prompt: string, referenceImages: string[] = []) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw Object.assign(new Error('OPENAI_API_KEY absente.'), { status: 503 });
 
-  if (referenceImage) {
-    const binary = dataUrlToBinary(referenceImage);
-    if (!binary) throw Object.assign(new Error("L'image de référence est invalide."), { status: 400 });
+  if (referenceImages.length) {
+    const binaries = referenceImages.map(dataUrlToBinary);
+    if (binaries.some((item) => !item)) throw Object.assign(new Error("Une image de référence est invalide."), { status: 400 });
     const form = new FormData();
     form.append('model', 'gpt-image-2');
     form.append('prompt', prompt);
-    form.append('image', new Blob([binary.bytes], { type: binary.mimeType }), 'reference.png');
+    binaries.forEach((binary, index) => {
+      if (!binary) return;
+      form.append('image[]', new Blob([binary.bytes], { type: binary.mimeType }), `reference-${index + 1}.png`);
+    });
     const response = await fetch('https://api.openai.com/v1/images/edits', { method: 'POST', headers: { Authorization: `Bearer ${apiKey}` }, body: form });
     const payload: any = await response.json().catch(() => ({}));
     if (!response.ok) throw Object.assign(new Error(payload?.error?.message || `OpenAI image error ${response.status}`), { status: response.status });
@@ -133,44 +134,73 @@ app.post('/api/ai/generate-lyrics', async (req, res) => {
 });
 
 app.post('/api/generate/image', async (req, res) => {
-  const { prompt, enhancedPrompt, referenceImage, userId } = req.body || {};
+  const { prompt, enhancedPrompt, referenceImage, referenceImages, userId } = req.body || {};
   if (!prompt || typeof prompt !== 'string' || !prompt.trim()) return res.status(400).json({ error: 'Le prompt image est requis.' });
   const finalPrompt = String(enhancedPrompt || prompt).trim();
-  const hasReference = typeof referenceImage === 'string' && referenceImage.startsWith('data:image/');
-  const providerPrompt = hasReference
-    ? `MODIFICATION STRICTE. Utilise l'image fournie comme base, préserve tout ce qui n'est pas explicitement demandé et applique uniquement cette instruction : ${finalPrompt}`
+  const refs = Array.isArray(referenceImages)
+    ? referenceImages.filter((item: unknown): item is string => typeof item === 'string' && item.startsWith('data:image/')).slice(0, 8)
+    : typeof referenceImage === 'string' && referenceImage.startsWith('data:image/')
+      ? [referenceImage]
+      : [];
+  const providerPrompt = refs.length
+    ? `MODIFICATION STRICTE. Utilise toutes les images fournies comme références. Préserve les identités, objets, styles ou éléments demandés et applique uniquement cette instruction : ${finalPrompt}`
     : `Crée une image en suivant précisément cette demande, sans ajouter d'éléments non demandés : ${finalPrompt}`;
   try {
-    const imageUrl = await openAIImage(providerPrompt, hasReference ? referenceImage : null);
-    const generation = { id: `gen-img-${Date.now()}`, userId: userId || 'usr-current', type: 'image', title: prompt.slice(0, 60), prompt, enhancedPrompt: finalPrompt, provider: 'OpenAI', model: 'gpt-image-2', status: 'completed', progress: 100, resultUrl: imageUrl, thumbnailUrl: imageUrl, creditsUsed: 8, settings: { style: 'prompt-only', aspectRatio: 'auto', quality: 'high', quantity: 1, referenceImage: hasReference }, createdAt: now(), updatedAt: now() };
+    const imageUrl = await openAIImage(providerPrompt, refs);
+    const generation = { id: `gen-img-${Date.now()}`, userId: userId || 'usr-current', type: 'image', title: prompt.slice(0, 60), prompt, enhancedPrompt: finalPrompt, provider: 'OpenAI', model: 'gpt-image-2', status: 'completed', progress: 100, resultUrl: imageUrl, thumbnailUrl: imageUrl, creditsUsed: 8, settings: { style: 'prompt-only', aspectRatio: 'auto', quality: 'high', quantity: 1, referenceImage: Boolean(refs.length), referenceImages: refs.length ? refs : undefined }, createdAt: now(), updatedAt: now() };
     generations.unshift(generation);
-    addLog('success', 'Studio Image', hasReference ? 'Image modifiée avec OpenAI.' : 'Image générée avec OpenAI.');
+    addLog('success', 'Studio Image', refs.length ? `Image modifiée avec ${refs.length} référence(s) OpenAI.` : 'Image générée avec OpenAI.');
     return res.json({ success: true, generation, images: [imageUrl] });
   } catch (error: any) {
     addLog('error', 'Studio Image', String(error?.message || error));
     const status = Number(error?.status || 500);
-    return res.status(status === 401 || status === 403 || status === 429 ? status : 500).json({ error: quotaError(error) ? 'Quota ou limite OpenAI Image atteint.' : String(error?.message || 'La génération OpenAI Image a échoué.') });
+    return res.status(status === 400 || status === 401 || status === 403 || status === 429 ? status : 500).json({ error: quotaError(error) ? 'Quota ou limite OpenAI Image atteint.' : String(error?.message || 'La génération OpenAI Image a échoué.') });
   }
 });
 
 app.post('/api/generate/video', async (req, res) => {
-  const { prompt, model = 'fast', aspectRatio = '16:9', duration = 8, startImage, endImage, userId } = req.body || {};
+  const { prompt, model = 'fast', aspectRatio = '16:9', duration = 8, startImage, endImage, referenceImages, userId } = req.body || {};
   if (!prompt || typeof prompt !== 'string' || !prompt.trim()) return res.status(400).json({ error: 'Le prompt vidéo est requis.' });
   const client = getAI();
   if (!client) return res.status(503).json({ error: 'La génération vidéo nécessite GEMINI_API_KEY.', code: 'VIDEO_NOT_CONFIGURED' });
 
-  const safeModel: VideoModel = model === 'lite' || model === 'pro' ? model : 'fast';
+  const safeModel: MonetizedVideoModel = model === 'omni' || model === 'lite' || model === 'pro' ? model : 'fast';
   const numeric = Number(duration);
   const safeDuration: VideoDuration = numeric === 4 || numeric === 6 ? numeric : 8;
   const safeAspectRatio: VeoAspectRatio = aspectRatio === '9:16' ? '9:16' : '16:9';
+  const refs = Array.isArray(referenceImages)
+    ? referenceImages.filter((item: unknown): item is string => typeof item === 'string' && item.startsWith('data:image/')).slice(0, 6)
+    : [];
   if (endImage && !startImage) return res.status(400).json({ error: 'Une image de fin nécessite une image de départ.', code: 'START_IMAGE_REQUIRED' });
+  if (refs.length > 0 && safeModel !== 'omni') {
+    return res.status(400).json({ error: 'Les références multiples utilisent Gemini Omni. Sélectionnez Omni pour ce projet.', code: 'OMNI_REQUIRED_FOR_REFERENCES' });
+  }
   const effectiveDuration: VideoDuration = endImage ? 8 : safeDuration;
   const creditsUsed = VIDEO_CREDIT_COSTS[safeModel][effectiveDuration];
 
   try {
+    assertMonetizationSafe(safeModel, effectiveDuration, creditsUsed);
     const startedAt = Date.now();
-    const result = await generateVideo(client, { model: safeModel, prompt: prompt.trim(), aspectRatio: safeAspectRatio, duration: effectiveDuration, startImage: typeof startImage === 'string' ? startImage : null, endImage: typeof endImage === 'string' ? endImage : null });
-    const generation = { id: `gen-video-${Date.now()}`, userId: userId || 'usr-current', type: 'video', title: prompt.trim().slice(0, 60), prompt: prompt.trim(), enhancedPrompt: prompt.trim(), provider: 'Google', model: result.model, status: 'completed', progress: 100, resultUrl: result.resultUrl, thumbnailUrl: '', creditsUsed, settings: { style: 'prompt-only', videoModel: safeModel, aspectRatio: safeAspectRatio, duration: result.duration, enableAudio: true, startImage: Boolean(startImage), endImage: Boolean(endImage), resolution: '720p' }, createdAt: now(), updatedAt: now() };
+    const result = safeModel === 'omni'
+      ? await generateOmniVideo({
+          prompt: prompt.trim(),
+          aspectRatio: safeAspectRatio,
+          duration: effectiveDuration,
+          resolution: '720p',
+          startImage: typeof startImage === 'string' ? startImage : null,
+          endImage: typeof endImage === 'string' ? endImage : null,
+          referenceImages: refs,
+        })
+      : await generateVideo(client, {
+          model: safeModel as VeoVideoModel,
+          prompt: prompt.trim(),
+          aspectRatio: safeAspectRatio,
+          duration: effectiveDuration,
+          startImage: typeof startImage === 'string' ? startImage : null,
+          endImage: typeof endImage === 'string' ? endImage : null,
+        });
+
+    const generation = { id: `gen-video-${Date.now()}`, userId: userId || 'usr-current', type: 'video', title: prompt.trim().slice(0, 60), prompt: prompt.trim(), enhancedPrompt: prompt.trim(), provider: 'Google', model: result.model, status: 'completed', progress: 100, resultUrl: result.resultUrl, thumbnailUrl: '', creditsUsed, settings: { style: 'prompt-only', videoModel: safeModel, aspectRatio: safeAspectRatio, duration: result.duration, enableAudio: true, startImage: Boolean(startImage), endImage: Boolean(endImage), referenceImages: refs.length ? refs : undefined, resolution: '720p' }, createdAt: now(), updatedAt: now() };
     generations.unshift(generation);
     addLog('success', 'Studio Vidéo', `${VIDEO_MODELS[safeModel].name} a généré ${result.duration}s en ${Math.round((Date.now() - startedAt) / 1000)}s.`);
     return res.json({ success: true, generation });
@@ -178,7 +208,7 @@ app.post('/api/generate/video', async (req, res) => {
     const status = Number(error?.status || 0);
     const message = String(error?.message || 'Erreur vidéo inconnue.');
     addLog('error', 'Studio Vidéo', message);
-    return res.status(status === 400 ? 400 : status === 401 || status === 403 ? status : quotaError(error) ? 429 : status === 504 ? 504 : 500).json({ error: quotaError(error) ? 'Quota ou limite vidéo Google atteinte. Vérifiez le solde et les limites Gemini API.' : message, code: error?.code || 'VIDEO_GENERATION_FAILED' });
+    return res.status(status === 400 ? 400 : status === 401 || status === 403 ? status : quotaError(error) ? 429 : status === 504 ? 504 : status === 503 ? 503 : 500).json({ error: quotaError(error) ? 'Quota ou limite vidéo Google atteinte. Vérifiez le solde et les limites Gemini API.' : message, code: error?.code || 'VIDEO_GENERATION_FAILED' });
   }
 });
 
@@ -198,9 +228,6 @@ app.post('/api/admin/providers/toggle', (req, res) => { const provider = apiProv
 app.post('/api/admin/settings', (req, res) => { const { creditCosts, announcementBanner, maintenanceMode } = req.body || {}; if (creditCosts) appSettings.creditCosts = { ...appSettings.creditCosts, ...creditCosts }; if (typeof announcementBanner === 'string') appSettings.announcementBanner = announcementBanner; if (typeof maintenanceMode === 'boolean') appSettings.maintenanceMode = maintenanceMode; res.json({ success: true, settings: appSettings }); });
 
 async function startServer() {
-  // In Google AI Studio the preview is exposed through an HTTPS reverse proxy.
-  // Use one real HTTP server for Express + Vite so websocket upgrade requests
-  // travel through the same endpoint instead of Vite opening a second socket.
   const httpServer = createHttpServer(app);
 
   if (process.env.NODE_ENV !== 'production') {

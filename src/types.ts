@@ -1,5 +1,5 @@
 export type StudioType = 'image' | 'video' | 'music';
-export type NavigationTab = 'home' | 'studio-image' | 'studio-video' | 'studio-music' | 'creations' | 'subscription' | 'profile' | 'help' | 'admin';
+export type NavigationTab = 'home' | 'projects-image' | 'projects-video' | 'projects-music' | 'studio-image' | 'studio-video' | 'studio-music' | 'creations' | 'subscription' | 'profile' | 'help' | 'admin';
 export type GenerationStatus = 'draft' | 'queued' | 'processing' | 'completed' | 'failed';
 export type UserPlan = 'free' | 'creator' | 'pro';
 
@@ -22,11 +22,12 @@ export interface ImageGenerationSettings {
   quality: 'standard' | 'hd' | 'ultra_4k' | 'studio_master' | 'high';
   quantity: number;
   referenceImage?: string | boolean;
+  referenceImages?: string[];
   negativePrompt?: string;
   guidanceScale?: number;
 }
 
-export type VideoModel = 'lite' | 'fast' | 'pro';
+export type VideoModel = 'omni' | 'lite' | 'fast' | 'pro';
 export type VideoDuration = 4 | 6 | 8;
 export type VideoResolution = '720p' | '1080p' | '4k';
 export interface VideoGenerationSettings {
@@ -39,6 +40,7 @@ export interface VideoGenerationSettings {
   multiScenes?: boolean;
   startImage?: boolean | string;
   endImage?: boolean | string;
+  referenceImages?: string[];
   cameraMotion?: 'pan' | 'zoom' | 'orbit' | 'drone' | 'static' | 'dynamic';
   resolution?: VideoResolution;
 }
