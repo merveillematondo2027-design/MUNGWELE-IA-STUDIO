@@ -27,25 +27,26 @@ export interface UserProfile {
 }
 
 export interface ImageGenerationSettings {
-  style: 'realistic' | '3d' | 'cinematic' | 'illustration' | 'anime' | 'product' | 'logo' | 'artistic';
-  aspectRatio: '1:1' | '9:16' | '16:9' | '4:5' | 'banner';
-  quality: 'standard' | 'hd' | 'ultra_4k' | 'studio_master';
+  style: 'realistic' | '3d' | 'cinematic' | 'illustration' | 'anime' | 'product' | 'logo' | 'artistic' | 'prompt-only' | 'custom';
+  aspectRatio: '1:1' | '9:16' | '16:9' | '4:5' | 'banner' | 'auto';
+  quality: 'standard' | 'hd' | 'ultra_4k' | 'studio_master' | 'high';
   quantity: number;
-  referenceImage?: string;
+  referenceImage?: string | boolean;
   negativePrompt?: string;
   guidanceScale?: number;
 }
 
 export interface VideoGenerationSettings {
-  style: 'cinematic' | 'commercial' | 'realistic' | '3d_animation' | 'social_media' | 'music_clip';
-  aspectRatio: '16:9' | '9:16' | '1:1';
-  duration: 5 | 10;
-  enableAudio: boolean;
+  style?: 'cinematic' | 'commercial' | 'realistic' | '3d_animation' | 'social_media' | 'music_clip' | 'prompt-only';
+  aspectRatio: '16:9' | '9:16';
+  duration: 4 | 6 | 8;
+  enableAudio?: boolean;
   dialogue?: string;
-  multiScenes: boolean;
-  startImage?: string;
-  endImage?: string;
+  multiScenes?: boolean;
+  startImage?: boolean | string;
+  endImage?: boolean | string;
   cameraMotion?: 'pan' | 'zoom' | 'orbit' | 'drone' | 'static' | 'dynamic';
+  resolution?: '720p' | '1080p' | '4k';
 }
 
 export interface MusicGenerationSettings {
