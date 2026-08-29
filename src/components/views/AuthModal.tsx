@@ -1,10 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { X, Sparkles, Mail, Lock, User, ArrowRight, Loader2, ExternalLink, AlertCircle } from 'lucide-react';
+import { X, Sparkles, Mail, Lock, User, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   friendlyAuthError,
-  isEmbeddedAuthContext,
   loginWithEmail,
   loginWithGoogle,
   registerWithEmail,
@@ -31,7 +30,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ required = false }) => {
   const [name, setName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authError, setAuthError] = useState('');
-  const embeddedPreview = useMemo(() => isEmbeddedAuthContext(), []);
 
   const visible = required || isAuthModalOpen;
   if (!visible) return null;
@@ -70,9 +68,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ required = false }) => {
     } catch (error: any) {
       const message = friendlyAuthError(error);
       setAuthError(message);
-      if (error?.code === 'auth/email-already-in-use') {
-        setAuthMode('login');
-      }
+      if (error?.code === 'auth/email-already-in-use') setAuthMode('login');
     } finally {
       setIsSubmitting(false);
     }
@@ -82,20 +78,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ required = false }) => {
     setAuthError('');
     setIsSubmitting(true);
     try {
-      const profile = await loginWithGoogle();
-      if (profile) finishLogin(profile);
+      finishLogin(await loginWithGoogle());
     } catch (error) {
       setAuthError(friendlyAuthError(error));
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const openStandalonePreview = () => {
-    try {
-      window.open(window.location.href, '_blank', 'noopener,noreferrer');
-    } catch {
-      setAuthError('Utilisez le bouton d’ouverture du preview dans un nouvel onglet en haut de Google AI Studio.');
     }
   };
 
@@ -164,18 +151,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ required = false }) => {
                     {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="w-5 h-5 rounded-full border border-gray-300 flex items-center justify-center font-black text-xs">G</span>}
                     Continuer avec Google
                   </button>
-
-                  {embeddedPreview && (
-                    <button
-                      type="button"
-                      onClick={openStandalonePreview}
-                      className="mt-2 w-full text-xs text-purple-300 hover:text-purple-200 flex items-center justify-center gap-1.5"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      Ouvrir le preview dans un nouvel onglet pour Google
-                    </button>
-                  )}
-
                   <div className="flex items-center gap-3 my-5 text-[10px] uppercase tracking-widest text-gray-500">
                     <div className="h-px bg-white/10 flex-1" /><span>ou</span><div className="h-px bg-white/10 flex-1" />
                   </div>
