@@ -45,7 +45,7 @@ async function generateWithVeo(
 ) {
   if (options.duration === 10) {
     throw Object.assign(
-      new Error('Veo 3.1 Lite et Veo 3.1 Pro acceptent 4, 6 ou 8 secondes, pas 10 secondes.'),
+      new Error('Veo 3.1 Lite et Veo 3.1 Pro acceptent directement 4, 6 ou 8 secondes. Le mode 10 secondes direct est réservé à Omni Fast.'),
       { status: 400, code: 'VIDEO_DURATION_UNSUPPORTED' },
     );
   }
@@ -59,7 +59,7 @@ async function generateWithVeo(
     });
   }
 
-  // Veo 3.1 impose 8 s pour l'interpolation avec image de fin.
+  // Veo 3.1 exige 8 s lorsque lastFrame est utilisé.
   const effectiveDuration: 4 | 6 | 8 = last ? 8 : options.duration;
   const modelId = MODEL_IDS[options.model];
 
@@ -121,31 +121,29 @@ async function generateWithOmni(
     });
   }
 
-  // Omni produit des clips entre 3 et 10 s. L'API ne documente pas de champ
-  // duration dédié : la durée cible est donc exprimée explicitement dans le prompt.
-  const timedPrompt = `${options.prompt}\nDurée cible : exactement ${options.duration} secondes. Organise le rythme, les plans, les dialogues et l'audio pour terminer naturellement à ${options.duration} secondes.`;
+  const timedPrompt = `${options.prompt}\nDurée cible : ${options.duration} secondes. Termine naturellement la scène, les dialogues et l'audio dans cette durée.`;
+  const input: any = first
+    ? [
+        { type: 'image', data: first.data, mime_type: first.mimeType },
+        ...(last ? [{ type: 'image', data: last.data, mime_type: last.mimeType }] : []),
+        {
+          type: 'text',
+          text: `${last ? 'La première image est le départ et la seconde est une référence visuelle pour la fin. ' : ''}${timedPrompt}`,
+        },
+      ]
+    : timedPrompt;
 
-  let input: any = timedPrompt;
-  if (first) {
-    input = [
-      { type: 'image', data: first.data, mime_type: first.mimeType },
-      ...(last ? [{ type: 'image', data: last.data, mime_type: last.mimeType }] : []),
-      {
-        type: 'text',
-        text: `${last ? '<FIRST_FRAME> <LAST_FRAME> ' : '<FIRST_FRAME> '}${timedPrompt}`,
-      },
-    ];
-  }
-
-  // Cast conservé pour compatibilité avec les versions du SDK dont les typings
-  // Interactions peuvent être en retard sur l'API, sans exposer la clé côté client.
   const interaction: any = await (ai as any).interactions.create({
     model: MODEL_IDS.omni,
     input,
     response_format: {
       type: 'video',
       aspect_ratio: options.aspectRatio,
-      resolution: '720p',
+    },
+    generationConfig: {
+      videoConfig: {
+        task: first ? 'image_to_video' : 'text_to_video',
+      },
     },
   });
 
