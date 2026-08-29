@@ -5,6 +5,7 @@ import { ImageStudio } from './components/studios/ImageStudio';
 import { VideoStudio } from './components/studios/VideoStudio';
 import { MusicStudio } from './components/studios/MusicStudio';
 import { HomeView } from './components/views/HomeView';
+import { ProjectsHubView } from './components/views/ProjectsHubView';
 import { CreationsView } from './components/views/CreationsView';
 import { SubscriptionView } from './components/views/SubscriptionView';
 import { ProfileView } from './components/views/ProfileView';
@@ -98,6 +99,9 @@ const MainLayout: React.FC = () => {
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.16 }}>
               {activeTab === 'home' && <HomeView />}
+              {activeTab === 'projects-image' && <ProjectsHubView type="image" />}
+              {activeTab === 'projects-video' && <ProjectsHubView type="video" />}
+              {activeTab === 'projects-music' && <ProjectsHubView type="music" />}
               {activeTab === 'studio-image' && <ImageStudio />}
               {activeTab === 'studio-video' && <VideoStudio />}
               {activeTab === 'studio-music' && <MusicStudio />}
