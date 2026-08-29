@@ -13,21 +13,21 @@ const MODEL_CONFIG: Record<VideoModel, {
   lite: {
     label: 'Veo 3.1 Lite',
     subtitle: 'Économique',
-    description: 'Pour les essais, réseaux sociaux et productions à petit budget.',
+    description: 'Google Veo 3.1 Lite, faible coût, audio natif, idéal pour essais et contenus sociaux.',
     allowedDurations: [4, 6, 8],
     baseCredits: 10,
   },
   omni: {
     label: 'Omni Fast',
     subtitle: 'Recommandé',
-    description: 'Gemini Omni 1.1 Flash : rapide, flexible, audio natif et jusqu’à 10 secondes.',
+    description: 'Gemini Omni 1.1 Flash, génération vidéo rapide et conversationnelle, audio natif, sortie jusqu’à 10 secondes.',
     allowedDurations: [4, 6, 8, 10],
     baseCredits: 20,
   },
   pro: {
     label: 'Veo 3.1 Pro',
     subtitle: 'Qualité maximale',
-    description: 'Veo 3.1 Standard côté Google, présenté comme Pro dans MUNGWELE pour les rendus premium.',
+    description: 'Google Veo 3.1 Standard présenté comme Pro dans MUNGWELE, pour les rendus premium et cinématographiques.',
     allowedDurations: [4, 6, 8],
     baseCredits: 40,
   },
@@ -254,7 +254,7 @@ export const VideoStudio: React.FC = () => {
               })}
             </div>
             <p className="text-[10px] text-amber-300/90 mt-2">
-              Important : l’API Veo 3.1 Lite/Pro est limitée à 4, 6 ou 8 secondes. Le mode Omni Fast permet une cible jusqu’à 10 secondes.
+              Google autorise Veo 3.1 Lite et Veo 3.1 Standard en 4, 6 ou 8 s. Omni Fast produit des vidéos de 3 à 10 s ; MUNGWELE propose 4, 6, 8 et 10 s. Une image de fin sur Veo impose 8 s.
             </p>
           </div>
 
@@ -317,13 +317,14 @@ export const VideoStudio: React.FC = () => {
               ) : (
                 <button type="button" onClick={() => endInputRef.current?.click()} className="w-full h-44 rounded-2xl border border-dashed border-white/15 hover:border-purple-500/60 bg-white/[0.02] flex flex-col items-center justify-center gap-2 text-gray-400"><Upload className="w-5 h-5 text-purple-400" /><span className="text-xs font-semibold">Importer une image de fin</span><span className="text-[10px] text-gray-500">nécessite une image de départ</span></button>
               )}
+              {videoModel === 'omni' && endImage && <p className="text-[10px] text-gray-500 mt-2">Avec Omni Fast, la seconde image sert de référence visuelle finale ; l’interpolation exacte first/last frame est une fonction Veo.</p>}
             </div>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <p className="text-xs font-bold text-white">{MODEL_CONFIG[videoModel].label} • {effectiveDuration}s • {aspectRatio} • 720p</p>
-              <p className="text-[10px] text-gray-500 mt-1">Coût MUNGWELE calculé avant lancement : aucun débit supplémentaire dans l’application si la génération échoue.</p>
+              <p className="text-[10px] text-gray-500 mt-1">Coût MUNGWELE calculé avant lancement : les crédits sont remboursés automatiquement si le fournisseur refuse ou échoue.</p>
             </div>
             <span className="text-sm font-black text-pink-300">{creditCost} crédits</span>
           </div>
