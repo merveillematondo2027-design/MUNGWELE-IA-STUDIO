@@ -38,6 +38,12 @@ export const ImageStudio: React.FC = () => {
   const imageCreations = generations.filter((g) => g.type === 'image');
   const creditCost = 8;
 
+  const clearWorkspace = () => {
+    setPrompt('');
+    setReferenceImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleFileUpload = (file: File) => {
     if (!file.type.startsWith('image/')) {
       addNotification('error', 'Format invalide', 'Importez une image PNG, JPG ou WEBP.');
@@ -66,7 +72,8 @@ export const ImageStudio: React.FC = () => {
       return;
     }
 
-    const reason = referenceImage ? 'Retouche image par prompt' : 'Génération image par prompt';
+    const hadReferenceImage = Boolean(referenceImage);
+    const reason = hadReferenceImage ? 'Retouche image par prompt' : 'Génération image par prompt';
     const allowed = useCredits(creditCost, reason);
     if (!allowed) return;
 
@@ -95,8 +102,6 @@ export const ImageStudio: React.FC = () => {
         throw new Error(data.error || 'La génération a échoué.');
       }
 
-      // Protection supplémentaire : aucune ancienne image de démonstration ne doit
-      // apparaître comme si elle avait été générée à partir du prompt utilisateur.
       if (String(data.generation.resultUrl || '').includes('images.unsplash.com')) {
         throw new Error('Résultat de démonstration refusé. Réessayez avec le fournisseur IA réel.');
       }
@@ -104,12 +109,13 @@ export const ImageStudio: React.FC = () => {
       setGenerationProgress(100);
       addGeneration(data.generation);
       triggerCelebration();
+      clearWorkspace();
       addNotification(
         'success',
-        referenceImage ? 'Modification terminée' : 'Image générée',
-        referenceImage
-          ? 'La modification demandée a été appliquée à votre image de référence.'
-          : 'Votre image a été créée à partir de votre prompt.'
+        hadReferenceImage ? 'Modification terminée' : 'Image générée',
+        hadReferenceImage
+          ? 'La modification a été appliquée. Le prompt et l’image de référence ont été vidés pour votre prochain projet.'
+          : 'Votre image a été créée. Le champ du prompt a été vidé pour votre prochain projet.'
       );
     } catch (error: any) {
       window.clearInterval(timer);
@@ -204,7 +210,10 @@ export const ImageStudio: React.FC = () => {
                 <img src={referenceImage} alt="Image à modifier" className="w-full max-h-80 object-contain" />
                 <button
                   type="button"
-                  onClick={() => setReferenceImage(null)}
+                  onClick={() => {
+                    setReferenceImage(null);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
                   className="absolute top-3 right-3 p-2 rounded-full bg-black/70 hover:bg-rose-600 text-white"
                   title="Retirer l'image"
                 >
