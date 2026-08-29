@@ -6,6 +6,7 @@ import { VideoStudio } from './components/studios/VideoStudio';
 import { MusicStudio } from './components/studios/MusicStudio';
 import { HomeView } from './components/views/HomeView';
 import { ProjectsHubView } from './components/views/ProjectsHubView';
+import { CommunityView } from './components/views/CommunityView';
 import { CreationsView } from './components/views/CreationsView';
 import { SubscriptionView } from './components/views/SubscriptionView';
 import { ProfileView } from './components/views/ProfileView';
@@ -18,6 +19,7 @@ import { subscribeToFirebaseUser } from './services/authService';
 import { auth } from './lib/firebase';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import brandLogo from './assets/mungwele-brand.svg';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -59,7 +61,7 @@ const MainLayout: React.FC = () => {
   if (authStatus === 'loading') {
     return (
       <div className="min-h-screen bg-[#050b18] text-white flex flex-col items-center justify-center gap-4 px-6 text-center">
-        <img src="/branding/mungwele-ia-logo.png" alt="MUNGWELE IA STUDIO" className="h-20 w-20 rounded-2xl object-contain shadow-2xl" />
+        <img src={brandLogo} alt="MUNGWELE IA STUDIO" className="h-24 w-32 object-contain drop-shadow-2xl" />
         <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
         <p className="text-sm text-gray-400">Vérification de votre session sécurisée…</p>
       </div>
@@ -99,6 +101,7 @@ const MainLayout: React.FC = () => {
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.16 }}>
               {activeTab === 'home' && <HomeView />}
+              {activeTab === 'community' && <CommunityView />}
               {activeTab === 'projects-image' && <ProjectsHubView type="image" />}
               {activeTab === 'projects-video' && <ProjectsHubView type="video" />}
               {activeTab === 'projects-music' && <ProjectsHubView type="music" />}
