@@ -75,25 +75,32 @@ export async function generateVideo(
   const effectiveDuration: VideoDuration = last ? 8 : options.duration;
   const instance: Record<string, any> = { prompt: options.prompt };
 
+  // Gemini REST attend les images d'entrée dans `instances` au format inlineData.
   if (first) {
     instance.image = {
-      imageBytes: first.data,
-      mimeType: first.mimeType,
+      inlineData: {
+        mimeType: first.mimeType,
+        data: first.data,
+      },
     };
   }
 
+  if (last) {
+    instance.lastFrame = {
+      inlineData: {
+        mimeType: last.mimeType,
+        data: last.data,
+      },
+    };
+  }
+
+  // Audio Veo 3.1 : toujours natif/actif. Ne pas envoyer generateAudio.
+  // Une seule vidéo est générée par requête. Ne pas envoyer numberOfVideos.
   const parameters: Record<string, any> = {
     aspectRatio: options.aspectRatio,
     durationSeconds: effectiveDuration,
     resolution: '720p',
   };
-
-  if (last) {
-    parameters.lastFrame = {
-      imageBytes: last.data,
-      mimeType: last.mimeType,
-    };
-  }
 
   const modelId = MODEL_IDS[options.model];
   const startResponse = await fetch(`${GEMINI_BASE_URL}/models/${modelId}:predictLongRunning`, {
