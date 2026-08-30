@@ -2,7 +2,7 @@ import React from 'react';
 import { ArrowRight, Clapperboard, Film, Image as ImageIcon, Music as MusicIcon, Sparkles } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { StudioType } from '../../types';
-import brandLogo from '../../assets/mungwele-brand.svg';
+import officialLogo from '../../assets/mungwele-ai-official-logo.svg';
 import { CommunityFeed } from '../community/CommunityFeed';
 
 export const HomeView: React.FC = () => {
@@ -23,8 +23,8 @@ export const HomeView: React.FC = () => {
   return (
     <div className="mx-auto w-full max-w-6xl pb-12 pt-2 sm:pt-6">
       <div className="mx-auto mb-6 max-w-2xl text-center sm:mb-8">
-        <div className="mb-2 flex justify-center"><img src={brandLogo} alt="MUNGWELE IA STUDIO" className="h-20 w-28 object-contain drop-shadow-2xl sm:h-24 sm:w-36" /></div>
-        <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-purple-200"><Sparkles className="h-3 w-3 text-pink-300" /> MUNGWELE IA STUDIO</div>
+        <div className="mb-2 flex justify-center"><img src={officialLogo} alt="MUNGWELE AI STUDIO" className="h-24 w-48 object-contain drop-shadow-2xl sm:h-28 sm:w-60" /></div>
+        <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-purple-200"><Sparkles className="h-3 w-3 text-pink-300" /> MUNGWELE AI STUDIO</div>
         <h1 className="text-2xl font-black tracking-tight text-white sm:text-4xl">Que voulez-vous créer ?</h1>
         <p className="mt-2 text-xs text-gray-500 sm:text-sm">Choisissez un studio, retrouvez vos projets, puis continuez ou créez-en un nouveau.</p>
         <p className="mt-1 text-[11px] text-gray-700">Bonjour {user.name || 'créateur'}.</p>
