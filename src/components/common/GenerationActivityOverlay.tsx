@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { GenerationProgressCard } from './GenerationProgressCard';
+import { auth } from '../../lib/firebase';
 
 type Activity = {
   kind: 'image' | 'video';
@@ -31,7 +32,11 @@ export const GenerationActivityOverlay: React.FC = () => {
       setActivity({ kind, completed: false, label: kind === 'image' ? 'MUNGWELE AI crée votre image' : 'MUNGWELE AI génère votre vidéo' });
 
       try {
-        const response = await originalFetch(input, init);
+        const token = await auth.currentUser?.getIdToken();
+        const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
+        if (token) headers.set('Authorization', `Bearer ${token}`);
+        headers.set('X-Mungwele-Background', '1');
+        const response = await originalFetch(input, { ...init, headers });
         if (response.ok) {
           setActivity((current) => current ? { ...current, completed: true } : current);
           window.setTimeout(() => setActivity(null), 800);
@@ -59,7 +64,7 @@ export const GenerationActivityOverlay: React.FC = () => {
           kind={activity.kind}
           completed={activity.completed}
           title={activity.label}
-          subtitle={activity.kind === 'image' ? 'Image • traitement sécurisé en cours' : 'Vidéo • génération et encodage en cours'}
+          subtitle={activity.kind === 'image' ? 'Image • traitement sécurisé en arrière-plan' : 'Vidéo • génération et encodage en arrière-plan'}
         />
       </div>
     </div>
