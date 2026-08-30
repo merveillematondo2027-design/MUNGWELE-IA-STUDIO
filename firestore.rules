@@ -21,7 +21,7 @@ service cloud.firestore {
     }
 
     match /mdigiProfiles/{userId} {
-      allow read: if signedIn();
+      allow read: if true;
       allow create: if isOwner(userId)
         && request.resource.data.nickname is string
         && request.resource.data.nickname.size() >= 2
@@ -47,12 +47,12 @@ service cloud.firestore {
     match /creditPacks/{packId} { allow read: if true; allow write: if isAdmin(); }
 
     match /generations/{generationId} {
-      allow read: if ownsExisting() || isAdmin() || (signedIn() && resource.data.isPublic == true);
+      allow read: if ownsExisting() || isAdmin() || resource.data.isPublic == true;
       allow create: if ownsIncoming() || isAdmin();
       allow update: if isAdmin() || (ownsExisting() && ownsIncoming());
       allow delete: if ownsExisting() || isAdmin();
-      match /likes/{userId} { allow read: if signedIn() && get(/databases/$(database)/documents/generations/$(generationId)).data.isPublic == true; allow create: if isOwner(userId) && request.resource.data.userId == request.auth.uid && get(/databases/$(database)/documents/generations/$(generationId)).data.isPublic == true; allow delete: if isOwner(userId) || isAdmin(); allow update: if false; }
-      match /comments/{commentId} { allow read: if signedIn() && get(/databases/$(database)/documents/generations/$(generationId)).data.isPublic == true; allow create: if signedIn() && request.resource.data.userId == request.auth.uid && request.resource.data.text is string && get(/databases/$(database)/documents/generations/$(generationId)).data.isPublic == true; allow update, delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid); }
+      match /likes/{userId} { allow read: if get(/databases/$(database)/documents/generations/$(generationId)).data.isPublic == true; allow create: if isOwner(userId) && request.resource.data.userId == request.auth.uid && get(/databases/$(database)/documents/generations/$(generationId)).data.isPublic == true; allow delete: if isOwner(userId) || isAdmin(); allow update: if false; }
+      match /comments/{commentId} { allow read: if get(/databases/$(database)/documents/generations/$(generationId)).data.isPublic == true; allow create: if signedIn() && request.resource.data.userId == request.auth.uid && request.resource.data.text is string && get(/databases/$(database)/documents/generations/$(generationId)).data.isPublic == true; allow update, delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid); }
     }
 
     match /images/{imageId} { allow read: if ownsExisting() || isAdmin(); allow create: if ownsIncoming() || isAdmin(); allow update: if isAdmin() || (ownsExisting() && ownsIncoming()); allow delete: if ownsExisting() || isAdmin(); }
@@ -63,9 +63,12 @@ service cloud.firestore {
     match /creditTransactions/{transactionId} { allow read: if ownsExisting() || isAdmin(); allow create: if ownsIncoming() || isAdmin(); allow update, delete: if isAdmin(); }
 
     match /communityPosts/{postId} {
-      allow read: if signedIn(); allow create: if ownsIncoming() || isAdmin(); allow update: if isAdmin() || (ownsExisting() && ownsIncoming()); allow delete: if ownsExisting() || isAdmin();
-      match /likes/{userId} { allow read: if signedIn(); allow create: if isOwner(userId) && request.resource.data.userId == request.auth.uid; allow delete: if isOwner(userId) || isAdmin(); allow update: if false; }
-      match /comments/{commentId} { allow read: if signedIn(); allow create: if signedIn() && request.resource.data.userId == request.auth.uid && request.resource.data.text is string; allow update, delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid); }
+      allow read: if true;
+      allow create: if ownsIncoming() || isAdmin();
+      allow update: if isAdmin() || (ownsExisting() && ownsIncoming());
+      allow delete: if ownsExisting() || isAdmin();
+      match /likes/{userId} { allow read: if true; allow create: if isOwner(userId) && request.resource.data.userId == request.auth.uid; allow delete: if isOwner(userId) || isAdmin(); allow update: if false; }
+      match /comments/{commentId} { allow read: if true; allow create: if signedIn() && request.resource.data.userId == request.auth.uid && request.resource.data.text is string; allow update, delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid); }
     }
 
     match /follows/{followId} { allow read: if signedIn(); allow create: if signedIn() && request.resource.data.userId == request.auth.uid && request.resource.data.followerId == request.auth.uid && request.resource.data.targetId != request.auth.uid; allow delete: if isAdmin() || (signedIn() && resource.data.followerId == request.auth.uid); allow update: if false; }
