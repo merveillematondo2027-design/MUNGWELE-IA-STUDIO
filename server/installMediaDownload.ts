@@ -11,6 +11,7 @@ const originalGet = express.application.get;
 let installed = false;
 
 type Kind = 'image'|'video'|'clips'|'music';
+type OutputInfo = { ext:string; mime:string; height?:number; width?:number; bitrate?:string };
 const FORMAT_LEVEL: Record<string, number> = {
   'video-480':0,'video-780':1,'video-1080':2,'video-1440':3,'video-2160':3,
   'image-jpg-1024':0,'image-webp-1600':1,'image-png-2048':2,'image-png-4096':3,
@@ -31,7 +32,7 @@ async function authenticatedUser(req: Request) {
   return { uid: decoded.uid, role, plan, level };
 }
 
-function outputInfo(format: string) {
+function outputInfo(format: string): OutputInfo | null {
   if (format === 'video-480') return { ext:'mp4', mime:'video/mp4', height:480 };
   if (format === 'video-780') return { ext:'mp4', mime:'video/mp4', height:780 };
   if (format === 'video-1080') return { ext:'mp4', mime:'video/mp4', height:1080 };
@@ -71,7 +72,7 @@ async function runFfmpeg(args: string[]) {
 async function transcode(input: Buffer, kind: Kind, format: string, community: boolean, ownerName: string) {
   const info = outputInfo(format); if (!info) throw new Error('Format de téléchargement invalide.');
   if (kind === 'image') {
-    let pipeline = sharp(input).resize({ width: info.width, withoutEnlargement: false, fit:'inside' });
+    let pipeline = sharp(input).resize({ width: info.width || 1024, withoutEnlargement: false, fit:'inside' });
     if (community) {
       const wm = await watermarkBuffer(ownerName);
       const meta = await pipeline.metadata();
@@ -95,14 +96,12 @@ async function transcode(input: Buffer, kind: Kind, format: string, community: b
       if (community) args.push('-metadata','artist',`MUNGWELE AI • ${ownerName}`,'-metadata','comment',`Téléchargé depuis la communauté MUNGWELE AI • Propriétaire: ${ownerName}`);
       args.push(outputPath); await runFfmpeg(args);
     } else {
+      const height = info.height || 480;
       const args = ['-y','-i',inputPath];
-      let filter = `scale=-2:${info.height}:flags=lanczos`;
       if (community) {
         const wmPath = path.join(dir,'watermark.png'); await fs.writeFile(wmPath,await watermarkBuffer(ownerName));
-        args.push('-i',wmPath);
-        filter = `[0:v]scale=-2:${info.height}:flags=lanczos[base];[1:v]scale='min(560,iw)':'-1'[wm];[base][wm]overlay=W-w-24:H-h-24`;
-        args.push('-filter_complex',filter,'-map','0:a?');
-      } else args.push('-vf',filter);
+        args.push('-i',wmPath,'-filter_complex',`[0:v]scale=-2:${height}:flags=lanczos[base];[1:v]scale='min(560,iw)':'-1'[wm];[base][wm]overlay=W-w-24:H-h-24[outv]`,'-map','[outv]','-map','0:a?');
+      } else args.push('-vf',`scale=-2:${height}:flags=lanczos`);
       args.push('-c:v','libx264','-preset','veryfast','-crf','20','-c:a','aac','-b:a','160k','-movflags','+faststart',outputPath);
       await runFfmpeg(args);
     }
