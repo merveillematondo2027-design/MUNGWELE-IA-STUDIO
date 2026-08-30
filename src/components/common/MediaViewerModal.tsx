@@ -1,24 +1,21 @@
 import React, { useState, useRef } from 'react';
 import { GenerationRecord } from '../../types';
 import { useApp } from '../../context/AppContext';
+import { BrandWatermark } from './BrandWatermark';
 import { 
   X, 
   Download, 
   Share2, 
   Copy, 
-  Sparkles, 
   Check, 
   Play, 
   Pause, 
   Volume2, 
   VolumeX, 
-  Maximize, 
   Film, 
   Image as ImageIcon, 
   Music as MusicIcon,
   Trash2,
-  ExternalLink,
-  Calendar,
   Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -41,7 +38,7 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({ media, onClo
   if (!media) return null;
 
   const isImage = media.type === 'image';
-  const isVideo = media.type === 'video';
+  const isVideo = media.type === 'video' || media.type === 'clips';
   const isMusic = media.type === 'music';
 
   const handleCopyPrompt = () => {
@@ -55,7 +52,7 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({ media, onClo
     if (navigator.share) {
       navigator.share({
         title: media.title,
-        text: `Création IA sur MUNGWELE IA STUDIO : ${media.title}`,
+        text: `Création IA sur MUNGWELE AI STUDIO : ${media.title}`,
         url: window.location.href,
       }).catch(() => {});
     } else {
@@ -79,7 +76,7 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({ media, onClo
     setActiveStudio('video');
     setActiveTab('studio-video');
     onClose();
-    addNotification('success', 'Image transférée !', 'L\'image a été insérée comme image de départ dans Studio Vidéo (Veo 3).');
+    addNotification('success', 'Image transférée !', 'L\'image a été insérée comme image de départ dans Studio Vidéo.');
   };
 
   const handleDelete = () => {
@@ -90,282 +87,99 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({ media, onClo
   };
 
   const toggleVideoPlay = () => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause();
-      } else {
-        videoRef.current.play();
-      }
-      setIsPlaying(!isPlaying);
-    }
+    if (!videoRef.current) return;
+    if (isPlaying) videoRef.current.pause();
+    else videoRef.current.play();
+    setIsPlaying(!isPlaying);
   };
 
   const toggleAudioPlay = () => {
-    if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause();
-      } else {
-        audioRef.current.play();
-      }
-      setIsPlaying(!isPlaying);
-    }
+    if (!audioRef.current) return;
+    if (isPlaying) audioRef.current.pause();
+    else audioRef.current.play();
+    setIsPlaying(!isPlaying);
   };
 
   return (
     <AnimatePresence>
-      <div 
-        id="media-viewer-modal-backdrop"
-        className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto"
-      >
+      <div id="media-viewer-modal-backdrop" className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/85 p-2 backdrop-blur-md sm:p-4">
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.96 }}
           id="media-viewer-modal-content"
-          className="relative w-full max-w-4xl bg-[#081226]/85 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden text-white my-auto max-h-[92vh] flex flex-col"
+          className="relative my-auto flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#081226]/85 text-white shadow-2xl backdrop-blur-2xl"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-white/[0.02]">
+          <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.02] px-5 py-4">
             <div className="flex items-center space-x-3 truncate">
-              <div className={`p-2 rounded-xl text-white border border-white/20 ${
-                isImage ? 'bg-purple-600/80' : isVideo ? 'bg-pink-600/80' : 'bg-blue-600/80'
-              }`}>
-                {isImage && <ImageIcon className="w-4 h-4" />}
-                {isVideo && <Film className="w-4 h-4" />}
-                {isMusic && <MusicIcon className="w-4 h-4" />}
+              <div className={`rounded-xl border border-white/20 p-2 text-white ${isImage ? 'bg-purple-600/80' : isVideo ? 'bg-pink-600/80' : 'bg-blue-600/80'}`}>
+                {isImage && <ImageIcon className="h-4 w-4" />}
+                {isVideo && <Film className="h-4 w-4" />}
+                {isMusic && <MusicIcon className="h-4 w-4" />}
               </div>
               <div className="truncate">
-                <h3 className="text-base font-bold text-white truncate">
-                  {media.title}
-                </h3>
-                <div className="flex items-center space-x-2 text-xs text-gray-400">
-                  <span>{media.provider}</span>
-                  <span>•</span>
-                  <span>{media.model}</span>
-                </div>
+                <h3 className="truncate text-base font-bold text-white">{media.title}</h3>
+                <div className="flex items-center space-x-2 text-xs text-gray-400"><span>{media.provider}</span><span>•</span><span>{media.model}</span></div>
               </div>
             </div>
-
             <div className="flex items-center space-x-2">
-              <button
-                id="media-viewer-download-btn"
-                onClick={handleDownload}
-                className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-gray-200 hover:text-white transition-colors"
-                title="Télécharger"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-              <button
-                id="media-viewer-share-btn"
-                onClick={handleShare}
-                className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-gray-200 hover:text-white transition-colors"
-                title="Partager"
-              >
-                <Share2 className="w-4 h-4" />
-              </button>
-              <button
-                id="media-viewer-close-btn"
-                onClick={onClose}
-                className="p-2 rounded-xl hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-                title="Fermer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <button id="media-viewer-download-btn" onClick={handleDownload} className="rounded-xl border border-white/10 bg-white/[0.06] p-2 text-gray-200 transition-colors hover:bg-white/[0.12] hover:text-white" title="Télécharger"><Download className="h-4 w-4" /></button>
+              <button id="media-viewer-share-btn" onClick={handleShare} className="rounded-xl border border-white/10 bg-white/[0.06] p-2 text-gray-200 transition-colors hover:bg-white/[0.12] hover:text-white" title="Partager"><Share2 className="h-4 w-4" /></button>
+              <button id="media-viewer-close-btn" onClick={onClose} className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-white/10 hover:text-white" title="Fermer"><X className="h-5 w-5" /></button>
             </div>
           </div>
 
-          {/* Content Area */}
-          <div className="flex-1 overflow-y-auto p-5 grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Visual / Player Area */}
-            <div className="lg:col-span-7 flex flex-col items-center justify-center bg-black/40 rounded-2xl border border-white/10 p-4 min-h-[300px]">
+          <div className="grid flex-1 grid-cols-1 gap-6 overflow-y-auto p-5 lg:grid-cols-12">
+            <div className="flex min-h-[300px] flex-col items-center justify-center rounded-2xl border border-white/10 bg-black/40 p-4 lg:col-span-7">
               {isImage && (
-                <div className="relative group w-full h-full flex items-center justify-center">
-                  <img
-                    src={media.resultUrl}
-                    alt={media.title}
-                    referrerPolicy="no-referrer"
-                    className="max-h-[460px] w-auto max-w-full rounded-xl object-contain shadow-2xl"
-                  />
+                <div className="group relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl">
+                  <img src={media.resultUrl} alt={media.title} referrerPolicy="no-referrer" className="max-h-[460px] w-auto max-w-full rounded-xl object-contain shadow-2xl" />
+                  <BrandWatermark opacity={0.28} />
                 </div>
               )}
 
               {isVideo && (
-                <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black flex items-center justify-center border border-white/10">
-                  <video
-                    ref={videoRef}
-                    src={media.resultUrl}
-                    poster={media.thumbnailUrl}
-                    loop
-                    playsInline
-                    className="w-full h-full object-contain"
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                  />
-                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between p-2 rounded-xl bg-black/60 backdrop-blur-md border border-white/10">
-                    <button
-                      onClick={toggleVideoPlay}
-                      className="p-2 rounded-lg bg-white/20 hover:bg-white/30 text-white"
-                    >
-                      {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
-                    </button>
-                    <span className="text-xs text-gray-300 font-mono">
-                      Google Veo 3 • {(media.settings as any)?.duration || 10}s
-                    </span>
-                    <button
-                      onClick={() => {
-                        if (videoRef.current) {
-                          videoRef.current.muted = !isMuted;
-                          setIsMuted(!isMuted);
-                        }
-                      }}
-                      className="p-2 rounded-lg bg-white/20 hover:bg-white/30 text-white"
-                    >
-                      {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                    </button>
+                <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black">
+                  <video ref={videoRef} src={media.resultUrl} poster={media.thumbnailUrl} loop playsInline className="h-full w-full object-contain" onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} />
+                  <BrandWatermark className="bottom-16" opacity={0.28} />
+                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-xl border border-white/10 bg-black/60 p-2 backdrop-blur-md">
+                    <button onClick={toggleVideoPlay} className="rounded-lg bg-white/20 p-2 text-white hover:bg-white/30">{isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 fill-white" />}</button>
+                    <span className="text-xs font-mono text-gray-300">{media.model} • {(media.settings as any)?.duration || 10}s</span>
+                    <button onClick={() => { if (videoRef.current) { videoRef.current.muted = !isMuted; setIsMuted(!isMuted); } }} className="rounded-lg bg-white/20 p-2 text-white hover:bg-white/30">{isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}</button>
                   </div>
                 </div>
               )}
 
               {isMusic && (
-                <div className="w-full flex flex-col items-center justify-center p-6 text-center space-y-4">
-                  <div className="relative w-28 h-28 rounded-2xl overflow-hidden shadow-2xl border-2 border-purple-500/40">
-                    <img
-                      src={media.thumbnailUrl}
-                      alt={media.title}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
-                    />
-                    <button
-                      onClick={toggleAudioPlay}
-                      className="absolute inset-0 bg-black/40 hover:bg-black/20 flex items-center justify-center text-white transition-all"
-                    >
-                      {isPlaying ? <Pause className="w-10 h-10" /> : <Play className="w-10 h-10 fill-white" />}
-                    </button>
+                <div className="flex w-full flex-col items-center justify-center space-y-4 p-6 text-center">
+                  <div className="relative h-28 w-28 overflow-hidden rounded-2xl border-2 border-purple-500/40 shadow-2xl">
+                    <img src={media.thumbnailUrl} alt={media.title} referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+                    <button onClick={toggleAudioPlay} className="absolute inset-0 flex items-center justify-center bg-black/40 text-white transition-all hover:bg-black/20">{isPlaying ? <Pause className="h-10 w-10" /> : <Play className="h-10 w-10 fill-white" />}</button>
                   </div>
-
-                  <audio
-                    ref={audioRef}
-                    src={media.resultUrl}
-                    loop
-                    onTimeUpdate={() => {
-                      if (audioRef.current) {
-                        setAudioProgress(
-                          (audioRef.current.currentTime / audioRef.current.duration) * 100 || 0
-                        );
-                      }
-                    }}
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                  />
-
-                  {/* Audio Wave Visualizer Simulation */}
-                  <div className="w-full max-w-md h-12 flex items-center justify-center space-x-1 px-4 py-2 rounded-xl bg-white/[0.04] backdrop-blur-md border border-white/10">
-                    {[...Array(32)].map((_, i) => (
-                      <div
-                        key={i}
-                        className={`w-1.5 rounded-full transition-all duration-150 ${
-                          isPlaying
-                            ? 'bg-gradient-to-t from-purple-500 to-pink-500 ' +
-                              (i % 4 === 0 ? 'animate-wave-1' : i % 4 === 1 ? 'animate-wave-2' : i % 4 === 2 ? 'animate-wave-3' : 'animate-wave-4')
-                            : 'bg-white/10 h-2'
-                        }`}
-                        style={{
-                          height: isPlaying ? `${Math.max(15, (Math.sin(i + audioProgress / 10) * 0.5 + 0.5) * 100)}%` : '8px',
-                        }}
-                      />
-                    ))}
+                  <audio ref={audioRef} src={media.resultUrl} loop onTimeUpdate={() => { if (audioRef.current) setAudioProgress((audioRef.current.currentTime / audioRef.current.duration) * 100 || 0); }} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} />
+                  <div className="flex h-12 w-full max-w-md items-center justify-center space-x-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 backdrop-blur-md">
+                    {[...Array(32)].map((_, i) => <div key={i} className={`w-1.5 rounded-full transition-all duration-150 ${isPlaying ? 'bg-gradient-to-t from-purple-500 to-pink-500' : 'h-2 bg-white/10'}`} style={{ height: isPlaying ? `${Math.max(15, (Math.sin(i + audioProgress / 10) * 0.5 + 0.5) * 100)}%` : '8px' }} />)}
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Metadata & Actions Area */}
-            <div className="lg:col-span-5 flex flex-col justify-between space-y-4">
+            <div className="flex flex-col justify-between space-y-4 lg:col-span-5">
               <div className="space-y-4">
-                {/* Prompt Details */}
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-purple-300">
-                      Prompt Utilisé
-                    </span>
-                    <button
-                      onClick={handleCopyPrompt}
-                      className="text-xs text-gray-400 hover:text-white flex items-center space-x-1"
-                    >
-                      {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copied ? 'Copié' : 'Copier'}</span>
-                    </button>
-                  </div>
-                  <div className="p-3 rounded-2xl bg-white/[0.04] backdrop-blur-md border border-white/10 text-xs text-gray-200 leading-relaxed max-h-36 overflow-y-auto">
-                    {media.enhancedPrompt || media.prompt}
-                  </div>
+                  <div className="mb-1.5 flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wider text-purple-300">Prompt Utilisé</span><button onClick={handleCopyPrompt} className="flex items-center space-x-1 text-xs text-gray-400 hover:text-white">{copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}<span>{copied ? 'Copié' : 'Copier'}</span></button></div>
+                  <div className="max-h-36 overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-relaxed text-gray-200 backdrop-blur-md">{media.enhancedPrompt || media.prompt}</div>
                 </div>
-
-                {/* Lyrics for music if available */}
-                {isMusic && media.lyrics && (
-                  <div>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-blue-300 block mb-1">
-                      Paroles du Morceau
-                    </span>
-                    <pre className="p-3 rounded-2xl bg-white/[0.04] backdrop-blur-md border border-white/10 text-xs text-gray-300 font-sans leading-relaxed max-h-32 overflow-y-auto whitespace-pre-wrap">
-                      {media.lyrics}
-                    </pre>
-                  </div>
-                )}
-
-                {/* Technical Specs */}
+                {isMusic && media.lyrics && <div><span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-blue-300">Paroles du Morceau</span><pre className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-2xl border border-white/10 bg-white/[0.04] p-3 font-sans text-xs leading-relaxed text-gray-300 backdrop-blur-md">{media.lyrics}</pre></div>}
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 rounded-xl bg-white/[0.04] backdrop-blur-md border border-white/10">
-                    <span className="text-gray-400 block text-[10px] uppercase">Coût</span>
-                    <span className="font-semibold text-amber-400 flex items-center space-x-1">
-                      <Zap className="w-3 h-3" />
-                      <span>{media.creditsUsed} Crédits</span>
-                    </span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-white/[0.04] backdrop-blur-md border border-white/10">
-                    <span className="text-gray-400 block text-[10px] uppercase">Créé le</span>
-                    <span className="font-medium text-gray-200">
-                      {new Date(media.createdAt).toLocaleDateString('fr-FR', {
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5 backdrop-blur-md"><span className="block text-[10px] uppercase text-gray-400">Coût</span><span className="flex items-center space-x-1 font-semibold text-amber-400"><Zap className="h-3 w-3" /><span>{media.creditsUsed} Crédits</span></span></div>
+                  <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2.5 backdrop-blur-md"><span className="block text-[10px] uppercase text-gray-400">Créé le</span><span className="font-medium text-gray-200">{new Date(media.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span></div>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="space-y-2 pt-4 border-t border-white/10">
-                {isImage && (
-                  <button
-                    id="btn-use-in-video-modal"
-                    onClick={handleTransferToVideo}
-                    className="w-full py-3 rounded-xl font-semibold text-xs bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white flex items-center justify-center space-x-2 shadow-md shadow-pink-900/30 transition-all border border-white/20"
-                  >
-                    <Film className="w-4 h-4" />
-                    <span>Animer avec Studio Vidéo (Veo 3)</span>
-                  </button>
-                )}
-
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={handleDownload}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white flex items-center justify-center space-x-1.5 transition-colors"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Télécharger</span>
-                  </button>
-
-                  <button
-                    onClick={handleDelete}
-                    className="p-2.5 rounded-xl text-xs font-semibold bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30 transition-colors"
-                    title="Supprimer la création"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+              <div className="space-y-2 border-t border-white/10 pt-4">
+                {isImage && <button id="btn-use-in-video-modal" onClick={handleTransferToVideo} className="flex w-full items-center justify-center space-x-2 rounded-xl border border-white/20 bg-gradient-to-r from-pink-600 to-purple-600 py-3 text-xs font-semibold text-white shadow-md shadow-pink-900/30 transition-all hover:from-pink-500 hover:to-purple-500"><Film className="h-4 w-4" /><span>Animer avec Studio Vidéo</span></button>}
+                <div className="flex items-center space-x-2"><button onClick={handleDownload} className="flex flex-1 items-center justify-center space-x-1.5 rounded-xl border border-white/10 bg-white/[0.06] py-2.5 text-xs font-semibold text-white transition-colors hover:bg-white/[0.12]"><Download className="h-3.5 w-3.5" /><span>Télécharger</span></button><button onClick={handleDelete} className="rounded-xl border border-rose-500/30 bg-rose-950/40 p-2.5 text-xs font-semibold text-rose-300 transition-colors hover:bg-rose-900/60" title="Supprimer la création"><Trash2 className="h-4 w-4" /></button></div>
               </div>
             </div>
           </div>
