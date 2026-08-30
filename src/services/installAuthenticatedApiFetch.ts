@@ -7,23 +7,9 @@ export function installAuthenticatedApiFetch() {
 
   const originalFetch = window.fetch.bind(window);
   const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const url = typeof input === 'string'
-      ? input
-      : input instanceof URL
-        ? input.toString()
-        : input.url;
-
-    // Firebase Storage media can be displayed by <img> while a programmatic
-    // browser fetch is rejected by CORS in mobile/AI Studio previews. Route
-    // those GET downloads through our same-origin backend.
-    if ((!init.method || init.method.toUpperCase() === 'GET') && url.startsWith('https://firebasestorage.googleapis.com/')) {
-      const proxyUrl = `/api/media/download?url=${encodeURIComponent(url)}`;
-      return originalFetch(proxyUrl, init);
-    }
-
-    if (!url.startsWith('/api/generate/')) {
-      return originalFetch(input, init);
-    }
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const protectedApi = url.startsWith('/api/generate/') || url.startsWith('/api/media/download');
+    if (!protectedApi) return originalFetch(input, init);
 
     const currentUser = auth.currentUser;
     if (!currentUser) return originalFetch(input, init);
