@@ -32,4 +32,5 @@ export const firebaseAdminApp = getApps().length
 
 export const adminAuth = getAuth(firebaseAdminApp);
 export const adminDb = getFirestore(firebaseAdminApp);
+adminDb.settings({ ignoreUndefinedProperties: true });
 export const adminStorage = getStorage(firebaseAdminApp);
