@@ -1,0 +1,1 @@
+Temporary validation marker for the current main social/community implementation. Do not merge this file.
