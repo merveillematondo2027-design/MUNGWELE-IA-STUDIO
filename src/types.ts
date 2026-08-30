@@ -1,5 +1,5 @@
 export type StudioType = 'image' | 'video' | 'clips' | 'music';
-export type NavigationTab = 'home' | 'community' | 'projects-image' | 'projects-video' | 'projects-clips' | 'projects-music' | 'studio-image' | 'studio-video' | 'studio-clips' | 'studio-music' | 'creations' | 'subscription' | 'profile' | 'help' | 'admin' | 'admin-home' | 'admin-users' | 'admin-credits' | 'admin-subscriptions' | 'admin-library' | 'admin-logs' | 'admin-usage';
+export type NavigationTab = 'home' | 'community' | 'notifications' | 'messages' | 'projects-image' | 'projects-video' | 'projects-clips' | 'projects-music' | 'studio-image' | 'studio-video' | 'studio-clips' | 'studio-music' | 'creations' | 'subscription' | 'profile' | 'help' | 'admin' | 'admin-home' | 'admin-users' | 'admin-credits' | 'admin-subscriptions' | 'admin-library' | 'admin-logs' | 'admin-usage';
 export type GenerationStatus = 'draft' | 'queued' | 'processing' | 'completed' | 'failed';
 export type UserPlan = 'free' | 'creator' | 'pro';
 
@@ -14,6 +14,9 @@ export interface UserProfile {
   plan: UserPlan;
   totalGenerations: number;
   createdAt: string;
+  referralCode?: string;
+  referredBy?: string;
+  referralRewardsCount?: number;
 }
 
 export interface ImageGenerationSettings {
@@ -95,6 +98,9 @@ export interface GenerationRecord {
   isPublic?: boolean;
   publicAt?: string;
   authorName?: string;
+  publicationCaption?: string;
+  publicationAuthorId?: string;
+  isOfficialPublication?: boolean;
 }
 
 export interface CreditTransaction {
@@ -120,13 +126,7 @@ export interface PlanConfig {
   maxDownloadResolution?: 'standard' | '720p' | '1080p';
 }
 
-export interface CreditPackConfig {
-  id: string;
-  name: string;
-  credits: number;
-  priceUsd: number;
-  enabled: boolean;
-}
+export interface CreditPackConfig { id: string; name: string; credits: number; priceUsd: number; enabled: boolean; }
 
 export interface ApiProviderSetting {
   id: string;
@@ -149,14 +149,7 @@ export interface AppSettings {
   annualDiscountPercent: number;
   subscriptionPlans: PlanConfig[];
   creditPacks: CreditPackConfig[];
-  creditCosts: {
-    imageStandard: number;
-    imageHd: number;
-    video5s: number;
-    video10s: number;
-    musicTrack: number;
-    promptEnhance: number;
-  };
+  creditCosts: { imageStandard: number; imageHd: number; video5s: number; video10s: number; musicTrack: number; promptEnhance: number; };
 }
 
 export interface TechnicalLog { id: string; timestamp: string; type: 'info' | 'warn' | 'error' | 'success'; module: string; message: string; details?: Record<string, unknown>; userId?: string; }
