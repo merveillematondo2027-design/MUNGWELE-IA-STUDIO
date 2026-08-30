@@ -3,20 +3,17 @@ import { db } from '../lib/firebase';
 
 export const OFFICIAL_MUNGWELE_ID = 'mungwele-ai-official';
 export const OFFICIAL_MUNGWELE_NAME = 'MUNGWELE AI';
-export interface CommunityPost { id:string; userId:string; authorId:string; authorName:string; authorAvatar?:string; isOfficial?:boolean; title:string; caption?:string; type:'image'|'video'|'clips'|'music'; mediaUrl:string; thumbnailUrl?:string; generationId:string; createdAt:string; }
+export interface CommunityPost { id:string; userId:string; authorId:string; authorName:string; authorAvatar?:string; isOfficial?:boolean; title:string; caption?:string; type:'image'|'video'|'clips'|'music'; mediaUrl:string; thumbnailUrl?:string; generationId:string; createdAt:string; allowCommunityDownload?:boolean; }
 
-export async function publishGeneration(input:{generation:any;user:{id:string;name:string;avatar?:string;role:'user'|'admin'};caption:string}) {
+export async function publishGeneration(input:{generation:any;user:{id:string;name:string;avatar?:string;role:'user'|'admin'};caption:string;allowCommunityDownload:boolean}) {
   const {generation,user}=input; const now=new Date().toISOString(); const official=user.role==='admin';
   const authorId=official?OFFICIAL_MUNGWELE_ID:user.id; const authorName=official?OFFICIAL_MUNGWELE_NAME:(user.name||'Créateur MUNGWELE');
-  const post={id:generation.id,userId:user.id,authorId,authorName,authorAvatar:official?'':(user.avatar||''),isOfficial:official,title:generation.title||'Création MUNGWELE',caption:input.caption.trim(),type:generation.type,mediaUrl:generation.resultUrl,thumbnailUrl:generation.thumbnailUrl||generation.resultUrl,generationId:generation.id,createdAt:now};
-  await setDoc(doc(db,'generations',generation.id),{isPublic:true,publicAt:now,authorName,publicationCaption:input.caption.trim(),publicationAuthorId:authorId,isOfficialPublication:official,updatedAt:now},{merge:true});
+  const post={id:generation.id,userId:user.id,authorId,authorName,authorAvatar:official?'':(user.avatar||''),isOfficial:official,title:generation.title||'Création MUNGWELE',caption:input.caption.trim(),type:generation.type,mediaUrl:generation.resultUrl,thumbnailUrl:generation.thumbnailUrl||generation.resultUrl,generationId:generation.id,createdAt:now,allowCommunityDownload:input.allowCommunityDownload};
+  await setDoc(doc(db,'generations',generation.id),{isPublic:true,publicAt:now,authorName,publicationCaption:input.caption.trim(),publicationAuthorId:authorId,isOfficialPublication:official,allowCommunityDownload:input.allowCommunityDownload,updatedAt:now},{merge:true});
   try { await setDoc(doc(db,'communityPosts',generation.id),post,{merge:true}); }
   catch(error){ console.warn('Community post mirror pending Firestore permissions; public generation remains published:',error); }
 }
 export async function unpublishGeneration(generationId:string){await setDoc(doc(db,'generations',generationId),{isPublic:false,updatedAt:new Date().toISOString()},{merge:true});await deleteDoc(doc(db,'communityPosts',generationId)).catch(()=>undefined);}
-
-// Community interactions live below the public generation document. This keeps
-// likes/comments working even when communityPosts is only a presentation mirror.
 export async function toggleLike(postId:string,user:{id:string;name:string},liked:boolean){const ref=doc(db,'generations',postId,'likes',user.id);if(liked)await deleteDoc(ref);else await setDoc(ref,{userId:user.id,userName:user.name,createdAt:new Date().toISOString()});}
 export async function addComment(postId:string,user:{id:string;name:string;avatar?:string},text:string){const value=text.trim();if(!value)return;await addDoc(collection(db,'generations',postId,'comments'),{userId:user.id,userName:user.name||'Utilisateur',userAvatar:user.avatar||'',text:value.slice(0,1000),createdAt:new Date().toISOString()});}
 export async function toggleFollow(followerId:string,targetId:string,followerName:string,following:boolean){if(!followerId||!targetId||followerId===targetId)return;const ref=doc(db,'follows',`${followerId}_${targetId}`);if(following)await deleteDoc(ref);else await setDoc(ref,{userId:followerId,followerId,targetId,followerName,createdAt:new Date().toISOString()});}
