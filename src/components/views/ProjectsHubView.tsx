@@ -37,7 +37,7 @@ export const ProjectsHubView: React.FC<{ type: StudioType }> = ({ type }) => {
     try {
       await updateGeneration(project.id, {
         isPublic: nextPublic,
-        publicAt: nextPublic ? new Date().toISOString() : undefined,
+        publicAt: nextPublic ? new Date().toISOString() : project.publicAt,
         authorName: user.name || 'Créateur MUNGWELE',
       });
       addNotification('success', nextPublic ? 'Publié dans la Communauté' : 'Publication retirée', nextPublic ? 'Votre création est maintenant visible par la communauté.' : 'Votre création n’est plus publique.');
