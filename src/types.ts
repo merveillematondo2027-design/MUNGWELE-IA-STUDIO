@@ -124,7 +124,7 @@ export interface PlanConfig {
   maxVideoDuration?: number;
   veo3Access?: boolean;
   supportLevel?: string;
-  maxDownloadResolution?: '480p' | '780p' | '1080p' | '4k';
+  maxDownloadResolution?: 'standard' | '480p' | '720p' | '780p' | '1080p' | '4k';
 }
 
 export interface CreditPackConfig { id: string; name: string; credits: number; priceUsd: number; enabled: boolean; }
