@@ -1,137 +1,52 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import type { StudioType } from '../../types';
-import { FolderOpen, Search, Image as ImageIcon, Film, Music as MusicIcon, Download, Trash2, Maximize2, Copy, Sparkles } from 'lucide-react';
+import type { GenerationRecord, StudioType } from '../../types';
+import { FolderOpen, Search, Film, Music as MusicIcon, Download, Trash2, Maximize2, Copy, Sparkles, Globe2, GlobeLock } from 'lucide-react';
+import { PublishCreationModal } from '../community/PublishCreationModal';
+import { unpublishGeneration } from '../../services/socialService';
 
 export const CreationsView: React.FC = () => {
   const { user, generations, removeGeneration, setActiveMediaModal, addNotification, setActiveStudio, setActiveTab } = useApp();
   const [filterType, setFilterType] = useState<StudioType | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest');
+  const [publishItem, setPublishItem] = useState<GenerationRecord | null>(null);
 
   const ownGenerations = generations.filter((item) => !user.id || item.userId === user.id);
-  const filtered = ownGenerations
-    .filter((item) => {
-      const matchesType = filterType === 'all' || item.type === filterType;
-      const q = searchQuery.trim().toLowerCase();
-      const matchesSearch = !q || item.title.toLowerCase().includes(q) || item.prompt.toLowerCase().includes(q);
-      return matchesType && matchesSearch;
-    })
-    .sort((a, b) => {
-      const dateA = new Date(a.createdAt).getTime();
-      const dateB = new Date(b.createdAt).getTime();
-      return sortBy === 'newest' ? dateB - dateA : dateA - dateB;
-    });
+  const filtered = ownGenerations.filter((item) => {
+    const q = searchQuery.trim().toLowerCase();
+    return (filterType === 'all' || item.type === filterType) && (!q || item.title.toLowerCase().includes(q) || item.prompt.toLowerCase().includes(q));
+  }).sort((a, b) => sortBy === 'newest' ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() : new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  const countImages = ownGenerations.filter((g) => g.type === 'image').length;
-  const countVideos = ownGenerations.filter((g) => g.type === 'video').length;
-  const countMusics = ownGenerations.filter((g) => g.type === 'music').length;
+  const counts = { image: ownGenerations.filter((g) => g.type === 'image').length, video: ownGenerations.filter((g) => g.type === 'video').length, music: ownGenerations.filter((g) => g.type === 'music').length };
 
-  const download = (item: (typeof generations)[number]) => {
-    if (item.type === 'video' && user.plan === 'free') {
-      addNotification('info', 'Abonnement requis', 'Le téléchargement vidéo HD nécessite un abonnement Creator ou Pro.');
-      setActiveTab('subscription');
-      return;
-    }
-    const a = document.createElement('a');
-    a.href = item.resultUrl;
-    a.download = `mungwele-${item.type}-${item.id}`;
-    a.click();
+  const download = async (item: GenerationRecord) => {
+    if (item.type === 'video' && user.plan === 'free') { addNotification('info', 'Abonnement requis', 'Le téléchargement vidéo HD nécessite un abonnement Creator ou Pro.'); setActiveTab('subscription'); return; }
+    try {
+      const response = await fetch(item.resultUrl);
+      if (!response.ok) throw new Error('Téléchargement indisponible.');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const ext = item.type === 'image' ? (blob.type.includes('webp') ? 'webp' : blob.type.includes('jpeg') ? 'jpg' : 'png') : item.type === 'music' ? 'mp3' : 'mp4';
+      const a = document.createElement('a');
+      a.href = url; a.download = `mungwele-${item.type}-${item.id}.${ext}`; a.style.display = 'none';
+      document.body.appendChild(a); a.click(); a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      addNotification('success', 'Téléchargement lancé', 'Le fichier est envoyé directement vers vos téléchargements.');
+    } catch (error: any) { addNotification('error', 'Téléchargement impossible', error?.message || 'Le fichier ne peut pas être téléchargé.'); }
   };
 
-  return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 pb-20">
-      <div className="flex flex-col gap-4 border-b border-white/10 pb-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="flex items-center gap-3 text-2xl font-extrabold text-white sm:text-3xl">
-            <span className="rounded-2xl border border-purple-500/30 bg-purple-600/20 p-2.5 text-purple-300"><FolderOpen className="h-6 w-6" /></span>
-            Bibliothèque de créations
-          </h2>
-          <p className="mt-2 text-xs text-gray-500 sm:text-sm">Retrouvez vos images et vidéos générées dans MUNGWELE IA STUDIO.</p>
-        </div>
-        <button onClick={() => { setActiveStudio('image'); setActiveTab('studio-image'); }} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg">
-          <Sparkles className="h-3.5 w-3.5" /> Nouvelle création
-        </button>
-      </div>
+  const unpublish = async (item: GenerationRecord) => {
+    try { await unpublishGeneration(item.id); addNotification('info', 'Publication retirée', 'La création n’est plus visible dans la communauté.'); }
+    catch (error: any) { addNotification('error', 'Action impossible', error?.message || 'Impossible de retirer la publication.'); }
+  };
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-1 overflow-x-auto">
-          {([
-            ['all', `Tout (${ownGenerations.length})`],
-            ['image', `Images (${countImages})`],
-            ['video', `Vidéos (${countVideos})`],
-            ['music', `Musiques (${countMusics})`],
-          ] as const).map(([id, label]) => (
-            <button key={id} onClick={() => setFilterType(id)} className={`whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-semibold ${filterType === id ? 'bg-purple-600 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>{label}</button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-500" />
-            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Rechercher…" className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-8 pr-3 text-xs text-white outline-none placeholder:text-gray-600" />
-          </div>
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as 'newest' | 'oldest')} className="rounded-xl border border-white/10 bg-[#0b1426] px-3 py-2 text-xs text-gray-200 outline-none">
-            <option value="newest">Plus récent</option>
-            <option value="oldest">Plus ancien</option>
-          </select>
-        </div>
-      </div>
+  return <div className="mx-auto w-full max-w-6xl space-y-6 pb-20">
+    <div className="flex flex-col gap-4 border-b border-white/10 pb-6 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="flex items-center gap-3 text-2xl font-extrabold text-white sm:text-3xl"><span className="rounded-2xl border border-purple-500/30 bg-purple-600/20 p-2.5 text-purple-300"><FolderOpen className="h-6 w-6" /></span>Bibliothèque de créations</h2><p className="mt-2 text-xs text-gray-500 sm:text-sm">Retrouvez, téléchargez et publiez vos images, vidéos et musiques.</p></div><button onClick={() => { setActiveStudio('image'); setActiveTab('studio-image'); }} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg"><Sparkles className="h-3.5 w-3.5" /> Nouvelle création</button></div>
 
-      {filtered.length === 0 ? (
-        <div className="rounded-3xl border border-white/10 bg-white/[0.02] px-4 py-20 text-center">
-          <FolderOpen className="mx-auto h-14 w-14 text-gray-700" />
-          <h3 className="mt-3 text-base font-bold text-gray-300">Aucune création trouvée</h3>
-          <p className="mt-1 text-xs text-gray-600">Commencez une génération ou modifiez votre recherche.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((item) => {
-            const isImage = item.type === 'image';
-            const isVideo = item.type === 'video';
-            const isMusic = item.type === 'music';
-            return (
-              <article key={item.id} className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-xl transition hover:border-purple-500/40 hover:bg-white/[0.05]">
-                <div className="relative aspect-video overflow-hidden bg-black/40" onClick={() => setActiveMediaModal(item)}>
-                  {isImage ? (
-                    <img src={item.thumbnailUrl || item.resultUrl} alt={item.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
-                  ) : isVideo ? (
-                    <video src={item.resultUrl} muted playsInline preload="metadata" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-950/50 to-purple-950/50"><MusicIcon className="h-10 w-10 text-blue-300" /></div>
-                  )}
+    <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-1 overflow-x-auto">{([['all',`Tout (${ownGenerations.length})`],['image',`Images (${counts.image})`],['video',`Vidéos (${counts.video})`],['music',`Musiques (${counts.music})`]] as const).map(([id,label]) => <button key={id} onClick={() => setFilterType(id)} className={`whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-semibold ${filterType===id?'bg-purple-600 text-white':'text-gray-400 hover:bg-white/5 hover:text-white'}`}>{label}</button>)}</div><div className="flex items-center gap-2"><div className="relative flex-1 sm:w-64"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-500" /><input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Rechercher…" className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-8 pr-3 text-xs text-white outline-none placeholder:text-gray-600" /></div><select value={sortBy} onChange={(e) => setSortBy(e.target.value as 'newest'|'oldest')} className="rounded-xl border border-white/10 bg-[#0b1426] px-3 py-2 text-xs text-gray-200 outline-none"><option value="newest">Plus récent</option><option value="oldest">Plus ancien</option></select></div></div>
 
-                  <span className={`absolute left-2.5 top-2.5 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white ${isImage ? 'bg-purple-600' : isVideo ? 'bg-pink-600' : 'bg-blue-600'}`}>{item.type}</span>
-                  <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button onClick={(e) => { e.stopPropagation(); setActiveMediaModal(item); }} className="rounded-xl bg-white/20 p-2 text-white" title="Plein écran"><Maximize2 className="h-4 w-4" /></button>
-                    <button onClick={(e) => { e.stopPropagation(); download(item); }} className="rounded-xl bg-white/20 p-2 text-white" title="Télécharger"><Download className="h-4 w-4" /></button>
-                  </div>
-                </div>
-
-                <div className="space-y-3 p-4">
-                  <div>
-                    <h4 className="line-clamp-1 text-sm font-bold text-white">{item.title}</h4>
-                    <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-gray-500">{item.prompt}</p>
-                  </div>
-                  {isVideo && (
-                    <div className="flex flex-wrap gap-1.5 text-[9px] font-bold text-gray-500">
-                      <span className="rounded-full border border-white/10 px-2 py-1">{String((item.settings as any).videoModel || 'veo').toUpperCase()}</span>
-                      <span className="rounded-full border border-white/10 px-2 py-1">{(item.settings as any).duration || '?'}s</span>
-                      <span className="rounded-full border border-white/10 px-2 py-1">{(item.settings as any).aspectRatio || '16:9'}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between border-t border-white/10 pt-3 text-[11px] text-gray-600">
-                    <span>{new Date(item.createdAt).toLocaleDateString('fr-FR')}</span>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => { navigator.clipboard.writeText(item.prompt); addNotification('info', 'Prompt copié', 'Le prompt a été copié.'); }} className="rounded-lg p-1.5 text-gray-500 hover:bg-white/10 hover:text-white" title="Copier le prompt"><Copy className="h-3.5 w-3.5" /></button>
-                      <button onClick={() => removeGeneration(item.id)} className="rounded-lg p-1.5 text-gray-500 hover:bg-rose-900/40 hover:text-rose-400" title="Supprimer"><Trash2 className="h-3.5 w-3.5" /></button>
-                    </div>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+    {filtered.length===0 ? <div className="rounded-3xl border border-white/10 bg-white/[0.02] px-4 py-20 text-center"><FolderOpen className="mx-auto h-14 w-14 text-gray-700" /><h3 className="mt-3 text-base font-bold text-gray-300">Aucune création trouvée</h3></div> : <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">{filtered.map((item) => { const isImage=item.type==='image'; const isVideo=item.type==='video'||item.type==='clips'; return <article key={item.id} className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-xl"><div className="relative aspect-video overflow-hidden bg-black/40" onClick={() => setActiveMediaModal(item)}>{isImage?<img src={item.thumbnailUrl||item.resultUrl} alt={item.title} className="h-full w-full object-cover"/>:isVideo?<video src={item.resultUrl} muted playsInline preload="metadata" className="h-full w-full object-cover"/>:<div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-950/50 to-purple-950/50"><MusicIcon className="h-10 w-10 text-blue-300"/></div>}<span className={`absolute left-2.5 top-2.5 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase text-white ${isImage?'bg-purple-600':isVideo?'bg-pink-600':'bg-blue-600'}`}>{item.type}</span>{item.isPublic&&<span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-emerald-500/85 px-2 py-1 text-[9px] font-black text-white"><Globe2 className="h-3 w-3"/> Publié</span>}<div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/60 opacity-0 transition-opacity group-hover:opacity-100"><button onClick={(e)=>{e.stopPropagation();setActiveMediaModal(item)}} className="rounded-xl bg-white/20 p-2 text-white"><Maximize2 className="h-4 w-4"/></button><button onClick={(e)=>{e.stopPropagation();void download(item)}} className="rounded-xl bg-white/20 p-2 text-white"><Download className="h-4 w-4"/></button></div></div><div className="space-y-3 p-4"><div><h4 className="line-clamp-1 text-sm font-bold text-white">{item.title}</h4><p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-gray-500">{item.prompt}</p>{item.publicationCaption&&<p className="mt-2 line-clamp-2 rounded-xl bg-white/[0.035] p-2 text-[10px] text-gray-400">{item.publicationCaption}</p>}</div><div className="grid grid-cols-2 gap-2"><button onClick={()=>void download(item)} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[10px] font-black text-gray-200"><Download className="h-3.5 w-3.5"/> Télécharger</button>{item.isPublic?<button onClick={()=>void unpublish(item)} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/20 bg-amber-500/[0.07] px-3 py-2 text-[10px] font-black text-amber-200"><GlobeLock className="h-3.5 w-3.5"/> Retirer</button>:<button onClick={()=>setPublishItem(item)} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.08] px-3 py-2 text-[10px] font-black text-cyan-200"><Globe2 className="h-3.5 w-3.5"/> Publier</button>}</div><div className="flex items-center justify-between border-t border-white/10 pt-3 text-[11px] text-gray-600"><span>{new Date(item.createdAt).toLocaleDateString('fr-FR')}</span><div className="flex items-center gap-1"><button onClick={()=>{navigator.clipboard.writeText(item.prompt);addNotification('info','Prompt copié','Le prompt a été copié.')}} className="rounded-lg p-1.5 text-gray-500 hover:bg-white/10"><Copy className="h-3.5 w-3.5"/></button><button onClick={()=>removeGeneration(item.id)} className="rounded-lg p-1.5 text-gray-500 hover:bg-rose-900/40 hover:text-rose-400"><Trash2 className="h-3.5 w-3.5"/></button></div></div></div></article>;})}</div>}
+    <PublishCreationModal item={publishItem} onClose={() => setPublishItem(null)} />
+  </div>;
 };
