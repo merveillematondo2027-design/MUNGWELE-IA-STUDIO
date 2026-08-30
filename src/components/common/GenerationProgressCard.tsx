@@ -13,6 +13,7 @@ const STAGES: Record<GenerationKind, Array<{ at: number; label: string; detail: 
     { at: 68, label: 'Rendu de l’image', detail: 'Calcul du résultat dans le format demandé.' },
     { at: 84, label: 'Contrôle du résultat', detail: 'Vérification du fichier reçu et préparation de l’aperçu.' },
     { at: 93, label: 'Finalisation', detail: 'Enregistrement de la création dans votre projet.' },
+    { at: 100, label: 'Création terminée', detail: 'Le fournisseur a renvoyé le résultat. Ouverture de votre création…' },
   ],
   video: [
     { at: 3, label: 'Préparation de la demande', detail: 'Analyse du prompt, du type, de la durée et du format.' },
@@ -23,6 +24,7 @@ const STAGES: Record<GenerationKind, Array<{ at: number; label: string; detail: 
     { at: 73, label: 'Rendu vidéo', detail: 'Assemblage des images, mouvements et audio natif.' },
     { at: 86, label: 'Encodage du résultat', detail: 'Préparation du fichier vidéo final.' },
     { at: 94, label: 'Finalisation', detail: 'Enregistrement de la vidéo dans votre projet.' },
+    { at: 100, label: 'Vidéo terminée', detail: 'Le fournisseur a renvoyé le fichier. Ouverture du rendu…' },
   ],
 };
 
@@ -30,7 +32,8 @@ export const GenerationProgressCard: React.FC<{
   kind: GenerationKind;
   title?: string;
   subtitle?: string;
-}> = ({ kind, title, subtitle }) => {
+  completed?: boolean;
+}> = ({ kind, title, subtitle, completed = false }) => {
   const [progress, setProgress] = useState(3);
   const maxBeforeResponse = kind === 'video' ? 94 : 93;
 
@@ -45,6 +48,10 @@ export const GenerationProgressCard: React.FC<{
     }, 700);
     return () => window.clearInterval(timer);
   }, [kind, maxBeforeResponse]);
+
+  useEffect(() => {
+    if (completed) setProgress(100);
+  }, [completed]);
 
   const stage = useMemo(() => {
     const stages = STAGES[kind];
@@ -64,7 +71,7 @@ export const GenerationProgressCard: React.FC<{
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-purple-300">{kind === 'image' ? 'Création de l’image' : 'Création de la vidéo'}</p>
               <h3 className="mt-1 text-base font-black text-white sm:text-lg">{title || 'MUNGWELE AI travaille sur votre création'}</h3>
             </div>
-            <Loader2 className="h-5 w-5 shrink-0 animate-spin text-cyan-300" />
+            {completed ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-300" /> : <Loader2 className="h-5 w-5 shrink-0 animate-spin text-cyan-300" />}
           </div>
 
           <div className="flex flex-1 flex-col items-center justify-center text-center">
@@ -72,7 +79,7 @@ export const GenerationProgressCard: React.FC<{
               <div className="absolute inset-2 rounded-full border border-purple-400/20" />
               <div className="text-4xl font-black tracking-tight text-white sm:text-5xl">{progress}<span className="text-lg text-gray-400">%</span></div>
             </div>
-            <div key={stage.label} className="mt-6 animate-pulse">
+            <div key={stage.label} className={`mt-6 ${completed ? '' : 'animate-pulse'}`}>
               <p className="text-sm font-black text-white sm:text-base">{stage.label}</p>
               <p className="mx-auto mt-2 max-w-md text-xs leading-5 text-gray-400">{stage.detail}</p>
             </div>
@@ -80,7 +87,7 @@ export const GenerationProgressCard: React.FC<{
           </div>
 
           <div>
-            <div className="mb-2 flex items-center justify-between text-[10px] font-semibold text-gray-500"><span>Progression</span><span>Le compteur attend le retour réel du fournisseur avant 100%</span></div>
+            <div className="mb-2 flex items-center justify-between gap-3 text-[10px] font-semibold text-gray-500"><span>Progression</span><span className="text-right">{completed ? 'Résultat reçu' : 'Le compteur reste sous 100% jusqu’au retour du fournisseur'}</span></div>
             <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-500 to-cyan-400 transition-all duration-700 ease-out" style={{ width: `${progress}%` }} /></div>
             <div className="mt-3 flex items-center gap-2 text-[10px] text-emerald-300/80"><CheckCircle2 className="h-3.5 w-3.5" /> Vos crédits seront remboursés automatiquement si le fournisseur échoue.</div>
           </div>
