@@ -1,4 +1,4 @@
 import { installBackgroundGenerationPersistence } from './server/backgroundGenerationPersistence';
 
 installBackgroundGenerationPersistence();
-await import('./server');
+void import('./server');
