@@ -17,6 +17,8 @@ import type { UserProfile } from '../types';
 
 export const GENERAL_ADMIN_EMAIL = 'merveillematondo2027@gmail.com';
 const DEFAULT_AVATAR = '';
+const WELCOME_CREDITS = 100;
+const WELCOME_BONUS_VERSION = 2;
 
 function isGeneralAdmin(user: User) {
   return user.email?.toLowerCase() === GENERAL_ADMIN_EMAIL;
@@ -71,10 +73,12 @@ export async function ensureUserProfile(user: User, preferredName?: string): Pro
       role: admin ? 'admin' : 'user',
       adminLevel: admin ? 'general' : null,
       status: 'active',
-      credits: 50,
+      credits: WELCOME_CREDITS,
       plan: 'free',
       totalGenerations: 0,
       welcomeBonusGranted: true,
+      welcomeBonusAmount: WELCOME_CREDITS,
+      welcomeBonusVersion: WELCOME_BONUS_VERSION,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -83,22 +87,34 @@ export async function ensureUserProfile(user: User, preferredName?: string): Pro
     return mapProfile(user, initial);
   }
 
-  const data = snapshot.data();
-  if (admin && (data.role !== 'admin' || data.adminLevel !== 'general')) {
-    await setDoc(
-      ref,
-      {
-        uid: user.uid,
-        email: user.email || data.email || GENERAL_ADMIN_EMAIL,
-        role: 'admin',
-        adminLevel: 'general',
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true },
-    );
+  let data = snapshot.data();
+
+  // Migration unique: les anciens comptes avaient reçu 50 crédits. On ajoute
+  // une seule fois les 50 crédits manquants et on marque la version 2.
+  if (Number(data.welcomeBonusVersion || 0) < WELCOME_BONUS_VERSION && data.welcomeBonusGranted === true) {
+    const migrated = {
+      credits: Math.max(0, Number(data.credits || 0)) + 50,
+      welcomeBonusAmount: WELCOME_CREDITS,
+      welcomeBonusVersion: WELCOME_BONUS_VERSION,
+      updatedAt: new Date().toISOString(),
+    };
+    await setDoc(ref, migrated, { merge: true });
+    data = { ...data, ...migrated };
   }
 
-  return mapProfile(user, admin ? { ...data, role: 'admin', adminLevel: 'general' } : data);
+  if (admin && (data.role !== 'admin' || data.adminLevel !== 'general')) {
+    const adminPatch = {
+      uid: user.uid,
+      email: user.email || data.email || GENERAL_ADMIN_EMAIL,
+      role: 'admin',
+      adminLevel: 'general',
+      updatedAt: new Date().toISOString(),
+    };
+    await setDoc(ref, adminPatch, { merge: true });
+    data = { ...data, ...adminPatch };
+  }
+
+  return mapProfile(user, data);
 }
 
 export async function registerWithEmail(name: string, email: string, password: string) {
@@ -118,9 +134,6 @@ export async function loginWithGoogle(): Promise<UserProfile> {
   await preparePersistence();
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-
-  // Use the popup flow directly from the user's click. Firebase recommends
-  // popup when redirect auth is affected by cross-origin/third-party storage.
   const credential = await signInWithPopup(auth, provider);
   return ensureUserProfile(credential.user);
 }
@@ -145,7 +158,6 @@ export function subscribeToFirebaseUser(
         onProfile(null);
         return;
       }
-
       try {
         onProfile(await ensureUserProfile(user));
       } catch (error) {
@@ -164,36 +176,22 @@ export function getCurrentAuthHostname() {
 export function friendlyAuthError(error: unknown): string {
   const code = (error as { code?: string })?.code || '';
   const hostname = getCurrentAuthHostname();
-
   switch (code) {
-    case 'auth/email-already-in-use':
-      return 'Cette adresse e-mail possède déjà un compte. Utilisez « Se connecter » ou « Mot de passe oublié ».';
+    case 'auth/email-already-in-use': return 'Cette adresse e-mail possède déjà un compte. Utilisez « Se connecter » ou « Mot de passe oublié ».';
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
-    case 'auth/user-not-found':
-      return 'E-mail ou mot de passe incorrect.';
-    case 'auth/weak-password':
-      return 'Le mot de passe doit contenir au moins 6 caractères.';
-    case 'auth/invalid-email':
-      return 'Adresse e-mail invalide.';
-    case 'auth/popup-closed-by-user':
-      return 'La fenêtre Google a été fermée avant la fin de la connexion.';
-    case 'auth/popup-blocked':
-      return 'Le navigateur a bloqué la fenêtre Google. Autorisez les pop-ups pour cette application puis réessayez.';
-    case 'auth/cancelled-popup-request':
-      return 'Une autre tentative Google est déjà en cours. Fermez l’autre fenêtre puis réessayez.';
-    case 'auth/unauthorized-domain':
-      return `Le domaine « ${hostname || 'actuel'} » n'est pas autorisé dans Firebase Authentication. Ajoutez-le dans Authentication > Paramètres > Domaines autorisés.`;
-    case 'auth/operation-not-allowed':
-      return 'La connexion Google n’est pas activée dans Firebase Authentication.';
-    case 'auth/operation-not-supported-in-this-environment':
-      return 'Ce navigateur intégré bloque le mécanisme Google. Testez le même bouton depuis la version publiée de MUNGWELE.';
-    case 'auth/network-request-failed':
-      return 'Connexion réseau indisponible. Vérifiez Internet puis réessayez.';
+    case 'auth/user-not-found': return 'E-mail ou mot de passe incorrect.';
+    case 'auth/weak-password': return 'Le mot de passe doit contenir au moins 6 caractères.';
+    case 'auth/invalid-email': return 'Adresse e-mail invalide.';
+    case 'auth/popup-closed-by-user': return 'La fenêtre Google a été fermée avant la fin de la connexion.';
+    case 'auth/popup-blocked': return 'Le navigateur a bloqué la fenêtre Google. Autorisez les pop-ups pour cette application puis réessayez.';
+    case 'auth/cancelled-popup-request': return 'Une autre tentative Google est déjà en cours. Fermez l’autre fenêtre puis réessayez.';
+    case 'auth/unauthorized-domain': return `Le domaine « ${hostname || 'actuel'} » n'est pas autorisé dans Firebase Authentication. Ajoutez-le dans Authentication > Paramètres > Domaines autorisés.`;
+    case 'auth/operation-not-allowed': return 'La connexion Google n’est pas activée dans Firebase Authentication.';
+    case 'auth/operation-not-supported-in-this-environment': return 'Ce navigateur intégré bloque le mécanisme Google. Testez le même bouton depuis la version publiée de MUNGWELE.';
+    case 'auth/network-request-failed': return 'Connexion réseau indisponible. Vérifiez Internet puis réessayez.';
     case 'permission-denied':
-    case 'firestore/permission-denied':
-      return 'Connexion réussie, mais Firestore refuse encore le profil. Publiez les dernières règles Firestore du dépôt.';
-    default:
-      return (error as Error)?.message || 'Une erreur Firebase est survenue. Réessayez dans quelques instants.';
+    case 'firestore/permission-denied': return 'Connexion réussie, mais Firestore refuse encore le profil. Publiez les dernières règles Firestore du dépôt.';
+    default: return (error as Error)?.message || 'Une erreur Firebase est survenue. Réessayez dans quelques instants.';
   }
 }
