@@ -1,80 +1,32 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useApp } from '../../context/AppContext';
 import { auth } from '../../lib/firebase';
 import { logoutFirebase } from '../../services/authService';
-import { User, Mail, ShieldCheck, Zap, Sparkles, Lock, LogIn, LogOut, UserPlus, WalletCards, ArrowRight } from 'lucide-react';
+import { User, Mail, ShieldCheck, Zap, Sparkles, Lock, LogIn, LogOut, UserPlus, WalletCards, ArrowRight, Copy, Share2, Gift } from 'lucide-react';
 
 export const ProfileView: React.FC = () => {
   const { user, credits, addNotification, setIsAuthModalOpen, setAuthMode, setActiveTab } = useApp();
   const [isAuthenticated, setIsAuthenticated] = useState(Boolean(auth.currentUser));
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-
   useEffect(() => onAuthStateChanged(auth, (firebaseUser) => setIsAuthenticated(Boolean(firebaseUser))), []);
+  const inviteLink = useMemo(() => user.referralCode && typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?ref=${encodeURIComponent(user.referralCode)}` : '', [user.referralCode]);
 
   const openLogin = () => { setAuthMode('login'); setIsAuthModalOpen(true); };
   const openRegister = () => { setAuthMode('register'); setIsAuthModalOpen(true); };
+  const handleLogout = async () => { if (isLoggingOut) return; setIsLoggingOut(true); try { await logoutFirebase(); addNotification('success','Déconnexion réussie','Vous êtes maintenant déconnecté.'); setActiveTab('home'); } catch { addNotification('error','Déconnexion impossible','Réessayez dans quelques instants.'); } finally { setIsLoggingOut(false); } };
+  const copyInvite = async () => { if (!inviteLink) return; await navigator.clipboard.writeText(inviteLink); addNotification('success','Lien copié','Partagez ce lien : chaque inscription validée vous rapporte 100 crédits.'); };
+  const shareInvite = async () => { if (!inviteLink) return; if (navigator.share) await navigator.share({ title:'Rejoindre MUNGWELE AI STUDIO', text:'Inscris-toi avec mon lien MUNGWELE AI STUDIO.', url:inviteLink }).catch(()=>undefined); else await copyInvite(); };
 
-  const handleLogout = async () => {
-    if (isLoggingOut) return;
-    setIsLoggingOut(true);
-    try {
-      await logoutFirebase();
-      addNotification('success', 'Déconnexion réussie', 'Vous êtes maintenant déconnecté de MUNGWELE IA STUDIO.');
-      setActiveTab('home');
-    } catch (error) {
-      console.warn('Firebase logout error:', error);
-      addNotification('error', 'Déconnexion impossible', 'Réessayez dans quelques instants.');
-    } finally { setIsLoggingOut(false); }
-  };
+  if (!isAuthenticated) return <div className="mx-auto w-full max-w-2xl pb-20"><div className="space-y-6 rounded-3xl border border-white/10 bg-white/[0.04] p-7 text-center shadow-2xl sm:p-10"><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-tr from-purple-600 via-pink-600 to-blue-600"><User className="h-8 w-8 text-white"/></div><div><h2 className="text-2xl font-extrabold text-white">Mon compte MUNGWELE</h2><p className="mt-2 text-sm text-gray-400">Connectez-vous pour retrouver vos crédits, votre galerie et vos créations IA.</p></div><div className="grid gap-3 sm:grid-cols-2"><button onClick={openLogin} className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 px-4 py-3.5 text-sm font-bold text-white"><LogIn className="h-5 w-5"/> Se connecter</button><button onClick={openRegister} className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3.5 text-sm font-bold text-white"><UserPlus className="h-5 w-5"/> Créer un compte</button></div></div></div>;
 
-  if (!isAuthenticated) {
-    return (
-      <div id="profile-view-container" className="mx-auto w-full max-w-2xl pb-20">
-        <div className="space-y-6 rounded-3xl border border-white/10 bg-white/[0.04] p-7 text-center shadow-2xl backdrop-blur-2xl sm:p-10">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-tr from-purple-600 via-pink-600 to-blue-600 shadow-xl"><User className="h-8 w-8 text-white" /></div>
-          <div><h2 className="text-2xl font-extrabold text-white">Mon compte MUNGWELE</h2><p className="mt-2 text-sm text-gray-400">Connectez-vous pour retrouver vos crédits, votre galerie et vos créations IA.</p></div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <button onClick={openLogin} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/20 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 px-4 py-3.5 text-sm font-bold text-white shadow-lg"><LogIn className="h-5 w-5" /> Se connecter</button>
-            <button onClick={openRegister} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3.5 text-sm font-bold text-white hover:bg-white/[0.08]"><UserPlus className="h-5 w-5" /> Créer un compte</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const roleLabel=user.role==='admin'?'ADMIN GÉNÉRAL':'UTILISATEUR';
+  return <div className="mx-auto w-full max-w-4xl space-y-6 pb-20">
+    <div className="rounded-3xl border border-amber-400/20 bg-gradient-to-br from-amber-500/10 via-purple-500/5 to-transparent p-5 shadow-xl sm:p-6"><div className="flex items-center justify-between gap-4"><div className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-500/10"><WalletCards className="h-6 w-6 text-amber-300"/></span><div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-300/80">Solde du compte</p><p className="mt-1 text-2xl font-black text-white sm:text-3xl">{credits} crédits</p><p className="mt-1 text-[11px] text-gray-500">100 crédits offerts à l'inscription.</p></div></div><button onClick={()=>setActiveTab('subscription')} className="hidden items-center gap-1 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-bold text-white sm:flex">Gérer <ArrowRight className="h-3.5 w-3.5"/></button></div></div>
 
-  const roleLabel = user.role === 'admin' ? 'ADMIN GÉNÉRAL' : 'UTILISATEUR';
+    <div className="rounded-3xl border border-purple-500/20 bg-gradient-to-br from-purple-500/10 via-cyan-500/[0.04] to-transparent p-5 shadow-xl"><div className="flex items-start gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-purple-500/15"><Gift className="h-5 w-5 text-purple-300"/></span><div><h3 className="text-sm font-black text-white">Invitez un ami = +100 crédits</h3><p className="mt-1 text-[11px] leading-5 text-gray-400">Votre code est créé automatiquement. Lorsqu'un nouvel utilisateur s'inscrit avec votre lien/code, votre compte reçoit une seule récompense de 100 crédits pour cet invité.</p></div></div><div className="mt-4 rounded-2xl border border-white/10 bg-[#07101f] p-3"><p className="text-[10px] font-black uppercase tracking-wider text-gray-600">Votre code promo</p><p className="mt-1 font-mono text-base font-black text-cyan-300">{user.referralCode || 'Génération en cours…'}</p><p className="mt-2 break-all text-[10px] text-gray-600">{inviteLink}</p></div><div className="mt-3 grid grid-cols-2 gap-2"><button onClick={()=>void copyInvite()} className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] py-2.5 text-xs font-bold text-white"><Copy className="h-4 w-4"/> Copier</button><button onClick={()=>void shareInvite()} className="flex items-center justify-center gap-2 rounded-xl bg-purple-600 py-2.5 text-xs font-bold text-white"><Share2 className="h-4 w-4"/> Partager</button></div><p className="mt-3 text-[10px] text-emerald-300">Récompenses obtenues : {user.referralRewardsCount || 0} × 100 crédits</p></div>
 
-  return (
-    <div id="profile-view-container" className="mx-auto w-full max-w-4xl space-y-6 pb-20">
-      <div className="rounded-3xl border border-amber-400/20 bg-gradient-to-br from-amber-500/10 via-purple-500/5 to-transparent p-5 shadow-xl sm:p-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-500/10"><WalletCards className="h-6 w-6 text-amber-300" /></span><div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-300/80">Solde du compte</p><p className="mt-1 text-2xl font-black text-white sm:text-3xl">{credits} crédits</p><p className="mt-1 text-[11px] text-gray-500">Crédits disponibles pour vos générations IA.</p></div></div>
-          <button onClick={() => setActiveTab('subscription')} className="hidden items-center gap-1 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-bold text-white hover:bg-white/[0.08] sm:flex">Gérer <ArrowRight className="h-3.5 w-3.5" /></button>
-        </div>
-        <button onClick={() => setActiveTab('subscription')} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] py-2.5 text-xs font-bold text-white sm:hidden">Gérer mes crédits <ArrowRight className="h-3.5 w-3.5" /></button>
-      </div>
-
-      <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl backdrop-blur-2xl sm:p-8">
-        <div className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:text-left">
-          <div className="relative">
-            {user.avatar ? <img src={user.avatar} alt={user.name} className="h-24 w-24 rounded-3xl border border-white/20 object-cover shadow-xl ring-4 ring-purple-500/40" /> : <div className="flex h-24 w-24 items-center justify-center rounded-3xl border border-purple-500/30 bg-purple-600/20 ring-4 ring-purple-500/20"><User className="h-10 w-10 text-purple-300" /></div>}
-            <span className={`absolute -bottom-2 -right-2 rounded-full border-2 border-[#081226] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white ${user.role === 'admin' ? 'bg-rose-600' : 'bg-purple-600'}`}>{roleLabel}</span>
-          </div>
-          <div className="flex-1 space-y-3">
-            <div><h2 className="text-xl font-extrabold text-white sm:text-2xl">{user.name}</h2><p className="mt-1 flex items-center justify-center gap-1.5 font-mono text-xs text-gray-400 sm:justify-start sm:text-sm"><Mail className="h-3.5 w-3.5" /> {user.email}</p></div>
-            <div className="flex flex-wrap items-center justify-center gap-2 pt-1 sm:justify-start">
-              {user.role === 'admin' && <span className="flex items-center gap-1 rounded-xl border border-rose-500/30 bg-rose-950/60 px-3 py-1 text-xs font-bold text-rose-300"><ShieldCheck className="h-3.5 w-3.5" /> Administrateur général</span>}
-              <span className="flex items-center gap-1 rounded-xl border border-purple-500/30 bg-purple-950/60 px-3 py-1 text-xs font-semibold text-purple-300"><Sparkles className="h-3.5 w-3.5 text-pink-400" /> Forfait {user.plan}</span>
-              <span className="flex items-center gap-1 rounded-xl border border-amber-500/30 bg-amber-950/60 px-3 py-1 text-xs font-semibold text-amber-300"><Zap className="h-3.5 w-3.5 fill-amber-400 text-amber-400" /> {credits} crédits</span>
-              <span className="flex items-center gap-1 rounded-xl border border-emerald-500/30 bg-emerald-950/60 px-3 py-1 text-xs font-semibold text-emerald-300"><ShieldCheck className="h-3.5 w-3.5" /> Session Firebase active</span>
-            </div>
-          </div>
-        </div>
-        <div className="mt-7 border-t border-white/10 pt-6"><button onClick={handleLogout} disabled={isLoggingOut} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-6 py-3 text-sm font-bold text-rose-300 hover:bg-rose-500/20 disabled:opacity-50 sm:w-auto"><LogOut className="h-5 w-5" /> {isLoggingOut ? 'Déconnexion...' : 'Se déconnecter'}</button></div>
-      </div>
-
-      <div className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.02] p-6 shadow-lg backdrop-blur-xl"><div className="flex items-center space-x-3 text-emerald-400"><Lock className="h-5 w-5" /><h3 className="text-sm font-bold text-white">Compte sécurisé avec Firebase</h3></div><p className="text-xs leading-relaxed text-gray-400">Votre session est gérée par Firebase Authentication. Aucun compte de démonstration n’est utilisé dans l’application.</p></div>
-    </div>
-  );
+    <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl sm:p-8"><div className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:text-left"><div className="relative">{user.avatar?<img src={user.avatar} alt={user.name} className="h-24 w-24 rounded-3xl border border-white/20 object-cover ring-4 ring-purple-500/40"/>:<div className="flex h-24 w-24 items-center justify-center rounded-3xl border border-purple-500/30 bg-purple-600/20"><User className="h-10 w-10 text-purple-300"/></div>}<span className={`absolute -bottom-2 -right-2 rounded-full border-2 border-[#081226] px-2.5 py-0.5 text-[10px] font-bold text-white ${user.role==='admin'?'bg-rose-600':'bg-purple-600'}`}>{roleLabel}</span></div><div className="flex-1 space-y-3"><div><h2 className="text-xl font-extrabold text-white sm:text-2xl">{user.name}</h2><p className="mt-1 flex items-center justify-center gap-1.5 font-mono text-xs text-gray-400 sm:justify-start"><Mail className="h-3.5 w-3.5"/> {user.email}</p></div><div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">{user.role==='admin'&&<span className="flex items-center gap-1 rounded-xl border border-rose-500/30 bg-rose-950/60 px-3 py-1 text-xs font-bold text-rose-300"><ShieldCheck className="h-3.5 w-3.5"/> Administrateur général</span>}<span className="flex items-center gap-1 rounded-xl border border-purple-500/30 bg-purple-950/60 px-3 py-1 text-xs font-semibold text-purple-300"><Sparkles className="h-3.5 w-3.5"/> Forfait {user.plan}</span><span className="flex items-center gap-1 rounded-xl border border-amber-500/30 bg-amber-950/60 px-3 py-1 text-xs font-semibold text-amber-300"><Zap className="h-3.5 w-3.5"/> {credits} crédits</span></div></div></div><div className="mt-7 border-t border-white/10 pt-6"><button onClick={handleLogout} disabled={isLoggingOut} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-6 py-3 text-sm font-bold text-rose-300 sm:w-auto"><LogOut className="h-5 w-5"/> {isLoggingOut?'Déconnexion...':'Se déconnecter'}</button></div></div>
+    <div className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.02] p-6"><div className="flex items-center space-x-3 text-emerald-400"><Lock className="h-5 w-5"/><h3 className="text-sm font-bold text-white">Compte sécurisé avec Firebase</h3></div><p className="text-xs leading-relaxed text-gray-400">Votre session, vos créations, publications et interactions sont reliées à votre compte Firebase.</p></div>
+  </div>;
 };
