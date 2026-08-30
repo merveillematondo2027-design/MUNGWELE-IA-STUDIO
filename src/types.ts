@@ -31,7 +31,7 @@ export type VideoModel = 'omni' | 'lite' | 'fast' | 'pro';
 export type VideoDuration = 4 | 6 | 8;
 export type ExtendedVideoDuration = 4 | 5 | 6 | 8 | 10 | 15 | 30;
 export type VideoResolution = '720p' | '1080p' | '4k';
-export type VideoType = 'cinematic' | 'action' | 'commercial' | 'realistic' | 'comedy' | '3d' | 'anime' | 'social' | 'talking' | 'effects' | 'music_clip' | 'custom';
+export type VideoType = 'social' | 'commercial' | 'realistic' | 'cinematic' | 'action' | 'comedy' | 'drama' | 'romantic_series' | '3d' | 'anime' | 'talking' | 'effects' | 'music_clip' | 'custom';
 export type VideoEngineKey = 'veo-lite' | 'veo-fast' | 'veo-pro' | 'omni' | 'runway-gen45' | 'minimax-h3' | 'kling-v3-pro' | 'seedance-25';
 
 export interface VideoGenerationSettings {
