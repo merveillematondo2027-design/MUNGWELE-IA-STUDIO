@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 660" fill="none" role="img" aria-labelledby="title">
+  <title id="title">MUNGWELE AI mark</title>
+  <defs>
+    <linearGradient id="mLeft" x1="85" y1="120" x2="570" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6FD7FF"/>
+      <stop offset=".28" stop-color="#7D63FF"/>
+      <stop offset=".62" stop-color="#8A17FF"/>
+      <stop offset="1" stop-color="#FF42D4"/>
+    </linearGradient>
+    <linearGradient id="mRight" x1="515" y1="220" x2="900" y2="575" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3ED6FF"/>
+      <stop offset=".38" stop-color="#1598FF"/>
+      <stop offset=".72" stop-color="#1554F4"/>
+      <stop offset="1" stop-color="#1EE5E8"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="742" y1="75" x2="952" y2="195" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6BE8FF"/>
+      <stop offset=".44" stop-color="#21D7A1"/>
+      <stop offset="1" stop-color="#26FF55"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity=".35"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M110 545V185L405 505L570 338" stroke="url(#mLeft)" stroke-width="115"/>
+    <path d="M565 338L770 520V220" stroke="url(#mRight)" stroke-width="115"/>
+    <path d="M720 170L815 78L915 170" stroke="url(#arrow)" stroke-width="72"/>
+    <path d="M128 520V205" stroke="#fff" stroke-opacity=".13" stroke-width="16"/>
+    <path d="M586 330L758 482" stroke="#fff" stroke-opacity=".11" stroke-width="14"/>
+  </g>
+</svg>
