@@ -1,5 +1,5 @@
 export type StudioType = 'image' | 'video' | 'clips' | 'music';
-export type NavigationTab = 'home' | 'community' | 'notifications' | 'messages' | 'projects-image' | 'projects-video' | 'projects-clips' | 'projects-music' | 'studio-image' | 'studio-video' | 'studio-clips' | 'studio-music' | 'creations' | 'subscription' | 'profile' | 'help' | 'admin' | 'admin-home' | 'admin-users' | 'admin-credits' | 'admin-subscriptions' | 'admin-library' | 'admin-logs' | 'admin-usage';
+export type NavigationTab = 'home' | 'community' | 'mdigi' | 'notifications' | 'messages' | 'projects-image' | 'projects-video' | 'projects-clips' | 'projects-music' | 'studio-image' | 'studio-video' | 'studio-clips' | 'studio-music' | 'creations' | 'subscription' | 'profile' | 'help' | 'admin' | 'admin-home' | 'admin-users' | 'admin-credits' | 'admin-subscriptions' | 'admin-library' | 'admin-logs' | 'admin-usage';
 export type GenerationStatus = 'draft' | 'queued' | 'processing' | 'completed' | 'failed';
 export type UserPlan = 'free' | 'creator' | 'pro' | 'studio';
 
@@ -17,6 +17,18 @@ export interface UserProfile {
   referralCode?: string;
   referredBy?: string;
   referralRewardsCount?: number;
+}
+
+export interface MDigiProfile {
+  id: string;
+  nickname: string;
+  avatar?: string;
+  bio?: string;
+  showFollowers: boolean;
+  showFriends: boolean;
+  showFollowing: boolean;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface ImageGenerationSettings {
