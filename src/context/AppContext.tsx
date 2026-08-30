@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, query, runTransaction, setDoc, updateDoc, where } from 'firebase/firestore';
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import confetti from 'canvas-confetti';
-import { db } from '../lib/firebase';
+import { db, storage } from '../lib/firebase';
 import {
   StudioType,
   NavigationTab,
@@ -25,21 +26,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   announcementBanner: 'Bienvenue sur MUNGWELE IA STUDIO — Génération IA nouvelle génération !',
   annualDiscountPercent: 20,
   subscriptionPlans: [
-    {
-      id: 'free', name: 'Gratuit', priceMonth: 0, creditsMonthly: 0,
-      maxDownloadResolution: 'standard',
-      features: ['Génération avec crédits achetés', 'Aperçu vidéo standard', 'Téléchargement HD réservé aux abonnés'],
-    },
-    {
-      id: 'creator', name: 'Creator', priceMonth: 10, creditsMonthly: 600, popular: true,
-      maxDownloadResolution: '720p',
-      features: ['600 crédits chaque mois', 'Téléchargement vidéo 720p', 'Accès Lite, Fast et Pro selon le solde'],
-    },
-    {
-      id: 'pro', name: 'Pro', priceMonth: 25, creditsMonthly: 1600,
-      maxDownloadResolution: '1080p',
-      features: ['1 600 crédits chaque mois', 'Téléchargement vidéo jusqu’à 1080p', 'Priorité sur les fonctions premium'],
-    },
+    { id: 'free', name: 'Gratuit', priceMonth: 0, creditsMonthly: 0, maxDownloadResolution: 'standard', features: ['100 crédits de bienvenue une seule fois', 'Génération avec crédits achetés', 'Téléchargement HD réservé aux abonnés'] },
+    { id: 'creator', name: 'Creator', priceMonth: 10, creditsMonthly: 600, popular: true, maxDownloadResolution: '720p', features: ['600 crédits chaque mois', 'Téléchargement vidéo 720p', 'Accès Lite, Fast et Pro selon le solde'] },
+    { id: 'pro', name: 'Pro', priceMonth: 25, creditsMonthly: 1600, maxDownloadResolution: '1080p', features: ['1 600 crédits chaque mois', 'Téléchargement vidéo jusqu’à 1080p', 'Priorité sur les fonctions premium'] },
   ],
   creditPacks: [
     { id: 'pack-200', name: 'Essentiel', credits: 200, priceUsd: 4, enabled: true },
@@ -60,7 +49,7 @@ interface AppContextType {
   generations: GenerationRecord[];
   addGeneration: (gen: GenerationRecord) => void;
   removeGeneration: (id: string) => void;
-  updateGeneration: (id: string, updates: Partial<GenerationRecord>) => void;
+  updateGeneration: (id: string, updates: Partial<GenerationRecord>) => Promise<void>;
   credits: number;
   useCredits: (amount: number, reason: string) => boolean;
   refundCredits: (amount: number, reason: string) => void;
@@ -89,6 +78,33 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+function extensionFor(type: StudioType, mime = '') {
+  if (mime.includes('png')) return 'png';
+  if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
+  if (mime.includes('webp')) return 'webp';
+  if (mime.includes('mp4')) return 'mp4';
+  if (mime.includes('mpeg') || mime.includes('mp3')) return 'mp3';
+  return type === 'image' ? 'png' : type === 'music' ? 'mp3' : 'mp4';
+}
+
+async function persistOutput(userId: string, gen: GenerationRecord) {
+  if (!gen.resultUrl) return gen;
+  if (gen.resultUrl.includes('firebasestorage.googleapis.com')) return gen;
+  try {
+    const response = await fetch(gen.resultUrl);
+    if (!response.ok) return gen;
+    const blob = await response.blob();
+    const ext = extensionFor(gen.type, blob.type);
+    const target = storageRef(storage, `users/${userId}/generations/${gen.id}/result.${ext}`);
+    await uploadBytes(target, blob, { contentType: blob.type || undefined });
+    const url = await getDownloadURL(target);
+    return { ...gen, resultUrl: url, thumbnailUrl: gen.type === 'image' ? url : gen.thumbnailUrl };
+  } catch (error) {
+    console.warn('Media persistence warning:', error);
+    return gen;
+  }
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile>(EMPTY_USER);
   const [activeTab, setActiveTab] = useState<NavigationTab>('home');
@@ -107,14 +123,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const resetUser = () => { setUser(EMPTY_USER); setTransactions([]); setGenerations([]); };
 
   useEffect(() => {
-    fetch('/api/settings')
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (!data) return;
-        if (data.settings) setAppSettings((prev) => ({ ...prev, ...data.settings, subscriptionPlans: prev.subscriptionPlans, creditPacks: prev.creditPacks }));
-        if (data.providers) setProviders(data.providers);
-      })
-      .catch((err) => console.warn('Settings sync warning:', err));
+    fetch('/api/settings').then((r) => r.ok ? r.json() : null).then((data) => {
+      if (!data) return;
+      if (data.settings) setAppSettings((prev) => ({ ...prev, ...data.settings, subscriptionPlans: prev.subscriptionPlans, creditPacks: prev.creditPacks }));
+      if (data.providers) setProviders(data.providers);
+    }).catch((err) => console.warn('Settings sync warning:', err));
   }, []);
 
   useEffect(() => {
@@ -123,23 +136,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return onSnapshot(pricingRef, (snapshot) => {
       if (!snapshot.exists()) return;
       const data = snapshot.data() as Partial<AppSettings>;
-      setAppSettings((prev) => ({
-        ...prev,
-        ...data,
-        subscriptionPlans: Array.isArray(data.subscriptionPlans) ? data.subscriptionPlans : prev.subscriptionPlans,
-        creditPacks: Array.isArray(data.creditPacks) ? data.creditPacks : prev.creditPacks,
-      }));
+      setAppSettings((prev) => ({ ...prev, ...data, subscriptionPlans: Array.isArray(data.subscriptionPlans) ? data.subscriptionPlans : prev.subscriptionPlans, creditPacks: Array.isArray(data.creditPacks) ? data.creditPacks : prev.creditPacks }));
     }, (error) => console.warn('Firestore pricing sync warning:', error));
   }, [user.id]);
 
+  // La bibliothèque utilisateur vient désormais de Firestore, plus de la mémoire du serveur.
   useEffect(() => {
     if (!user.id) { setGenerations([]); return; }
-    fetch('/api/generations')
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (Array.isArray(data?.generations)) setGenerations(data.generations.filter((gen: GenerationRecord) => gen.userId === user.id));
-      })
-      .catch((err) => console.warn('Generation sync warning:', err));
+    const q = query(collection(db, 'generations'), where('userId', '==', user.id));
+    return onSnapshot(q, (snap) => {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<GenerationRecord, 'id'>) }));
+      rows.sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
+      setGenerations(rows);
+    }, (error) => console.warn('Generation Firestore sync warning:', error));
+  }, [user.id]);
+
+  useEffect(() => {
+    if (!user.id) { setTransactions([]); return; }
+    const q = query(collection(db, 'creditTransactions'), where('userId', '==', user.id));
+    return onSnapshot(q, (snap) => {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<CreditTransaction, 'id'>) }));
+      rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+      setTransactions(rows);
+    }, (error) => console.warn('Credit transaction sync warning:', error));
   }, [user.id]);
 
   useEffect(() => {
@@ -154,38 +173,95 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.setTimeout(() => dismissNotification(item.id), 5000);
   };
 
+  // Réservation locale uniquement. Le vrai débit Firestore est confirmé après succès.
   const useCredits = (amount: number, reason: string) => {
     if (!user.id) { addNotification('warning', 'Connexion requise', 'Connectez-vous avant de lancer une génération IA.'); setAuthMode('login'); setIsAuthModalOpen(true); return false; }
     if (user.credits < amount) { addNotification('error', 'Crédits insuffisants', `Cette opération nécessite ${amount} crédits. Solde : ${user.credits}.`); return false; }
-    const balance = user.credits - amount;
-    setUser((prev) => ({ ...prev, credits: balance, totalGenerations: prev.totalGenerations + 1 }));
-    setTransactions((prev) => [{ id: `tx-${Date.now()}`, userId: user.id, amount: -amount, type: 'generation', description: reason, balanceAfter: balance, createdAt: new Date().toISOString() }, ...prev]);
+    setUser((prev) => ({ ...prev, credits: Math.max(0, prev.credits - amount) }));
     return true;
   };
 
+  // Comme le débit n'est confirmé qu'après succès, un échec rend simplement la réservation locale.
   const refundCredits = (amount: number, reason: string) => {
     if (!user.id) return;
-    const balance = user.credits + amount;
-    setUser((prev) => ({ ...prev, credits: balance }));
-    setTransactions((prev) => [{ id: `tx-ref-${Date.now()}`, userId: user.id, amount, type: 'refund', description: `Remboursement automatique : ${reason}`, balanceAfter: balance, createdAt: new Date().toISOString() }, ...prev]);
-    addNotification('info', 'Crédits remboursés', `${amount} crédits ont été restitués.`);
+    setUser((prev) => ({ ...prev, credits: prev.credits + amount }));
+    addNotification('info', 'Crédits libérés', `${amount} crédits réservés ont été restitués.`);
   };
 
   const addCredits = (amount: number, reason: string) => {
     if (!user.id) return;
-    const balance = user.credits + amount;
-    setUser((prev) => ({ ...prev, credits: balance }));
-    setTransactions((prev) => [{ id: `tx-add-${Date.now()}`, userId: user.id, amount, type: 'purchase', description: reason, balanceAfter: balance, createdAt: new Date().toISOString() }, ...prev]);
+    setUser((prev) => ({ ...prev, credits: prev.credits + amount }));
   };
 
-  const addGeneration = (gen: GenerationRecord) => setGenerations((prev) => [gen, ...prev]);
+  const addGeneration = (gen: GenerationRecord) => {
+    setGenerations((prev) => [gen, ...prev.filter((g) => g.id !== gen.id)]);
+    void (async () => {
+      if (!user.id) return;
+      try {
+        const persisted = await persistOutput(user.id, { ...gen, userId: user.id });
+        const userRef = doc(db, 'users', user.id);
+        const generationRef = doc(db, 'generations', persisted.id);
+        const txRef = doc(db, 'creditTransactions', `tx-${persisted.id}`);
+        let newBalance = 0;
+        let newTotal = 0;
+
+        await runTransaction(db, async (transaction) => {
+          const userSnap = await transaction.get(userRef);
+          if (!userSnap.exists()) throw new Error('Profil utilisateur introuvable.');
+          const data = userSnap.data();
+          const currentCredits = Math.max(0, Number(data.credits || 0));
+          const cost = Math.max(0, Number(persisted.creditsUsed || 0));
+          if (currentCredits < cost) throw new Error('Solde Firestore insuffisant pour confirmer cette génération.');
+          newBalance = currentCredits - cost;
+          newTotal = Math.max(0, Number(data.totalGenerations || 0)) + 1;
+          transaction.update(userRef, { credits: newBalance, totalGenerations: newTotal, updatedAt: new Date().toISOString() });
+          transaction.set(generationRef, { ...persisted, userId: user.id, updatedAt: new Date().toISOString() });
+          transaction.set(txRef, { userId: user.id, amount: -cost, type: 'generation', description: `${persisted.type} — ${persisted.title || persisted.model}`, balanceAfter: newBalance, createdAt: new Date().toISOString() });
+        });
+
+        setUser((prev) => ({ ...prev, credits: newBalance, totalGenerations: newTotal }));
+        setGenerations((prev) => prev.map((g) => g.id === persisted.id ? persisted : g));
+      } catch (error: any) {
+        console.error('Generation persistence error:', error);
+        addNotification('error', 'Synchronisation incomplète', error?.message || 'La création a été générée mais sa sauvegarde Firebase a échoué.');
+      }
+    })();
+  };
+
   const removeGeneration = async (id: string) => {
     setGenerations((prev) => prev.filter((g) => g.id !== id));
+    try { await deleteDoc(doc(db, 'generations', id)); } catch {}
+    try { await deleteDoc(doc(db, 'communityPosts', id)); } catch {}
     try { await fetch(`/api/generations/${id}`, { method: 'DELETE' }); } catch {}
   };
-  const updateGeneration = (id: string, updates: Partial<GenerationRecord>) => setGenerations((prev) => prev.map((g) => g.id === id ? { ...g, ...updates, updatedAt: new Date().toISOString() } : g));
-  const updateAppSettings = (newSettings: Partial<AppSettings>) => setAppSettings((prev) => ({ ...prev, ...newSettings }));
 
+  const updateGeneration = async (id: string, updates: Partial<GenerationRecord>) => {
+    const updatedAt = new Date().toISOString();
+    const current = generations.find((g) => g.id === id);
+    setGenerations((prev) => prev.map((g) => g.id === id ? { ...g, ...updates, updatedAt } : g));
+    if (!current || !user.id) return;
+    const next = { ...current, ...updates, updatedAt, userId: user.id };
+    await setDoc(doc(db, 'generations', id), next, { merge: true });
+    if (next.isPublic) {
+      await setDoc(doc(db, 'communityPosts', id), {
+        id,
+        userId: user.id,
+        authorId: user.id,
+        authorName: user.name || 'Créateur MUNGWELE',
+        title: next.title,
+        caption: next.prompt,
+        type: next.type,
+        mediaUrl: next.resultUrl,
+        thumbnailUrl: next.thumbnailUrl,
+        generationId: id,
+        createdAt: next.publicAt || updatedAt,
+      }, { merge: true });
+    } else {
+      await deleteDoc(doc(db, 'communityPosts', id)).catch(() => undefined);
+    }
+  };
+
+  const updateAppSettings = (newSettings: Partial<AppSettings>) => setAppSettings((prev) => ({ ...prev, ...newSettings }));
   const toggleProvider = async (id: string, enabled: boolean) => {
     setProviders((prev) => prev.map((p) => p.id === id ? { ...p, enabled } : p));
     try { await fetch('/api/admin/providers/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ providerId: id, enabled }) }); } catch {}
