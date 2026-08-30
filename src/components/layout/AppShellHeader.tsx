@@ -3,7 +3,7 @@ import { ArrowLeft, ChevronDown, Menu, X, UserRound, LogOut, Images, CreditCard,
 import { useApp } from '../../context/AppContext';
 import type { StudioType } from '../../types';
 import { auth } from '../../lib/firebase';
-import brandLogo from '../../assets/mungwele-brand.svg';
+import officialLogo from '../../assets/mungwele-ai-official-logo.svg';
 
 export const AppShellHeader: React.FC<{ studioMode?: boolean }> = ({ studioMode = false }) => {
   const { user, setActiveTab, setActiveStudio } = useApp();
@@ -21,7 +21,9 @@ export const AppShellHeader: React.FC<{ studioMode?: boolean }> = ({ studioMode 
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             {studioMode && <button onClick={goHome} className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-gray-300 hover:bg-white/[0.08] hover:text-white" title="Retour à l'accueil"><ArrowLeft className="h-4 w-4" /></button>}
-            <button onClick={goHome} className="flex min-w-0 items-center gap-2 text-left"><img src={brandLogo} alt="MUNGWELE IA STUDIO" className="h-10 w-12 object-contain drop-shadow-lg" /><div className="hidden min-w-0 sm:block"><p className="truncate text-sm font-black tracking-wide text-white">MUNGWELE IA STUDIO</p><p className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-purple-300">Create with AI</p></div></button>
+            <button onClick={goHome} className="flex min-w-0 items-center text-left" aria-label="Accueil MUNGWELE AI STUDIO">
+              <img src={officialLogo} alt="MUNGWELE AI STUDIO" className="h-11 w-[118px] object-contain object-left drop-shadow-lg sm:w-[142px]" />
+            </button>
           </div>
           <div className="flex items-center gap-2">
             {user.role === 'admin' && <button onClick={() => go('admin-home')} className="inline-flex h-10 items-center gap-2 rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 text-xs font-black text-rose-200 hover:bg-rose-500/15"><Shield className="h-4 w-4" /><span className="hidden sm:inline">Admin</span></button>}
