@@ -8,6 +8,7 @@ import { MusicStudio } from './components/studios/MusicStudio';
 import { HomeView } from './components/views/HomeView';
 import { ProjectsHubView } from './components/views/ProjectsHubView';
 import { CommunityView } from './components/views/CommunityView';
+import { MDigiView } from './components/views/MDigiView';
 import { CreationsView } from './components/views/CreationsView';
 import { SubscriptionView } from './components/views/SubscriptionView';
 import { ProfileView } from './components/views/ProfileView';
@@ -21,16 +22,15 @@ import { MediaViewerModal } from './components/common/MediaViewerModal';
 import { AuthModal } from './components/views/AuthModal';
 import { subscribeToFirebaseUser } from './services/authService';
 import { auth } from './lib/firebase';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import officialLogo from './assets/mungwele-ai-official-logo.svg';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 type AdminSection = 'home' | 'users' | 'credits' | 'subscriptions' | 'library' | 'logs' | 'usage';
 const ADMIN_UNLIMITED_CREDITS = Number.MAX_SAFE_INTEGER;
 
 const MainLayout: React.FC = () => {
-  const { activeTab, activeMediaModal, setActiveMediaModal, appSettings, user, setUser, resetUser, addNotification } = useApp();
+  const { activeTab, activeMediaModal, setActiveMediaModal, appSettings, user, setUser, resetUser, addNotification, setAuthMode, setIsAuthModalOpen } = useApp();
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
 
   useEffect(() => {
@@ -39,9 +39,12 @@ const MainLayout: React.FC = () => {
       (profile) => {
         if (!mounted) return;
         if (profile) {
-          setUser(profile.role === 'admin' ? { ...profile, credits: ADMIN_UNLIMITED_CREDITS, plan: 'pro' } : profile);
+          setUser(profile.role === 'admin' ? { ...profile, credits: ADMIN_UNLIMITED_CREDITS, plan: 'studio' } : profile);
           setAuthStatus('authenticated');
-        } else { resetUser(); setAuthStatus('unauthenticated'); }
+        } else {
+          resetUser();
+          setAuthStatus('unauthenticated');
+        }
       },
       (error) => {
         if (!mounted) return;
@@ -49,41 +52,50 @@ const MainLayout: React.FC = () => {
         if (auth.currentUser) {
           setAuthStatus('authenticated');
           addNotification('warning', 'Profil à synchroniser', 'Votre connexion Firebase est active, mais certaines données Firestore doivent encore être synchronisées.');
-        } else { resetUser(); setAuthStatus('unauthenticated'); }
+        } else {
+          resetUser();
+          setAuthStatus('unauthenticated');
+        }
       },
     );
     return () => { mounted = false; unsubscribe(); };
   }, []);
 
-  if (authStatus === 'loading') return <div className="min-h-screen bg-[#050b18] text-white flex flex-col items-center justify-center gap-4 px-6 text-center"><img src={officialLogo} alt="MUNGWELE AI STUDIO" className="h-28 w-60 object-contain drop-shadow-2xl"/><Loader2 className="w-5 h-5 animate-spin text-purple-400"/><p className="text-sm text-gray-400">Vérification de votre session sécurisée…</p></div>;
-  if (authStatus === 'unauthenticated') return <div className="min-h-screen bg-[#050b18]"><AuthModal required/><NotificationToast/></div>;
-
+  const signedIn = authStatus === 'authenticated' && Boolean(user.id);
+  const requestLogin = () => { setAuthMode('login'); setIsAuthModalOpen(true); };
+  const protectedTabs = new Set(['notifications','messages','projects-image','projects-video','projects-clips','projects-music','studio-image','studio-video','studio-clips','studio-music','creations','profile','admin','admin-home','admin-users','admin-credits','admin-subscriptions','admin-library','admin-logs','admin-usage']);
+  const needsLogin = !signedIn && protectedTabs.has(activeTab);
   const isStudioTab = activeTab === 'studio-image' || activeTab === 'studio-video' || activeTab === 'studio-clips' || activeTab === 'studio-music';
-  const canOpenAdmin = user.role === 'admin' && Boolean(user.id);
-  const renderAdmin = (section: AdminSection) => canOpenAdmin ? <AdminWorkspaceView section={section}/> : <ProfileView/>;
+  const canOpenAdmin = signedIn && user.role === 'admin';
+  const renderAdmin = (section: AdminSection) => canOpenAdmin ? <AdminWorkspaceView section={section}/> : <HomeView/>;
+
+  useEffect(() => {
+    if (authStatus !== 'loading' && needsLogin) requestLogin();
+  }, [authStatus, activeTab, needsLogin]);
 
   return <div className="relative min-h-screen bg-[#07101f] text-gray-100 antialiased selection:bg-purple-600 selection:text-white overflow-x-hidden">
     <div className="fixed inset-0 pointer-events-none overflow-hidden"><div className="absolute -top-40 -left-32 h-[520px] w-[520px] rounded-full bg-purple-600/10 blur-[150px]"/><div className="absolute top-1/3 -right-40 h-[520px] w-[520px] rounded-full bg-blue-600/10 blur-[160px]"/><div className="absolute -bottom-40 left-1/3 h-[520px] w-[520px] rounded-full bg-pink-600/8 blur-[150px]"/></div>
     {appSettings.maintenanceMode&&<div className="relative z-50 flex items-center justify-center gap-2 border-b border-amber-500/30 bg-amber-950/70 px-4 py-2 text-center text-xs font-semibold text-amber-200"><AlertTriangle className="h-4 w-4 text-amber-400"/><span>Le studio est actuellement en maintenance programmée.</span></div>}
-    <div className="relative z-10 min-h-screen"><AppShellHeader studioMode={isStudioTab}/><main className={isStudioTab?'mx-auto w-full max-w-7xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8':'mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8'}><AnimatePresence mode="wait"><motion.div key={activeTab} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}} transition={{duration:0.16}}>
-      {activeTab==='home'&&<HomeView/>}
-      {activeTab==='community'&&<CommunityView/>}
-      {activeTab==='notifications'&&<NotificationsView/>}
-      {activeTab==='messages'&&<MessagesView/>}
-      {activeTab==='projects-image'&&<ProjectsHubView type="image"/>}
-      {activeTab==='projects-video'&&<ProjectsHubView type="video"/>}
-      {activeTab==='projects-clips'&&<ProjectsHubView type="clips"/>}
-      {activeTab==='projects-music'&&<ProjectsHubView type="music"/>}
-      {activeTab==='studio-image'&&<ImageStudio/>}
-      {activeTab==='studio-video'&&<VideoStudio/>}
-      {activeTab==='studio-clips'&&<ClipStudio/>}
-      {activeTab==='studio-music'&&<MusicStudio/>}
-      {activeTab==='creations'&&<CreationsView/>}
-      {activeTab==='subscription'&&<SubscriptionView/>}
-      {activeTab==='profile'&&<ProfileView/>}
-      {activeTab==='admin'&&(canOpenAdmin?<AdminView/>:<ProfileView/>)}
-      {activeTab==='admin-home'&&renderAdmin('home')}{activeTab==='admin-users'&&renderAdmin('users')}{activeTab==='admin-credits'&&renderAdmin('credits')}{activeTab==='admin-subscriptions'&&renderAdmin('subscriptions')}{activeTab==='admin-library'&&renderAdmin('library')}{activeTab==='admin-logs'&&renderAdmin('logs')}{activeTab==='admin-usage'&&renderAdmin('usage')}
-      {activeTab==='help'&&<HelpView/>}
+    <div className="relative z-10 min-h-screen"><AppShellHeader studioMode={signedIn && isStudioTab}/><main className={signedIn&&isStudioTab?'mx-auto w-full max-w-7xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8':'mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8'}><AnimatePresence mode="wait"><motion.div key={needsLogin?'guest-home':activeTab} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}} transition={{duration:0.16}}>
+      {(activeTab==='home'||needsLogin)&&<HomeView/>}
+      {!needsLogin&&activeTab==='community'&&<CommunityView/>}
+      {!needsLogin&&activeTab==='mdigi'&&<MDigiView/>}
+      {!needsLogin&&activeTab==='notifications'&&<NotificationsView/>}
+      {!needsLogin&&activeTab==='messages'&&<MessagesView/>}
+      {!needsLogin&&activeTab==='projects-image'&&<ProjectsHubView type="image"/>}
+      {!needsLogin&&activeTab==='projects-video'&&<ProjectsHubView type="video"/>}
+      {!needsLogin&&activeTab==='projects-clips'&&<ProjectsHubView type="clips"/>}
+      {!needsLogin&&activeTab==='projects-music'&&<ProjectsHubView type="music"/>}
+      {!needsLogin&&activeTab==='studio-image'&&<ImageStudio/>}
+      {!needsLogin&&activeTab==='studio-video'&&<VideoStudio/>}
+      {!needsLogin&&activeTab==='studio-clips'&&<ClipStudio/>}
+      {!needsLogin&&activeTab==='studio-music'&&<MusicStudio/>}
+      {!needsLogin&&activeTab==='creations'&&<CreationsView/>}
+      {!needsLogin&&activeTab==='subscription'&&<SubscriptionView/>}
+      {!needsLogin&&activeTab==='profile'&&<ProfileView/>}
+      {!needsLogin&&activeTab==='admin'&&(canOpenAdmin?<AdminView/>:<HomeView/>)}
+      {!needsLogin&&activeTab==='admin-home'&&renderAdmin('home')}{!needsLogin&&activeTab==='admin-users'&&renderAdmin('users')}{!needsLogin&&activeTab==='admin-credits'&&renderAdmin('credits')}{!needsLogin&&activeTab==='admin-subscriptions'&&renderAdmin('subscriptions')}{!needsLogin&&activeTab==='admin-library'&&renderAdmin('library')}{!needsLogin&&activeTab==='admin-logs'&&renderAdmin('logs')}{!needsLogin&&activeTab==='admin-usage'&&renderAdmin('usage')}
+      {!needsLogin&&activeTab==='help'&&<HelpView/>}
     </motion.div></AnimatePresence></main></div>
     <NotificationToast/><MediaViewerModal media={activeMediaModal} onClose={()=>setActiveMediaModal(null)}/><AuthModal/>
   </div>;
