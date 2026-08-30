@@ -1,7 +1,7 @@
 export type StudioType = 'image' | 'video' | 'clips' | 'music';
 export type NavigationTab = 'home' | 'community' | 'notifications' | 'messages' | 'projects-image' | 'projects-video' | 'projects-clips' | 'projects-music' | 'studio-image' | 'studio-video' | 'studio-clips' | 'studio-music' | 'creations' | 'subscription' | 'profile' | 'help' | 'admin' | 'admin-home' | 'admin-users' | 'admin-credits' | 'admin-subscriptions' | 'admin-library' | 'admin-logs' | 'admin-usage';
 export type GenerationStatus = 'draft' | 'queued' | 'processing' | 'completed' | 'failed';
-export type UserPlan = 'free' | 'creator' | 'pro';
+export type UserPlan = 'free' | 'creator' | 'pro' | 'studio';
 
 export interface UserProfile {
   id: string;
@@ -33,7 +33,7 @@ export interface ImageGenerationSettings {
 export type VideoModel = 'omni' | 'lite' | 'fast' | 'pro';
 export type VideoDuration = 4 | 6 | 8;
 export type ExtendedVideoDuration = 4 | 5 | 6 | 8 | 10 | 15 | 30;
-export type VideoResolution = '720p' | '1080p' | '4k';
+export type VideoResolution = '480p' | '720p' | '780p' | '1080p' | '1440p' | '2k' | '4k';
 export type VideoType = 'social' | 'commercial' | 'realistic' | 'cinematic' | 'action' | 'comedy' | 'drama' | 'romantic_series' | '3d' | 'anime' | 'talking' | 'effects' | 'music_clip' | 'custom';
 export type VideoEngineKey = 'veo-lite' | 'veo-fast' | 'veo-pro' | 'omni' | 'runway-gen45' | 'minimax-h3' | 'kling-v3-pro' | 'seedance-25';
 
@@ -101,6 +101,7 @@ export interface GenerationRecord {
   publicationCaption?: string;
   publicationAuthorId?: string;
   isOfficialPublication?: boolean;
+  allowCommunityDownload?: boolean;
 }
 
 export interface CreditTransaction {
@@ -123,7 +124,7 @@ export interface PlanConfig {
   maxVideoDuration?: number;
   veo3Access?: boolean;
   supportLevel?: string;
-  maxDownloadResolution?: 'standard' | '720p' | '1080p';
+  maxDownloadResolution?: 'standard' | '480p' | '720p' | '780p' | '1080p' | '4k';
 }
 
 export interface CreditPackConfig { id: string; name: string; credits: number; priceUsd: number; enabled: boolean; }

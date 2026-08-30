@@ -7,20 +7,12 @@ export function installAuthenticatedApiFetch() {
 
   const originalFetch = window.fetch.bind(window);
   const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const url = typeof input === 'string'
-      ? input
-      : input instanceof URL
-        ? input.toString()
-        : input.url;
-
-    if (!url.startsWith('/api/generate/')) {
-      return originalFetch(input, init);
-    }
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const protectedApi = url.startsWith('/api/generate/') || url.startsWith('/api/media/download');
+    if (!protectedApi) return originalFetch(input, init);
 
     const currentUser = auth.currentUser;
-    if (!currentUser) {
-      return originalFetch(input, init);
-    }
+    if (!currentUser) return originalFetch(input, init);
 
     const token = await currentUser.getIdToken();
     const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
