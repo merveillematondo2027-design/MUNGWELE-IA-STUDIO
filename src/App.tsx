@@ -21,7 +21,7 @@ import { subscribeToFirebaseUser } from './services/authService';
 import { auth } from './lib/firebase';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import brandLogo from './assets/mungwele-brand.svg';
+import officialLogo from './assets/mungwele-ai-official-logo.svg';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 type AdminSection = 'home' | 'users' | 'credits' | 'subscriptions' | 'library' | 'logs' | 'usage';
@@ -64,7 +64,7 @@ const MainLayout: React.FC = () => {
   if (authStatus === 'loading') {
     return (
       <div className="min-h-screen bg-[#050b18] text-white flex flex-col items-center justify-center gap-4 px-6 text-center">
-        <img src={brandLogo} alt="MUNGWELE IA STUDIO" className="h-24 w-32 object-contain drop-shadow-2xl" />
+        <img src={officialLogo} alt="MUNGWELE AI STUDIO" className="h-28 w-60 object-contain drop-shadow-2xl" />
         <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
         <p className="text-sm text-gray-400">Vérification de votre session sécurisée…</p>
       </div>
