@@ -30,19 +30,31 @@ service cloud.firestore {
       allow read: if isOwner(userId) || isAdmin();
 
       allow create: if isOwner(userId)
-        && request.resource.data.credits == 50
+        && request.resource.data.credits == 100
         && request.resource.data.welcomeBonusGranted == true
+        && request.resource.data.welcomeBonusVersion == 2
         && (
           (isAdmin() && request.resource.data.role in ['admin', 'user']) ||
           (!isAdmin() && request.resource.data.role == 'user')
         );
 
+      // Un utilisateur ne peut jamais augmenter librement son solde.
+      // Il peut uniquement consommer ses crédits. La seule hausse autorisée
+      // est la migration unique de +50 pour les anciens comptes bonus v1.
       allow update: if isAdmin() || (
         isOwner(userId)
-        && request.resource.data.credits == resource.data.credits
         && request.resource.data.role == resource.data.role
         && request.resource.data.welcomeBonusGranted == resource.data.welcomeBonusGranted
-        && request.resource.data.totalGenerations == resource.data.totalGenerations
+        && request.resource.data.totalGenerations >= resource.data.totalGenerations
+        && (
+          request.resource.data.credits <= resource.data.credits
+          || (
+            resource.data.welcomeBonusGranted == true
+            && (!('welcomeBonusVersion' in resource.data) || resource.data.welcomeBonusVersion < 2)
+            && request.resource.data.welcomeBonusVersion == 2
+            && request.resource.data.credits == resource.data.credits + 50
+          )
+        )
       );
 
       allow delete: if isAdmin();
@@ -59,26 +71,30 @@ service cloud.firestore {
     }
 
     match /generations/{generationId} {
-      allow read: if ownsExisting() || isAdmin();
-      allow create, update: if isAdmin();
+      allow read: if ownsExisting() || isAdmin() || (signedIn() && resource.data.isPublic == true);
+      allow create: if ownsIncoming() || isAdmin();
+      allow update: if isAdmin() || (ownsExisting() && ownsIncoming());
       allow delete: if ownsExisting() || isAdmin();
     }
 
     match /images/{imageId} {
       allow read: if ownsExisting() || isAdmin();
-      allow create, update: if isAdmin();
+      allow create: if ownsIncoming() || isAdmin();
+      allow update: if isAdmin() || (ownsExisting() && ownsIncoming());
       allow delete: if ownsExisting() || isAdmin();
     }
 
     match /videos/{videoId} {
       allow read: if ownsExisting() || isAdmin();
-      allow create, update: if isAdmin();
+      allow create: if ownsIncoming() || isAdmin();
+      allow update: if isAdmin() || (ownsExisting() && ownsIncoming());
       allow delete: if ownsExisting() || isAdmin();
     }
 
     match /musics/{musicId} {
       allow read: if ownsExisting() || isAdmin();
-      allow create, update: if isAdmin();
+      allow create: if ownsIncoming() || isAdmin();
+      allow update: if isAdmin() || (ownsExisting() && ownsIncoming());
       allow delete: if ownsExisting() || isAdmin();
     }
 
@@ -97,7 +113,15 @@ service cloud.firestore {
 
     match /creditTransactions/{transactionId} {
       allow read: if ownsExisting() || isAdmin();
-      allow write: if isAdmin();
+      allow create: if ownsIncoming() || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /communityPosts/{postId} {
+      allow read: if signedIn();
+      allow create: if ownsIncoming() || isAdmin();
+      allow update: if isAdmin() || (ownsExisting() && ownsIncoming());
+      allow delete: if ownsExisting() || isAdmin();
     }
 
     match /notifications/{notificationId} {
