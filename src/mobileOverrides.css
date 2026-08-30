@@ -1,0 +1,7 @@
+/* Mobile navigation: Messages stays directly beside Menu. The same destination
+   is also available inside the drawer/profile menus. */
+@media (max-width: 639px) {
+  button[title="Messages"].hidden {
+    display: flex !important;
+  }
+}
