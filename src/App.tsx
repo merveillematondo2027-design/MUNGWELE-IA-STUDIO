@@ -27,6 +27,7 @@ import officialLogo from './assets/mungwele-ai-official-logo.svg';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 type AdminSection = 'home' | 'users' | 'credits' | 'subscriptions' | 'library' | 'logs' | 'usage';
+const ADMIN_UNLIMITED_CREDITS = Number.MAX_SAFE_INTEGER;
 
 const MainLayout: React.FC = () => {
   const { activeTab, activeMediaModal, setActiveMediaModal, appSettings, user, setUser, resetUser, addNotification } = useApp();
@@ -37,8 +38,10 @@ const MainLayout: React.FC = () => {
     const unsubscribe = subscribeToFirebaseUser(
       (profile) => {
         if (!mounted) return;
-        if (profile) { setUser(profile); setAuthStatus('authenticated'); }
-        else { resetUser(); setAuthStatus('unauthenticated'); }
+        if (profile) {
+          setUser(profile.role === 'admin' ? { ...profile, credits: ADMIN_UNLIMITED_CREDITS, plan: 'pro' } : profile);
+          setAuthStatus('authenticated');
+        } else { resetUser(); setAuthStatus('unauthenticated'); }
       },
       (error) => {
         if (!mounted) return;
