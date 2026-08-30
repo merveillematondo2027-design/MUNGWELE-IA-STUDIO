@@ -18,9 +18,10 @@ export const GenerationActivityOverlay: React.FC = () => {
   const [activity, setActivity] = useState<Activity | null>(null);
 
   useEffect(() => {
+    const ownDescriptor = Object.getOwnPropertyDescriptor(window, 'fetch');
     const originalFetch = window.fetch.bind(window);
 
-    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const wrappedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = getUrl(input);
       const method = (init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
       const isImageGeneration = method === 'POST' && url.includes('/api/generate/image');
@@ -29,13 +30,18 @@ export const GenerationActivityOverlay: React.FC = () => {
       if (!isImageGeneration && !isVideoGeneration) return originalFetch(input, init);
 
       const kind: Activity['kind'] = isImageGeneration ? 'image' : 'video';
-      setActivity({ kind, completed: false, label: kind === 'image' ? 'MUNGWELE AI crée votre image' : 'MUNGWELE AI génère votre vidéo' });
+      setActivity({
+        kind,
+        completed: false,
+        label: kind === 'image' ? 'MUNGWELE AI crée votre image' : 'MUNGWELE AI génère votre vidéo',
+      });
 
       try {
         const token = await auth.currentUser?.getIdToken();
         const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
         if (token) headers.set('Authorization', `Bearer ${token}`);
         headers.set('X-Mungwele-Background', '1');
+
         const response = await originalFetch(input, { ...init, headers });
         if (response.ok) {
           setActivity((current) => current ? { ...current, completed: true } : current);
@@ -50,8 +56,25 @@ export const GenerationActivityOverlay: React.FC = () => {
       }
     };
 
+    try {
+      Object.defineProperty(window, 'fetch', {
+        configurable: true,
+        enumerable: ownDescriptor?.enumerable ?? true,
+        writable: true,
+        value: wrappedFetch,
+      });
+    } catch (error) {
+      console.warn('[GENERATION_OVERLAY_FETCH_HOOK_SKIPPED]', error);
+      return undefined;
+    }
+
     return () => {
-      window.fetch = originalFetch;
+      try {
+        if (ownDescriptor) Object.defineProperty(window, 'fetch', ownDescriptor);
+        else delete (window as Window & { fetch?: typeof fetch }).fetch;
+      } catch (error) {
+        console.warn('[GENERATION_OVERLAY_FETCH_RESTORE_WARNING]', error);
+      }
     };
   }, []);
 
