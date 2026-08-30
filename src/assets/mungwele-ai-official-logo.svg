@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">MUNGWELE AI STUDIO</title>
+  <desc id="desc">Logo officiel MUNGWELE AI STUDIO, symbole M multicolore avec flèche verte et signature typographique.</desc>
+  <defs>
+    <linearGradient id="mLeft" x1="145" y1="140" x2="650" y2="580" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6FD7FF"/>
+      <stop offset=".28" stop-color="#7D63FF"/>
+      <stop offset=".62" stop-color="#8A17FF"/>
+      <stop offset="1" stop-color="#FF42D4"/>
+    </linearGradient>
+    <linearGradient id="mRight" x1="600" y1="235" x2="1020" y2="610" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3ED6FF"/>
+      <stop offset=".38" stop-color="#1598FF"/>
+      <stop offset=".72" stop-color="#1554F4"/>
+      <stop offset="1" stop-color="#1EE5E8"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="835" y1="95" x2="1095" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6BE8FF"/>
+      <stop offset=".44" stop-color="#21D7A1"/>
+      <stop offset="1" stop-color="#26FF55"/>
+    </linearGradient>
+    <linearGradient id="ai" x1="905" y1="590" x2="1110" y2="690" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F13CFF"/>
+      <stop offset=".42" stop-color="#315BFF"/>
+      <stop offset=".72" stop-color="#10B8FF"/>
+      <stop offset="1" stop-color="#21F06A"/>
+    </linearGradient>
+    <linearGradient id="line" x1="170" y1="712" x2="1040" y2="712" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EE1CFF"/>
+      <stop offset=".42" stop-color="#3476FF"/>
+      <stop offset=".7" stop-color="#12CFFF"/>
+      <stop offset="1" stop-color="#35F060"/>
+    </linearGradient>
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#000" flood-opacity=".4"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M180 500V205L485 505L665 337" stroke="url(#mLeft)" stroke-width="105"/>
+    <path d="M655 337L870 520V240" stroke="url(#mRight)" stroke-width="105"/>
+    <path d="M818 188L920 94L1027 183" stroke="url(#arrow)" stroke-width="70"/>
+    <path d="M199 483V226" stroke="#fff" stroke-opacity=".14" stroke-width="15"/>
+    <path d="M677 329L857 479" stroke="#fff" stroke-opacity=".12" stroke-width="14"/>
+  </g>
+
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="900" letter-spacing="-3">
+    <text x="92" y="663" font-size="122" fill="#FFFFFF" filter="url(#softGlow)">MUNGWELE</text>
+    <text x="892" y="663" font-size="122" fill="url(#ai)">AI</text>
+  </g>
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="34" fill="#FFFFFF">
+    <text x="390" y="735" font-size="45">STUDIO</text>
+  </g>
+  <path d="M150 716H330" stroke="url(#line)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M875 716H1060" stroke="url(#line)" stroke-width="8" stroke-linecap="round"/>
+</svg>
