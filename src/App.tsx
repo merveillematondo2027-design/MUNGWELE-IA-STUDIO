@@ -16,6 +16,7 @@ import { AdminWorkspaceView } from './components/views/AdminWorkspaceView';
 import { HelpView } from './components/views/HelpView';
 import { NotificationToast } from './components/common/NotificationToast';
 import { MediaViewerModal } from './components/common/MediaViewerModal';
+import { GenerationActivityOverlay } from './components/common/GenerationActivityOverlay';
 import { AuthModal } from './components/views/AuthModal';
 import { subscribeToFirebaseUser } from './services/authService';
 import { auth } from './lib/firebase';
@@ -131,6 +132,7 @@ const MainLayout: React.FC = () => {
         </main>
       </div>
 
+      <GenerationActivityOverlay />
       <NotificationToast />
       <MediaViewerModal media={activeMediaModal} onClose={() => setActiveMediaModal(null)} />
       <AuthModal />
