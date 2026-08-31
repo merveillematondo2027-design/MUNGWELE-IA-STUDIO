@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, increment, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export const OFFICIAL_MUNGWELE_ID = 'mungwele-ai-official';
@@ -40,4 +40,15 @@ export async function reportPost(post:CommunityPost, reporter:{id:string;name:st
   const identity=await requireMDigiIdentity(reporter.id).catch(()=>({nickname:reporter.name,avatar:''}));
   await addDoc(collection(db,'reports'),{userId:reporter.id,reporterId:reporter.id,reporterName:identity.nickname||reporter.name||'Utilisateur',postId:post.id,generationId:post.generationId||post.id,ownerId:post.userId,ownerName:post.authorName,reason,status:'open',createdAt:new Date().toISOString()});
 }
-export async function sendMessage(sender:{id:string;name:string},recipientId:string,recipientName:string,text:string){const value=text.trim();if(!value||!recipientId||recipientId===sender.id)return;const identity=await requireMDigiIdentity(sender.id);const members=[sender.id,recipientId].sort();const conversationId=members.join('_');const now=new Date().toISOString();await setDoc(doc(db,'conversations',conversationId),{userId:sender.id,members,memberNames:{[sender.id]:identity.nickname,[recipientId]:recipientName},lastMessage:value.slice(0,500),updatedAt:now},{merge:true});await addDoc(collection(db,'conversations',conversationId,'messages'),{userId:sender.id,senderId:sender.id,senderName:identity.nickname,recipientId,text:value.slice(0,2000),createdAt:now,read:false});}
+export async function sendMessage(sender:{id:string;name:string},recipientId:string,recipientName:string,text:string){
+  const value=text.trim();
+  if(!value||!recipientId||recipientId===sender.id)return;
+  const identity=await requireMDigiIdentity(sender.id);
+  const members=[sender.id,recipientId].sort();
+  const conversationId=members.join('_');
+  const now=new Date().toISOString();
+  const conversationRef=doc(db,'conversations',conversationId);
+  await setDoc(conversationRef,{userId:sender.id,members,memberNames:{[sender.id]:identity.nickname,[recipientId]:recipientName},lastMessage:value.slice(0,500),lastSenderId:sender.id,updatedAt:now},{merge:true});
+  await updateDoc(conversationRef,{[`unreadBy.${recipientId}`]:increment(1)}).catch(()=>undefined);
+  await addDoc(collection(db,'conversations',conversationId,'messages'),{userId:sender.id,senderId:sender.id,senderName:identity.nickname,recipientId,text:value.slice(0,2000),createdAt:now,read:false});
+}
