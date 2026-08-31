@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BadgeCheck, Download, Flag, Heart, MessageCircle, MessageSquareText, MoreHorizontal, Send, Share2, UserCheck, UserPlus, XCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { addComment, notifyUser, OFFICIAL_MUNGWELE_ID, reportPost, sharePost, subscribeComments, subscribeFollow, subscribeLikes, toggleFollow, toggleLike, sendMessage, type CommunityPost } from '../../services/socialService';
+import { addComment, notifyUser, reportPost, sharePost, subscribeComments, subscribeFollow, subscribeLikes, toggleFollow, toggleLike, sendMessage, type CommunityPost } from '../../services/socialService';
 import { getMDigiProfile, type MDigiProfile } from '../../services/mdigiService';
 import { DownloadOptionsModal } from '../common/DownloadOptionsModal';
 import type { GenerationRecord } from '../../types';
@@ -19,7 +19,6 @@ export const CommunityPostCard: React.FC<{ post: CommunityPost }> = ({ post }) =
   const [liveProfile, setLiveProfile] = useState<MDigiProfile | null>(null);
 
   const profileId = post.userId || post.authorId;
-  const targetId = post.isOfficial ? OFFICIAL_MUNGWELE_ID : post.authorId;
   const canFollow = Boolean(user.id && post.userId && user.id !== post.userId && !post.isOfficial);
   const liked = likes.includes(user.id);
   const visibleName = liveProfile?.nickname || post.authorName || 'Créateur MUNGWELE';
@@ -63,16 +62,8 @@ export const CommunityPostCard: React.FC<{ post: CommunityPost }> = ({ post }) =
 
   return <article className="relative overflow-hidden rounded-[22px] border border-white/10 bg-[#0a1324]/95 shadow-xl">
     <div className="flex items-center gap-3 p-3.5 sm:p-4">
-      <button onClick={openProfile} aria-label={`Voir le profil de ${visibleName}`} className="h-11 w-11 shrink-0 overflow-hidden rounded-full ring-2 ring-white/10">
-        {visibleAvatar ? <img src={visibleAvatar} alt={visibleName} className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center bg-gradient-to-tr from-purple-600 to-cyan-500 text-sm font-black text-white">{visibleName.charAt(0) || 'M'}</span>}
-      </button>
-      <div className="min-w-0 flex-1">
-        <button onClick={openProfile} className="flex max-w-full items-center gap-1.5 text-left">
-          <span className="truncate text-sm font-black text-white hover:underline">{visibleName}</span>
-          {official && <BadgeCheck className="h-4 w-4 shrink-0 text-cyan-300" />}
-        </button>
-        <p className="mt-0.5 text-[10px] text-gray-500">{new Date(post.createdAt).toLocaleString('fr-FR')}</p>
-      </div>
+      <button onClick={openProfile} aria-label={`Voir le profil de ${visibleName}`} className="h-11 w-11 shrink-0 overflow-hidden rounded-full ring-2 ring-white/10">{visibleAvatar ? <img src={visibleAvatar} alt={visibleName} className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center bg-gradient-to-tr from-purple-600 to-cyan-500 text-sm font-black text-white">{visibleName.charAt(0) || 'M'}</span>}</button>
+      <div className="min-w-0 flex-1"><button onClick={openProfile} className="flex max-w-full items-center gap-1.5 text-left"><span className="truncate text-sm font-black text-white hover:underline">{visibleName}</span>{official && <BadgeCheck className="h-4 w-4 shrink-0 text-cyan-300" />}</button><p className="mt-0.5 text-[10px] text-gray-500">{new Date(post.createdAt).toLocaleString('fr-FR')}</p></div>
       {canFollow && <button onClick={() => void onFollow()} className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-2 text-[10px] font-black ${following ? 'border-white/10 bg-white/[0.04] text-gray-300' : 'border-purple-500/25 bg-purple-500/10 text-purple-200'}`}>{following ? <UserCheck className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}{following ? 'Abonné' : 'S’abonner'}</button>}
       <div className="relative"><button onClick={()=>setActionsOpen(v=>!v)} className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 hover:bg-white/[0.06]" aria-label="Plus d’options"><MoreHorizontal className="h-5 w-5"/></button>{actionsOpen&&<div className="absolute right-0 top-11 z-30 w-60 overflow-hidden rounded-2xl border border-white/10 bg-[#111827] p-1.5 shadow-2xl"><p className="px-3 py-2 text-[10px] font-black uppercase tracking-wider text-gray-600">Options de la publication</p>{post.allowCommunityDownload&&<button onClick={()=>{setActionsOpen(false);setDownloadOpen(true)}} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-xs font-bold text-gray-200 hover:bg-white/[0.05]"><Download className="h-4 w-4 text-cyan-300"/>Télécharger</button>}<button onClick={onNotInterested} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-xs font-bold text-gray-200 hover:bg-white/[0.05]"><XCircle className="h-4 w-4 text-amber-300"/>Pas intéressé(e)</button><button onClick={()=>void onReport()} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-xs font-bold text-rose-200 hover:bg-rose-500/10"><Flag className="h-4 w-4"/>Signaler</button></div>}</div>
     </div>
