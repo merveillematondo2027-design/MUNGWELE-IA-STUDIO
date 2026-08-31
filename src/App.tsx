@@ -22,7 +22,6 @@ import { MediaViewerModal } from './components/common/MediaViewerModal';
 import { AuthModal } from './components/views/AuthModal';
 import { subscribeToFirebaseUser } from './services/authService';
 import { ensureOfficialMDigiAccount } from './services/mdigiService';
-import { auth } from './lib/firebase';
 import { AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -40,17 +39,25 @@ const MainLayout: React.FC = () => {
       (profile) => {
         if (!mounted) return;
         if (profile) {
-          const effectiveProfile = profile.role === 'admin' ? { ...profile, credits: ADMIN_UNLIMITED_CREDITS, plan: 'studio' as const } : profile;
+          const effectiveProfile = profile.role === 'admin'
+            ? { ...profile, credits: ADMIN_UNLIMITED_CREDITS, plan: 'studio' as const }
+            : profile;
           setUser(effectiveProfile);
           setAuthStatus('authenticated');
-          if (effectiveProfile.role === 'admin') void ensureOfficialMDigiAccount(effectiveProfile).catch((error) => console.warn('Official M.Digi bootstrap warning:', error));
-        } else { resetUser(); setAuthStatus('unauthenticated'); }
+          if (effectiveProfile.role === 'admin') {
+            void ensureOfficialMDigiAccount(effectiveProfile).catch((error) => console.warn('Official M.Digi bootstrap warning:', error));
+          }
+        } else {
+          resetUser();
+          setAuthStatus('unauthenticated');
+        }
       },
       (error) => {
         if (!mounted) return;
         console.warn('Firebase profile/session sync warning:', error);
-        if (auth.currentUser) { setAuthStatus('authenticated'); addNotification('warning', 'Profil à synchroniser', 'Votre connexion Firebase est active, mais certaines données Firestore doivent encore être synchronisées.'); }
-        else { resetUser(); setAuthStatus('unauthenticated'); }
+        resetUser();
+        setAuthStatus('unauthenticated');
+        addNotification('error', 'Profil indisponible', 'La session n’est pas ouverte tant que le profil Firestore réel n’est pas disponible. Reconnectez-vous après vérification de Firebase.');
       },
     );
     return () => { mounted = false; unsubscribe(); };
@@ -58,7 +65,11 @@ const MainLayout: React.FC = () => {
 
   const signedIn = authStatus === 'authenticated' && Boolean(user.id);
   const requestLogin = () => { setAuthMode('login'); setIsAuthModalOpen(true); };
-  const protectedTabs = new Set(['notifications','messages','projects-image','projects-video','projects-clips','projects-music','studio-image','studio-video','studio-clips','studio-music','creations','profile','admin','admin-home','admin-users','admin-credits','admin-subscriptions','admin-library','admin-logs','admin-usage']);
+  const protectedTabs = new Set([
+    'notifications','messages','projects-image','projects-video','projects-clips','projects-music',
+    'studio-image','studio-video','studio-clips','studio-music','creations','subscription','profile',
+    'admin','admin-home','admin-users','admin-credits','admin-subscriptions','admin-library','admin-logs','admin-usage',
+  ]);
   const needsLogin = !signedIn && protectedTabs.has(activeTab);
   const isStudioTab = activeTab === 'studio-image' || activeTab === 'studio-video' || activeTab === 'studio-clips' || activeTab === 'studio-music';
   const canOpenAdmin = signedIn && user.role === 'admin';
