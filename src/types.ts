@@ -24,6 +24,7 @@ export interface MDigiProfile {
   nickname: string;
   avatar?: string;
   bio?: string;
+  isOfficial?: boolean;
   showFollowers: boolean;
   showFriends: boolean;
   showFollowing: boolean;
@@ -139,19 +140,20 @@ export interface PlanConfig {
   maxDownloadResolution?: 'standard' | '480p' | '720p' | '780p' | '1080p' | '4k';
 }
 
-export interface CreditPackConfig { id: string; name: string; credits: number; priceUsd: number; enabled: boolean; }
-
-export interface ApiProviderSetting {
+export interface CreditPack {
   id: string;
   name: string;
-  providerKey: 'gemini' | 'openai' | 'veo' | 'suno' | 'elevenlabs' | 'runway' | 'minimax' | 'kling' | 'seedance';
-  category: 'image' | 'video' | 'clips' | 'music' | 'text';
+  credits: number;
+  priceUsd: number;
   enabled: boolean;
-  isConfigured: boolean;
-  isDemoFallback: boolean;
-  modelName: string;
-  latencyAvgMs: number;
-  creditCost: number;
+}
+
+export interface NotificationItem {
+  id: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+  title: string;
+  message: string;
+  timestamp: string;
 }
 
 export interface AppSettings {
@@ -161,9 +163,22 @@ export interface AppSettings {
   announcementBanner: string;
   annualDiscountPercent: number;
   subscriptionPlans: PlanConfig[];
-  creditPacks: CreditPackConfig[];
-  creditCosts: { imageStandard: number; imageHd: number; video5s: number; video10s: number; musicTrack: number; promptEnhance: number; };
+  creditPacks: CreditPack[];
+  creditCosts: {
+    imageStandard: number;
+    imageHd: number;
+    video5s: number;
+    video10s: number;
+    musicTrack: number;
+    promptEnhance: number;
+  };
 }
 
-export interface TechnicalLog { id: string; timestamp: string; type: 'info' | 'warn' | 'error' | 'success'; module: string; message: string; details?: Record<string, unknown>; userId?: string; }
-export interface NotificationItem { id: string; type: 'success' | 'error' | 'info' | 'warning'; title: string; message: string; timestamp: string; read?: boolean; }
+export interface ApiProviderSetting {
+  id: string;
+  name: string;
+  category: 'image' | 'video' | 'music' | 'general';
+  enabled: boolean;
+  status: 'connected' | 'disconnected' | 'error';
+  model?: string;
+}
