@@ -18,47 +18,58 @@ const nav = [
   { id: 'search', label: 'Recherche', icon: Search },
 ] as const;
 
+const generationToPost = (id: string, g: any): CommunityPost => ({
+  id,
+  userId: g.userId || '',
+  authorId: g.publicationAuthorId || g.userId || '',
+  authorName: g.authorName || 'Créateur MUNGWELE',
+  authorAvatar: g.authorAvatar || '',
+  isOfficial: Boolean(g.isOfficialPublication),
+  title: g.title || 'Création MUNGWELE',
+  caption: g.publicationCaption || g.prompt || '',
+  type: g.type,
+  mediaUrl: g.resultUrl,
+  thumbnailUrl: g.thumbnailUrl || '',
+  generationId: id,
+  createdAt: g.publicAt || g.updatedAt || g.createdAt || new Date(0).toISOString(),
+  allowCommunityDownload: Boolean(g.allowCommunityDownload),
+});
+
 export const CommunityFeed: React.FC<{ compact?: boolean; socialShell?: boolean }> = ({ compact = false, socialShell = false }) => {
   const { user } = useApp();
-  const [items, setItems] = useState<CommunityPost[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [communityItems, setCommunityItems] = useState<CommunityPost[]>([]);
+  const [legacyItems, setLegacyItems] = useState<CommunityPost[]>([]);
+  const [communityReady, setCommunityReady] = useState(false);
+  const [legacyReady, setLegacyReady] = useState(false);
   const [queryText, setQueryText] = useState('');
   const [section, setSection] = useState<SocialSection>('home');
   const [followingIds, setFollowingIds] = useState<string[]>([]);
 
   useEffect(() => {
-    let fallbackUnsubscribe: (() => void) | undefined;
-    const primaryUnsubscribe = onSnapshot(collection(db, 'communityPosts'), (snap) => {
-      const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<CommunityPost, 'id'>) }));
-      rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-      setItems(rows); setLoading(false);
-    }, () => {
-      const publicQuery = query(collection(db, 'generations'), where('isPublic', '==', true));
-      fallbackUnsubscribe = onSnapshot(publicQuery, (snap) => {
-        const rows: CommunityPost[] = snap.docs.map((d) => {
-          const g: any = d.data();
-          return {
-            id: d.id,
-            userId: g.userId || '',
-            authorId: g.publicationAuthorId || g.userId || '',
-            authorName: g.authorName || 'Créateur MUNGWELE',
-            authorAvatar: g.authorAvatar || '',
-            isOfficial: Boolean(g.isOfficialPublication),
-            title: g.title || 'Création MUNGWELE',
-            caption: g.publicationCaption || g.prompt || '',
-            type: g.type,
-            mediaUrl: g.resultUrl,
-            thumbnailUrl: g.thumbnailUrl || g.resultUrl,
-            generationId: d.id,
-            createdAt: g.publicAt || g.updatedAt || g.createdAt || new Date(0).toISOString(),
-            allowCommunityDownload: Boolean(g.allowCommunityDownload),
-          };
-        }).filter((row) => Boolean(row.mediaUrl));
-        rows.sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
-        setItems(rows); setLoading(false);
-      }, () => { setItems([]); setLoading(false); });
+    const unsubscribeCommunity = onSnapshot(collection(db, 'communityPosts'), (snap) => {
+      const rows = snap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as Omit<CommunityPost, 'id'>) }))
+        .filter((row) => Boolean(row.mediaUrl));
+      setCommunityItems(rows);
+      setCommunityReady(true);
+    }, (error) => {
+      console.warn('Community mirror unavailable; public generations remain visible:', error);
+      setCommunityItems([]);
+      setCommunityReady(true);
     });
-    return () => { primaryUnsubscribe(); fallbackUnsubscribe?.(); };
+
+    const publicQuery = query(collection(db, 'generations'), where('isPublic', '==', true));
+    const unsubscribeLegacy = onSnapshot(publicQuery, (snap) => {
+      const rows = snap.docs.map((d) => generationToPost(d.id, d.data())).filter((row) => Boolean(row.mediaUrl));
+      setLegacyItems(rows);
+      setLegacyReady(true);
+    }, (error) => {
+      console.warn('Public generations feed unavailable:', error);
+      setLegacyItems([]);
+      setLegacyReady(true);
+    });
+
+    return () => { unsubscribeCommunity(); unsubscribeLegacy(); };
   }, []);
 
   useEffect(() => {
@@ -66,6 +77,19 @@ export const CommunityFeed: React.FC<{ compact?: boolean; socialShell?: boolean 
     const q = query(collection(db, 'follows'), where('followerId', '==', user.id));
     return onSnapshot(q, (snap) => setFollowingIds(snap.docs.map((d) => String(d.data().targetId || '')).filter(Boolean)), () => setFollowingIds([]));
   }, [user.id]);
+
+  const items = useMemo(() => {
+    const byGeneration = new Map<string, CommunityPost>();
+    legacyItems.forEach((item) => byGeneration.set(item.generationId || item.id, item));
+    communityItems.forEach((item) => {
+      const key = item.generationId || item.id;
+      const legacy = byGeneration.get(key);
+      byGeneration.set(key, legacy ? { ...legacy, ...item, thumbnailUrl: item.thumbnailUrl || legacy.thumbnailUrl } : item);
+    });
+    return Array.from(byGeneration.values()).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  }, [communityItems, legacyItems]);
+
+  const loading = !communityReady && !legacyReady;
 
   const filtered = useMemo(() => {
     const needle = queryText.trim().toLowerCase();
@@ -99,6 +123,6 @@ export const CommunityFeed: React.FC<{ compact?: boolean; socialShell?: boolean 
     {section === 'friends' && !user.id && <div className="mx-auto mb-4 max-w-3xl rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-gray-400">Connectez-vous pour retrouver les publications des comptes M.Digi que vous suivez.</div>}
     {section === 'marketplace' && <div className="mx-auto mb-4 max-w-3xl rounded-2xl border border-purple-500/15 bg-purple-500/[0.05] p-4"><p className="text-sm font-black text-white">Marketplace M.Digi</p><p className="mt-1 text-xs text-gray-400">Contenus dont le créateur autorise le téléchargement. Les règles de qualité suivent toujours votre abonnement MUNGWELE AI STUDIO.</p></div>}
 
-    {loading ? <div className="flex min-h-[220px] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-cyan-300"/></div> : filtered.length===0 ? <div className="mx-auto flex min-h-[220px] max-w-3xl flex-col items-center justify-center rounded-[24px] border border-dashed border-white/15 bg-white/[0.025] text-center"><Search className="mb-3 h-8 w-8 text-cyan-300/70"/><p className="text-sm font-black text-white">Aucun contenu ici pour le moment</p><p className="mt-2 max-w-sm px-6 text-xs leading-5 text-gray-500">Changez d’onglet ou publiez une création depuis MUNGWELE AI STUDIO.</p></div> : <div className="mx-auto max-w-3xl space-y-3">{filtered.map((post)=><CommunityPostCard key={post.id} post={post}/>)}</div>}
+    {loading ? <div className="flex min-h-[220px] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-cyan-300"/></div> : filtered.length===0 ? <div className="mx-auto flex min-h-[220px] max-w-3xl flex-col items-center justify-center rounded-[24px] border border-dashed border-white/15 bg-white/[0.025] text-center"><Search className="mb-3 h-8 w-8 text-cyan-300/70"/><p className="text-sm font-black text-white">Aucun contenu ici pour le moment</p><p className="mt-2 max-w-sm px-6 text-xs leading-5 text-gray-500">Changez d’onglet ou publiez une création depuis MUNGWELE AI STUDIO.</p></div> : <div className="mx-auto max-w-3xl space-y-3">{filtered.map((post)=><CommunityPostCard key={`${post.generationId || post.id}-${post.id}`} post={post}/>)}</div>}
   </section>;
 };
