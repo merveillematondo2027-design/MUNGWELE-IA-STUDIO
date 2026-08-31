@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import type { UserProfile } from '../types';
 import { db, storage } from '../lib/firebase';
@@ -35,6 +35,9 @@ export async function createMDigiAccount(input: {
   if (nickname.length < 2) throw new Error('Le surnom doit contenir au moins 2 caractères.');
   if (phone.length < 7) throw new Error('Un numéro de téléphone valide est obligatoire.');
 
+  const existing = await getMDigiProfile(input.user.id);
+  if (existing) return existing;
+
   const now = new Date().toISOString();
   const profile = {
     nickname,
@@ -48,14 +51,16 @@ export async function createMDigiAccount(input: {
     updatedAt: now,
   };
 
-  await setDoc(doc(db, 'mdigiProfiles', input.user.id), profile, { merge: true });
-  await setDoc(doc(db, 'mdigiPrivate', input.user.id), {
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'mdigiProfiles', input.user.id), profile);
+  batch.set(doc(db, 'mdigiPrivate', input.user.id), {
     studioUserId: input.user.id,
     studioEmail: input.user.email || '',
     phone,
     createdAt: now,
     updatedAt: now,
-  }, { merge: true });
+  });
+  await batch.commit();
 
   return { id: input.user.id, ...profile };
 }
