@@ -24,6 +24,7 @@ export interface MDigiProfile {
   nickname: string;
   avatar?: string;
   bio?: string;
+  isOfficial?: boolean;
   showFollowers: boolean;
   showFriends: boolean;
   showFollowing: boolean;

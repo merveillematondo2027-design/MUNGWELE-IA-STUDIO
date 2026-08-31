@@ -42,6 +42,17 @@ service firebase.storage {
       allow delete: if isOwner(userId) || isAdmin();
     }
 
+    // Photo de profil publique du compte social M.Digi.
+    // Lecture publique comme sur un réseau social, écriture uniquement par le
+    // propriétaire du compte ou l'administration MUNGWELE.
+    match /mdigi/{userId}/avatar/{fileName} {
+      allow read: if true;
+      allow create, update: if (isOwner(userId) || isAdmin())
+        && request.resource.size <= 5 * 1024 * 1024
+        && isImage();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
     match /users/{userId}/uploads/{fileName} {
       allow read: if isOwner(userId) || isAdmin();
       allow create, update: if (isOwner(userId) || isAdmin())
@@ -50,8 +61,6 @@ service firebase.storage {
       allow delete: if isOwner(userId) || isAdmin();
     }
 
-    // Les résultats IA peuvent être persistés par leur propriétaire afin que
-    // la bibliothèque et l'administration restent synchronisées après reload.
     match /users/{userId}/generations/{allPaths=**} {
       allow read: if isOwner(userId) || isAdmin();
       allow create, update: if (isOwner(userId) || isAdmin())

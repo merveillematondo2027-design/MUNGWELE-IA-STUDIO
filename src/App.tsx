@@ -21,6 +21,7 @@ import { NotificationToast } from './components/common/NotificationToast';
 import { MediaViewerModal } from './components/common/MediaViewerModal';
 import { AuthModal } from './components/views/AuthModal';
 import { subscribeToFirebaseUser } from './services/authService';
+import { ensureOfficialMDigiAccount } from './services/mdigiService';
 import { auth } from './lib/firebase';
 import { AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -39,8 +40,14 @@ const MainLayout: React.FC = () => {
       (profile) => {
         if (!mounted) return;
         if (profile) {
-          setUser(profile.role === 'admin' ? { ...profile, credits: ADMIN_UNLIMITED_CREDITS, plan: 'studio' } : profile);
+          const effectiveProfile = profile.role === 'admin'
+            ? { ...profile, credits: ADMIN_UNLIMITED_CREDITS, plan: 'studio' as const }
+            : profile;
+          setUser(effectiveProfile);
           setAuthStatus('authenticated');
+          if (effectiveProfile.role === 'admin') {
+            void ensureOfficialMDigiAccount(effectiveProfile).catch((error) => console.warn('Official M.Digi bootstrap warning:', error));
+          }
         } else {
           resetUser();
           setAuthStatus('unauthenticated');
