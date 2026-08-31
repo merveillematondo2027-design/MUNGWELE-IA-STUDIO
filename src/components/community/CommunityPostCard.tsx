@@ -1,10 +1,52 @@
-import React, { useEffect, useState } from 'react';
-import { BadgeCheck, Download, Flag, Heart, MessageCircle, MessageSquareText, MoreHorizontal, Send, Share2, UserCheck, UserPlus, XCircle } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { BadgeCheck, Download, Flag, Heart, MessageCircle, MessageSquareText, MoreHorizontal, Play, Send, Share2, UserCheck, UserPlus, XCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { addComment, notifyUser, reportPost, sharePost, subscribeComments, subscribeFollow, subscribeLikes, toggleFollow, toggleLike, sendMessage, type CommunityPost } from '../../services/socialService';
 import { getMDigiProfile, type MDigiProfile } from '../../services/mdigiService';
 import { DownloadOptionsModal } from '../common/DownloadOptionsModal';
 import type { GenerationRecord } from '../../types';
+
+const CommunityVideo: React.FC<{ post: CommunityPost }> = ({ post }) => {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [nearViewport, setNearViewport] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const hasPoster = Boolean(post.thumbnailUrl && post.thumbnailUrl !== post.mediaUrl);
+
+  useEffect(() => {
+    const node = hostRef.current;
+    if (!node) return;
+    if (!('IntersectionObserver' in window)) { setNearViewport(true); return; }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setNearViewport(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '1100px 0px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [post.mediaUrl]);
+
+  return <div ref={hostRef} className="relative min-h-[220px] overflow-hidden bg-black sm:min-h-[320px]">
+    {!ready && hasPoster && <img src={post.thumbnailUrl} alt="Aperçu vidéo" className="absolute inset-0 h-full w-full object-contain" draggable={false} />}
+    {!ready && !hasPoster && <div className="absolute inset-0 flex min-h-[220px] items-center justify-center bg-gradient-to-b from-[#111827] to-black sm:min-h-[320px]"><div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white"><Play className="ml-1 h-7 w-7 fill-current" /></div></div>}
+    {nearViewport && !failed && <video
+      src={post.mediaUrl}
+      controls
+      playsInline
+      preload="auto"
+      poster={hasPoster ? post.thumbnailUrl : undefined}
+      controlsList="nodownload noremoteplayback"
+      disablePictureInPicture
+      onCanPlay={() => setReady(true)}
+      onLoadedData={() => setReady(true)}
+      onError={() => setFailed(true)}
+      onContextMenu={(e)=>e.preventDefault()}
+      className={`relative z-10 max-h-[620px] w-full bg-black object-contain transition-opacity duration-200 ${ready ? 'opacity-100' : 'opacity-0'}`}
+    />}
+    {failed && <div className="relative z-20 flex min-h-[220px] items-center justify-center bg-black px-6 text-center text-xs text-gray-500 sm:min-h-[320px]">Cette vidéo n’est plus disponible depuis sa source. La publication reste conservée.</div>}
+  </div>;
+};
 
 export const CommunityPostCard: React.FC<{ post: CommunityPost }> = ({ post }) => {
   const { user, addNotification, setActiveTab } = useApp();
@@ -70,7 +112,7 @@ export const CommunityPostCard: React.FC<{ post: CommunityPost }> = ({ post }) =
       <div className="relative"><button onClick={()=>setActionsOpen(v=>!v)} className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 hover:bg-white/[0.06]" aria-label="Plus d’options"><MoreHorizontal className="h-5 w-5"/></button>{actionsOpen&&<div className="absolute right-0 top-11 z-30 w-60 overflow-hidden rounded-2xl border border-white/10 bg-[#111827] p-1.5 shadow-2xl"><p className="px-3 py-2 text-[10px] font-black uppercase tracking-wider text-gray-600">Options de la publication</p>{post.allowCommunityDownload&&<button onClick={()=>{setActionsOpen(false);setDownloadOpen(true)}} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-xs font-bold text-gray-200 hover:bg-white/[0.05]"><Download className="h-4 w-4 text-cyan-300"/>Télécharger selon mon offre</button>}<button onClick={onNotInterested} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-xs font-bold text-gray-200 hover:bg-white/[0.05]"><XCircle className="h-4 w-4 text-amber-300"/>Pas intéressé(e)</button><button onClick={()=>void onReport()} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-xs font-bold text-rose-200 hover:bg-rose-500/10"><Flag className="h-4 w-4"/>Signaler</button></div>}</div>
     </div>
     <div className="px-4 pb-3">{post.caption && <p className="whitespace-pre-wrap text-sm leading-6 text-gray-200">{post.caption}</p>}<p className="mt-2 text-xs font-black text-white">{post.title}</p></div>
-    {post.type === 'music' ? <div className="flex aspect-[16/7] items-center justify-center bg-gradient-to-br from-blue-950 to-purple-950 text-blue-200">Création musicale MUNGWELE</div> : post.type === 'video' || post.type === 'clips' ? <video src={post.mediaUrl} controls playsInline preload="metadata" controlsList="nodownload noremoteplayback" disablePictureInPicture onContextMenu={(e)=>e.preventDefault()} className="max-h-[620px] w-full bg-black object-contain" /> : <img src={post.mediaUrl} alt={post.title} onContextMenu={(e)=>e.preventDefault()} draggable={false} className="max-h-[620px] w-full select-none bg-black/30 object-contain" />}
+    {post.type === 'music' ? <div className="flex aspect-[16/7] items-center justify-center bg-gradient-to-br from-blue-950 to-purple-950 text-blue-200">Création musicale MUNGWELE</div> : post.type === 'video' || post.type === 'clips' ? <CommunityVideo post={post} /> : <img src={post.mediaUrl} alt={post.title} loading="lazy" decoding="async" onContextMenu={(e)=>e.preventDefault()} draggable={false} className="max-h-[620px] w-full select-none bg-black/30 object-contain" />}
     <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-[10px] text-gray-500"><span>{likes.length} J’aime</span><button onClick={() => setCommentsOpen((v) => !v)}>{comments.length} commentaire{comments.length > 1 ? 's' : ''}</button></div>
     <div className={`grid ${actionCols} border-b border-white/10 p-1`}><button onClick={() => void onLike()} className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[9px] font-bold sm:flex-row sm:text-[11px] ${liked ? 'text-pink-300' : 'text-gray-400 hover:bg-white/[0.04]'}`}><Heart className={`h-4 w-4 ${liked ? 'fill-current' : ''}`} /> J’aime</button><button onClick={() => setCommentsOpen(true)} className="flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[9px] font-bold text-gray-400 hover:bg-white/[0.04] sm:flex-row sm:text-[11px]"><MessageCircle className="h-4 w-4" /> Commenter</button><button onClick={() => void onShare()} className="flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[9px] font-bold text-gray-400 hover:bg-white/[0.04] sm:flex-row sm:text-[11px]"><Share2 className="h-4 w-4" /> Partager</button><button onClick={() => void onMessage()} className="flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[9px] font-bold text-gray-400 hover:bg-white/[0.04] sm:flex-row sm:text-[11px]"><MessageSquareText className="h-4 w-4" /> Message</button>{post.allowCommunityDownload&&<button onClick={()=>setDownloadOpen(true)} className="flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[9px] font-bold text-cyan-300 hover:bg-cyan-500/[0.06] sm:flex-row sm:text-[11px]"><Download className="h-4 w-4"/>Télécharger</button>}</div>
     {commentsOpen && <div className="p-3"><div className="space-y-2">{comments.map((c) => <div key={c.id} className="rounded-2xl bg-white/[0.04] px-3 py-2"><p className="text-[10px] font-black text-white">{c.userName}</p><p className="mt-1 text-xs leading-5 text-gray-300">{c.text}</p></div>)}</div><div className="mt-3 flex items-end gap-2 rounded-2xl border border-white/10 bg-[#07101f] p-2"><textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={1} placeholder="Écrire un commentaire…" className="max-h-24 flex-1 resize-none bg-transparent px-2 py-2 text-xs text-white outline-none placeholder:text-gray-600" /><button onClick={() => void onComment()} disabled={!comment.trim()} className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-600 text-white disabled:opacity-40"><Send className="h-3.5 w-3.5" /></button></div></div>}
