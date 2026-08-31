@@ -1,6 +1,7 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import type { UserProfile } from '../types';
-import { db } from '../lib/firebase';
+import { db, storage } from '../lib/firebase';
 
 export type MDigiProfile = {
   id: string;
@@ -67,7 +68,7 @@ export async function ensureOfficialMDigiAccount(user: UserProfile): Promise<MDi
   const now = new Date().toISOString();
   const profile = {
     nickname: OFFICIAL_MDIGI_NICKNAME,
-    avatar: user.avatar || '',
+    avatar: existing?.avatar || user.avatar || '',
     bio: 'Compte officiel de MUNGWELE AI.',
     isOfficial: true,
     showFollowers: true,
@@ -78,4 +79,17 @@ export async function ensureOfficialMDigiAccount(user: UserProfile): Promise<MDi
   };
   await setDoc(doc(db, 'mdigiProfiles', user.id), profile, { merge: true });
   return { id: user.id, ...profile };
+}
+
+export async function uploadMDigiAvatar(userId: string, file: File): Promise<string> {
+  if (!userId) throw new Error('Connexion requise.');
+  if (!file.type.startsWith('image/')) throw new Error('Sélectionnez une image JPG, PNG ou WEBP.');
+  if (file.size > 5 * 1024 * 1024) throw new Error('La photo de profil ne doit pas dépasser 5 Mo.');
+
+  const extension = file.type.includes('png') ? 'png' : file.type.includes('webp') ? 'webp' : 'jpg';
+  const target = storageRef(storage, `mdigi/${userId}/avatar/profile-${Date.now()}.${extension}`);
+  await uploadBytes(target, file, { contentType: file.type });
+  const avatar = await getDownloadURL(target);
+  await setDoc(doc(db, 'mdigiProfiles', userId), { avatar, updatedAt: new Date().toISOString() }, { merge: true });
+  return avatar;
 }
