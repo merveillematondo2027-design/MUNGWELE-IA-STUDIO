@@ -123,7 +123,6 @@ export const MarketCashPaymentModal: React.FC<MarketCashPaymentModalProps> = ({ 
     const pan = cardNumber.replace(/\D/g, '');
     const cvvDigits = cvv.replace(/\D/g, '');
     if (pan.length < 12 || pan.length > 19) return setError('Numéro de carte invalide.');
-    if (!cardHolder.trim()) return setError('Nom du titulaire requis.');
     if (!/^\d{2}\/\d{2}$/.test(expiry)) return setError('Expiration attendue au format MM/AA.');
     if (cvvDigits.length < 3 || cvvDigits.length > 4) return setError('CVV requis. Il doit toujours être saisi manuellement.');
 
@@ -131,7 +130,7 @@ export const MarketCashPaymentModal: React.FC<MarketCashPaymentModalProps> = ({ 
     try {
       const result = await payWithMarketCashCard({
         target,
-        card: { cardNumber: pan, cardHolder, expiry, cvv: cvvDigits },
+        card: { cardNumber: pan, cardHolder: cardHolder.trim() || 'CLIENT MARKET-CASH', expiry, cvv: cvvDigits },
         captureMethod,
         userId,
         userEmail,
@@ -162,7 +161,7 @@ export const MarketCashPaymentModal: React.FC<MarketCashPaymentModalProps> = ({ 
 
         <form onSubmit={submit} className="space-y-5 p-5 sm:p-6">
           <div className="rounded-2xl border border-emerald-500/20 bg-emerald-950/20 p-4">
-            <div className="flex gap-3"><ShieldCheck className="h-5 w-5 shrink-0 text-emerald-300" /><div><p className="text-sm font-black text-white">Carte Market-Cash</p><p className="mt-1 text-xs leading-5 text-gray-400">Vous pouvez saisir la carte, scanner son QR ou lire son tag NFC. Le CVV n'est jamais extrait par QR ou NFC : il reste obligatoirement manuel.</p></div></div>
+            <div className="flex gap-3"><ShieldCheck className="h-5 w-5 shrink-0 text-emerald-300" /><div><p className="text-sm font-black text-white">Carte Market-Cash</p><p className="mt-1 text-xs leading-5 text-gray-400">Le paiement est vérifié principalement avec le numéro de carte, la date d'expiration et le CVV saisi manuellement. Le nom du titulaire est indicatif et une différence d'écriture ne bloque pas le paiement.</p></div></div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
@@ -176,7 +175,7 @@ export const MarketCashPaymentModal: React.FC<MarketCashPaymentModalProps> = ({ 
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-2 sm:col-span-2"><span className="text-xs font-bold text-gray-300">Numéro de carte</span><input value={cardNumber} onChange={(e)=>setCardNumber(normalizeCardNumber(e.target.value))} inputMode="numeric" autoComplete="cc-number" placeholder="0000 0000 0000 0000" className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-purple-500"/></label>
-            <label className="space-y-2"><span className="text-xs font-bold text-gray-300">Titulaire</span><input value={cardHolder} onChange={(e)=>setCardHolder(e.target.value.slice(0,80))} autoComplete="cc-name" placeholder="NOM DU TITULAIRE" className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm uppercase text-white outline-none focus:border-purple-500"/></label>
+            <label className="space-y-2"><span className="text-xs font-bold text-gray-300">Titulaire <span className="font-normal text-gray-500">• indicatif</span></span><input value={cardHolder} onChange={(e)=>setCardHolder(e.target.value.slice(0,80))} autoComplete="cc-name" placeholder="NOM (facultatif)" className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm uppercase text-white outline-none focus:border-purple-500"/></label>
             <div className="grid grid-cols-2 gap-3">
               <label className="space-y-2"><span className="text-xs font-bold text-gray-300">Expiration</span><input value={expiry} onChange={(e)=>setExpiry(normalizeExpiry(e.target.value))} inputMode="numeric" autoComplete="cc-exp" placeholder="MM/AA" className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-purple-500"/></label>
               <label className="space-y-2"><span className="text-xs font-bold text-amber-300">CVV • manuel</span><input value={cvv} onChange={(e)=>setCvv(e.target.value.replace(/\D/g,'').slice(0,4))} inputMode="numeric" autoComplete="cc-csc" type="password" placeholder="•••" className="w-full rounded-2xl border border-amber-500/30 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-amber-400"/></label>
