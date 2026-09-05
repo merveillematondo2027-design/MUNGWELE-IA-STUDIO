@@ -49,12 +49,18 @@ function outputInfo(format: string): OutputInfo | null {
   return null;
 }
 
-function xml(value: string) { return value.replace(/[<>&"']/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c] || c)); }
+function xml(value: string) {
+  return value.replace(/[<>&"']/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c] || c));
+}
 
 async function watermarkBuffer(ownerName: string) {
   const markPath = path.join(process.cwd(), 'src/assets/mungwele-ai-official-mark.svg');
   let mark = '';
-  try { mark = await fs.readFile(markPath, 'utf8'); } catch { mark = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text x="5" y="65" font-size="60" fill="white">M</text></svg>'; }
+  try {
+    mark = await fs.readFile(markPath, 'utf8');
+  } catch {
+    mark = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text x="5" y="65" font-size="60" fill="white">M</text></svg>';
+  }
   const encoded = Buffer.from(mark).toString('base64');
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="110"><rect width="640" height="110" rx="20" fill="rgba(0,0,0,.50)"/><image href="data:image/svg+xml;base64,${encoded}" x="14" y="15" width="78" height="78"/><text x="108" y="48" font-family="Arial,sans-serif" font-size="27" font-weight="700" fill="white">MUNGWELE AI</text><text x="108" y="80" font-family="Arial,sans-serif" font-size="22" fill="white">@${xml(ownerName || 'Créateur MUNGWELE')}</text></svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
@@ -64,13 +70,17 @@ async function runFfmpeg(args: string[]) {
   if (!ffmpegPath) throw new Error('Convertisseur vidéo/audio indisponible.');
   await new Promise<void>((resolve, reject) => {
     const child = spawn(ffmpegPath, args, { stdio:['ignore','ignore','pipe'] });
-    let stderr=''; child.stderr.on('data',(chunk)=>{stderr += String(chunk).slice(-4000);});
-    child.on('error',reject); child.on('close',(code)=>code===0?resolve():reject(new Error(`Conversion média échouée (${code}). ${stderr.slice(-900)}`)));
+    let stderr = '';
+    child.stderr.on('data', (chunk) => { stderr += String(chunk).slice(-4000); });
+    child.on('error', reject);
+    child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`Conversion média échouée (${code}). ${stderr.slice(-900)}`)));
   });
 }
 
 async function transcode(input: Buffer, kind: Kind, format: string, community: boolean, ownerName: string) {
-  const info = outputInfo(format); if (!info) throw new Error('Format de téléchargement invalide.');
+  const info = outputInfo(format);
+  if (!info) throw new Error('Format de téléchargement invalide.');
+
   if (kind === 'image') {
     let pipeline = sharp(input).resize({ width: info.width || 1024, withoutEnlargement: false, fit:'inside' });
     if (community) {
@@ -85,57 +95,126 @@ async function transcode(input: Buffer, kind: Kind, format: string, community: b
     return { bytes: await pipeline.png().toBuffer(), ...info };
   }
 
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(),'mungwele-download-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mungwele-download-'));
   const inputPath = path.join(dir, kind === 'music' ? 'input.audio' : 'input.video');
   const outputPath = path.join(dir, `output.${info.ext}`);
+
   try {
-    await fs.writeFile(inputPath,input);
+    await fs.writeFile(inputPath, input);
     if (kind === 'music') {
-      const args = ['-y','-i',inputPath];
-      if (info.ext === 'wav') args.push('-c:a','pcm_s16le'); else args.push('-c:a','libmp3lame','-b:a',info.bitrate || '192k');
-      if (community) args.push('-metadata','artist',`MUNGWELE AI • ${ownerName}`,'-metadata','comment',`Téléchargé depuis la communauté MUNGWELE AI • Propriétaire: ${ownerName}`);
-      args.push(outputPath); await runFfmpeg(args);
+      const args = ['-y', '-i', inputPath];
+      if (info.ext === 'wav') args.push('-c:a', 'pcm_s16le');
+      else args.push('-c:a', 'libmp3lame', '-b:a', info.bitrate || '192k');
+      if (community) {
+        args.push(
+          '-metadata', 'artist', `MUNGWELE AI • ${ownerName}`,
+          '-metadata', 'comment', `Téléchargé depuis la communauté MUNGWELE AI • Propriétaire: ${ownerName}`,
+        );
+      }
+      args.push(outputPath);
+      await runFfmpeg(args);
     } else {
       const height = info.height || 480;
-      const args = ['-y','-i',inputPath];
+      const args = ['-y', '-i', inputPath];
       if (community) {
-        const wmPath = path.join(dir,'watermark.png'); await fs.writeFile(wmPath,await watermarkBuffer(ownerName));
-        args.push('-i',wmPath,'-filter_complex',`[0:v]scale=-2:${height}:flags=lanczos[base];[1:v]scale='min(560,iw)':'-1'[wm];[base][wm]overlay=W-w-24:H-h-24[outv]`,'-map','[outv]','-map','0:a?');
-      } else args.push('-vf',`scale=-2:${height}:flags=lanczos`);
-      args.push('-c:v','libx264','-preset','veryfast','-crf','20','-c:a','aac','-b:a','160k','-movflags','+faststart',outputPath);
+        const wmPath = path.join(dir, 'watermark.png');
+        await fs.writeFile(wmPath, await watermarkBuffer(ownerName));
+        args.push(
+          '-i', wmPath,
+          '-filter_complex', `[0:v]scale=-2:${height}:flags=lanczos[base];[1:v]scale='min(560,iw)':'-1'[wm];[base][wm]overlay=W-w-24:H-h-24[outv]`,
+          '-map', '[outv]',
+          '-map', '0:a?',
+        );
+      } else {
+        args.push('-vf', `scale=-2:${height}:flags=lanczos`);
+      }
+      args.push(
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-crf', '20',
+        '-c:a', 'aac',
+        '-b:a', '160k',
+        '-movflags', '+faststart',
+        outputPath,
+      );
       await runFfmpeg(args);
     }
     return { bytes: await fs.readFile(outputPath), ...info };
-  } finally { await fs.rm(dir,{recursive:true,force:true}).catch(()=>undefined); }
+  } finally {
+    await fs.rm(dir, { recursive:true, force:true }).catch(() => undefined);
+  }
+}
+
+async function mediaDownloadHandler(req: Request, res: Response) {
+  try {
+    const requester = await authenticatedUser(req);
+    if (!requester) return res.status(401).json({ error:'Connexion requise pour télécharger.' });
+
+    const generationId = String(req.query.generationId || '');
+    const format = String(req.query.format || '');
+    const community = String(req.query.community || '') === '1';
+
+    if (!generationId || !(format in FORMAT_LEVEL)) {
+      return res.status(400).json({ error:'Paramètres de téléchargement invalides.' });
+    }
+
+    const requiredLevel = FORMAT_LEVEL[format];
+    if (requiredLevel > requester.level) {
+      return res.status(403).json({ error:`Ce format nécessite un abonnement niveau ${requiredLevel}.` });
+    }
+
+    const snap = await adminDb.collection('generations').doc(generationId).get();
+    if (!snap.exists) return res.status(404).json({ error:'Création introuvable.' });
+
+    const generation:any = { id:snap.id, ...snap.data() };
+    const kind = generation.type as Kind;
+    if (!['image','video','clips','music'].includes(kind)) {
+      return res.status(415).json({ error:'Type de création non téléchargeable.' });
+    }
+
+    if (community) {
+      if (generation.isPublic !== true || generation.allowCommunityDownload !== true) {
+        return res.status(403).json({ error:'Le propriétaire n’autorise pas le téléchargement de cette publication.' });
+      }
+    } else if (generation.userId !== requester.uid && requester.role !== 'admin') {
+      return res.status(403).json({ error:'Cette création ne vous appartient pas.' });
+    }
+
+    const source = String(generation.resultUrl || '');
+    if (!source) return res.status(404).json({ error:'Fichier source indisponible.' });
+
+    const upstream = await fetch(source);
+    if (!upstream.ok) return res.status(502).json({ error:'Impossible de récupérer le fichier source.' });
+
+    const input = Buffer.from(await upstream.arrayBuffer());
+    const ownerName = String(generation.authorName || generation.ownerName || 'Créateur MUNGWELE');
+    const output = await transcode(input, kind, format, community, ownerName);
+    const safeTitle = String(generation.title || 'creation').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 60) || 'creation';
+    const filename = `${community ? 'mungwele-community' : 'mungwele'}-${safeTitle}.${output.ext}`;
+
+    res.setHeader('Content-Type', output.mime);
+    res.setHeader('Content-Length', String(output.bytes.length));
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.send(output.bytes);
+  } catch (error:any) {
+    console.warn('[MEDIA_DOWNLOAD_WARNING]', error);
+    return res.status(500).json({ error:error?.message || 'Téléchargement impossible.' });
+  }
 }
 
 export function installMediaDownload() {
-  if (installed) return; installed = true;
+  if (installed) return;
+  installed = true;
+
+  // server-entry.ts installe ce module avant le chargement de server.ts.
+  // On profite du premier app.get(...) déclaré par server.ts pour enregistrer
+  // réellement /api/media/download sur la même instance Express, AVANT que
+  // Vite ou le fallback SPA ne puisse renvoyer index.html à la place du média.
   express.application.get = function patchedGet(route: any, ...handlers: any[]) {
-    if (route !== '/api/media/download') return originalGet.call(this, route, ...handlers);
-    return originalGet.call(this, route, async (req: Request, res: Response) => {
-      try {
-        const requester = await authenticatedUser(req);
-        if (!requester) return res.status(401).json({ error:'Connexion requise pour télécharger.' });
-        const generationId = String(req.query.generationId || ''); const format = String(req.query.format || ''); const community = String(req.query.community || '') === '1';
-        if (!generationId || !(format in FORMAT_LEVEL)) return res.status(400).json({ error:'Paramètres de téléchargement invalides.' });
-        const requiredLevel = FORMAT_LEVEL[format]; if (requiredLevel > requester.level) return res.status(403).json({ error:`Ce format nécessite un abonnement niveau ${requiredLevel}.` });
-        const snap = await adminDb.collection('generations').doc(generationId).get(); if (!snap.exists) return res.status(404).json({ error:'Création introuvable.' });
-        const generation:any = { id:snap.id, ...snap.data() }; const kind = generation.type as Kind;
-        if (!['image','video','clips','music'].includes(kind)) return res.status(415).json({ error:'Type de création non téléchargeable.' });
-        if (community) {
-          if (generation.isPublic !== true || generation.allowCommunityDownload !== true) return res.status(403).json({ error:'Le propriétaire n’autorise pas le téléchargement de cette publication.' });
-        } else if (generation.userId !== requester.uid && requester.role !== 'admin') return res.status(403).json({ error:'Cette création ne vous appartient pas.' });
-        const source = String(generation.resultUrl || ''); if (!source) return res.status(404).json({ error:'Fichier source indisponible.' });
-        const upstream = await fetch(source); if (!upstream.ok) return res.status(502).json({ error:'Impossible de récupérer le fichier source.' });
-        const input = Buffer.from(await upstream.arrayBuffer());
-        const ownerName = String(generation.authorName || generation.ownerName || 'Créateur MUNGWELE');
-        const output = await transcode(input, kind, format, community, ownerName);
-        const safeTitle = String(generation.title || 'creation').replace(/[^a-zA-Z0-9_-]/g,'-').slice(0,60);
-        const filename = `${community?'mungwele-community':'mungwele'}-${safeTitle}.${output.ext}`;
-        res.setHeader('Content-Type',output.mime); res.setHeader('Content-Length',String(output.bytes.length)); res.setHeader('Content-Disposition',`attachment; filename="${filename}"`); res.setHeader('Cache-Control','private, no-store');
-        return res.send(output.bytes);
-      } catch (error:any) { console.warn('[MEDIA_DOWNLOAD_WARNING]',error); return res.status(500).json({ error:error?.message || 'Téléchargement impossible.' }); }
-    }, ...handlers);
+    express.application.get = originalGet;
+    originalGet.call(this, '/api/media/download', mediaDownloadHandler);
+    return originalGet.call(this, route, ...handlers);
   } as any;
 }
