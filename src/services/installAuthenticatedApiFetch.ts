@@ -38,6 +38,16 @@ function paymentAttemptId(userId: string, init: RequestInit) {
   return id;
 }
 
+function withPaymentAttempt(init: RequestInit, attemptId: string): RequestInit {
+  if (typeof init.body !== 'string') return init;
+  try {
+    const parsed = JSON.parse(init.body);
+    return { ...init, body: JSON.stringify({ ...parsed, attemptId }) };
+  } catch {
+    return init;
+  }
+}
+
 export function installAuthenticatedApiFetch() {
   if (installed || typeof window === 'undefined') return;
 
@@ -57,11 +67,14 @@ export function installAuthenticatedApiFetch() {
     const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
     headers.set('Authorization', `Bearer ${token}`);
 
+    let nextInit: RequestInit = { ...init, headers };
     if (url.startsWith('/api/market-cash/payments')) {
-      headers.set('X-Mungwele-Payment-Attempt', paymentAttemptId(currentUser.uid, init));
+      const attemptId = paymentAttemptId(currentUser.uid, init);
+      headers.set('X-Mungwele-Payment-Attempt', attemptId);
+      nextInit = { ...withPaymentAttempt(nextInit, attemptId), headers };
     }
 
-    return originalFetch(input, { ...init, headers });
+    return originalFetch(input, nextInit);
   };
 
   try {
