@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { doc, getDoc } from 'firebase/firestore';
 import { Check, Crown, Lock, PackageOpen, Receipt, ShieldCheck, WalletCards, Zap } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { db } from '../../lib/firebase';
 import { MarketCashPaymentModal } from '../common/MarketCashPaymentModal';
 import type { MarketCashPaymentTarget } from '../../services/marketCashPaymentService';
 
@@ -14,7 +16,7 @@ const VIDEO_ROWS = [
 ] as const;
 
 export const SubscriptionView: React.FC = () => {
-  const { user, credits, transactions, addNotification, appSettings } = useApp();
+  const { user, setUser, credits, transactions, addNotification, appSettings } = useApp();
   const [section, setSection] = useState<SectionMode>('choose');
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [paymentTarget, setPaymentTarget] = useState<MarketCashPaymentTarget | null>(null);
@@ -26,13 +28,35 @@ export const SubscriptionView: React.FC = () => {
   const openPayment = (target: MarketCashPaymentTarget) => setPaymentTarget(target);
   const closePayment = () => setPaymentTarget(null);
 
-  const paymentSucceeded = (transactionId?: string) => {
+  const paymentSucceeded = async (transactionId?: string) => {
+    // Le backend ne renvoie désormais un succès qu'après :
+    // 1) débit réel de la carte Market-Cash ;
+    // 2) règlement dans MUNGWELE ;
+    // 3) écriture du nouveau solde / abonnement dans Firestore.
+    // On relit alors le profil officiel au lieu d'afficher un faux succès local.
+    try {
+      const snap = await getDoc(doc(db, 'users', user.id));
+      if (snap.exists()) {
+        const data = snap.data() as Record<string, unknown>;
+        const nextCredits = Number(data.credits);
+        const nextPlan = String(data.plan || user.plan);
+        setUser((current) => ({
+          ...current,
+          credits: Number.isFinite(nextCredits) ? Math.max(0, nextCredits) : current.credits,
+          plan: ['free', 'creator', 'pro', 'studio'].includes(nextPlan) ? nextPlan as typeof current.plan : current.plan,
+        }));
+      }
+    } catch (error) {
+      console.warn('[MARKET_CASH_PROFILE_REFRESH_WARNING]', error);
+    }
+
+    setPaymentTarget(null);
     addNotification(
       'success',
       'Paiement Market-Cash confirmé',
       transactionId
-        ? `Transaction ${transactionId}. La mise à jour du solde ou de l'abonnement sera synchronisée avec Market-Cash.`
-        : `Le paiement a été accepté. La mise à jour du solde ou de l'abonnement sera synchronisée avec Market-Cash.`,
+        ? `Paiement réellement réglé. Crédits/abonnement mis à jour. Référence : ${transactionId}.`
+        : 'Paiement réellement réglé. Crédits/abonnement mis à jour.',
     );
   };
 
@@ -106,15 +130,17 @@ export const SubscriptionView: React.FC = () => {
             <div className="grid gap-5 md:grid-cols-3">
               {plans.map((plan) => {
                 const current = user.plan === plan.id;
-                const monthly = billingCycle === 'yearly' ? plan.priceMonth * (1 - discount / 100) : plan.priceMonth;
+                const discountedMonthly = billingCycle === 'yearly' ? plan.priceMonth * (1 - discount / 100) : plan.priceMonth;
+                const amountDue = billingCycle === 'yearly' ? discountedMonthly * 12 : discountedMonthly;
                 return (
                   <article key={plan.id} className={`relative flex flex-col rounded-3xl border p-5 ${plan.popular ? 'border-purple-500 bg-purple-950/25' : 'border-white/10 bg-white/[0.03]'}`}>
                     {plan.popular && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-3 py-1 text-[10px] font-black text-white">POPULAIRE</span>}
                     <h3 className="text-xl font-black text-white">{plan.name}</h3>
-                    <p className="mt-2 text-4xl font-black text-white">${monthly.toFixed(monthly % 1 ? 2 : 0)}<span className="text-xs font-medium text-gray-500"> / mois</span></p>
+                    <p className="mt-2 text-4xl font-black text-white">${discountedMonthly.toFixed(discountedMonthly % 1 ? 2 : 0)}<span className="text-xs font-medium text-gray-500"> / mois</span></p>
+                    {billingCycle === 'yearly' && plan.id !== 'free' && <p className="mt-1 text-[11px] font-bold text-cyan-300">Facturé ${amountDue.toFixed(2)} pour 12 mois</p>}
                     <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-3"><div className="flex justify-between text-xs"><span className="text-gray-400">Crédits mensuels</span><strong className="text-amber-300">{plan.creditsMonthly}</strong></div></div>
                     <ul className="mt-4 flex-1 space-y-2">{plan.features.map((feature, index) => <li key={index} className="flex gap-2 text-xs text-gray-300"><Check className="h-4 w-4 shrink-0 text-purple-400" />{feature}</li>)}</ul>
-                    <button disabled={current || plan.id === 'free'} onClick={() => openPayment({ kind: 'subscription', label: `Abonnement ${plan.name}`, amountUsd: monthly, metadata: { planId: plan.id, billingCycle } })} className={`mt-5 w-full rounded-xl py-3 text-xs font-black ${current || plan.id === 'free' ? 'border border-white/10 bg-white/[0.03] text-gray-500' : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'}`}>{current ? 'Formule actuelle' : plan.id === 'free' ? 'Sans abonnement' : `Payer ${plan.name} avec Market-Cash`}</button>
+                    <button disabled={current || plan.id === 'free'} onClick={() => openPayment({ kind: 'subscription', label: `Abonnement ${plan.name}`, amountUsd: amountDue, metadata: { planId: plan.id, billingCycle } })} className={`mt-5 w-full rounded-xl py-3 text-xs font-black ${current || plan.id === 'free' ? 'border border-white/10 bg-white/[0.03] text-gray-500' : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'}`}>{current ? 'Formule actuelle' : plan.id === 'free' ? 'Sans abonnement' : `Payer ${plan.name} avec Market-Cash`}</button>
                   </article>
                 );
               })}
@@ -122,7 +148,7 @@ export const SubscriptionView: React.FC = () => {
           </section>
 
           <section className="rounded-3xl border border-white/10 bg-white/[0.025] p-5">
-            <div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" /><div><h3 className="text-sm font-black text-white">Paiement carte protégé</h3><p className="mt-1 text-xs leading-5 text-gray-400">Le QR et le NFC peuvent préremplir les informations non sensibles de la carte Market-Cash. Le CVV reste toujours saisi manuellement et n'est jamais conservé par MUNGWELE IA STUDIO.</p></div></div>
+            <div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" /><div><h3 className="text-sm font-black text-white">Paiement carte protégé</h3><p className="mt-1 text-xs leading-5 text-gray-400">Le QR et le NFC peuvent préremplir les informations non sensibles de la carte Market-Cash. Le CVV reste toujours saisi manuellement et n'est jamais conservé par MUNGWELE IA STUDIO. Les frais Market-Cash éventuels sont ajoutés par Market-Cash au débit de la carte.</p></div></div>
             <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">{VIDEO_ROWS.map(([name, cost, duration]) => <div key={name} className="grid grid-cols-[1.2fr_1fr_auto] gap-3 border-b border-white/5 px-4 py-3 text-xs"><span className="font-bold text-white">{name}</span><span className="text-amber-300">{cost}</span><span className="text-gray-500">{duration}</span></div>)}</div>
           </section>
 
@@ -130,7 +156,7 @@ export const SubscriptionView: React.FC = () => {
         </>
       )}
 
-      {paymentTarget && <MarketCashPaymentModal target={paymentTarget} userId={user.id} userEmail={user.email} onClose={closePayment} onSuccess={paymentSucceeded} />}
+      {paymentTarget && <MarketCashPaymentModal target={paymentTarget} userId={user.id} userEmail={user.email} onClose={closePayment} onSuccess={(transactionId) => void paymentSucceeded(transactionId)} />}
     </div>
   );
 };
