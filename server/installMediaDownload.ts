@@ -79,6 +79,54 @@ function xml(value: string) {
   return value.replace(/[<>&"']/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c] || c));
 }
 
+function cleanPublicName(value: unknown) {
+  return String(value || '')
+    .replace(/^@+/, '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 28);
+}
+
+async function resolveOwnerName(generation: any) {
+  const explicit = cleanPublicName(
+    generation.authorName
+    || generation.userNickname
+    || generation.ownerName
+    || generation.nickname
+    || generation.username
+    || generation.displayName,
+  );
+  if (explicit) return explicit;
+
+  const userId = String(generation.userId || '').trim();
+  if (!userId) return 'Créateur MUNGWELE';
+
+  try {
+    const [mdigiSnap, userSnap] = await Promise.all([
+      adminDb.collection('mdigiProfiles').doc(userId).get(),
+      adminDb.collection('users').doc(userId).get(),
+    ]);
+
+    const mdigi = mdigiSnap.data() || {};
+    const user = userSnap.data() || {};
+    const nickname = cleanPublicName(mdigi.nickname);
+    if (nickname) return nickname;
+
+    const fallbackName = cleanPublicName(
+      user.nickname
+      || user.displayName
+      || user.name
+      || user.fullName,
+    );
+    if (fallbackName) return fallbackName;
+  } catch (error) {
+    console.warn('[MEDIA_DOWNLOAD_OWNER_NAME_WARNING]', error);
+  }
+
+  return 'Créateur MUNGWELE';
+}
+
 async function watermarkBuffer(ownerName: string) {
   const markPath = path.join(process.cwd(), 'src/assets/mungwele-ai-official-mark.svg');
   let mark = '';
@@ -87,8 +135,30 @@ async function watermarkBuffer(ownerName: string) {
   } catch {
     mark = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text x="5" y="65" font-size="60" fill="white">M</text></svg>';
   }
+
   const encoded = Buffer.from(mark).toString('base64');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="110"><rect width="640" height="110" rx="20" fill="rgba(0,0,0,.50)"/><image href="data:image/svg+xml;base64,${encoded}" x="14" y="15" width="78" height="78"/><text x="108" y="48" font-family="Arial,sans-serif" font-size="27" font-weight="700" fill="white">MUNGWELE AI</text><text x="108" y="80" font-family="Arial,sans-serif" font-size="22" fill="white">@${xml(ownerName || 'Créateur MUNGWELE')}</text></svg>`;
+  const nickname = cleanPublicName(ownerName) || 'Créateur MUNGWELE';
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="430" height="120">
+      <defs>
+        <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#ff39d0"/>
+          <stop offset=".48" stop-color="#6c57ff"/>
+          <stop offset="1" stop-color="#18e86a"/>
+        </linearGradient>
+        <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity=".85"/>
+        </filter>
+      </defs>
+      <g filter="url(#shadow)" opacity=".96">
+        <image href="data:image/svg+xml;base64,${encoded}" x="0" y="12" width="82" height="82" preserveAspectRatio="xMidYMid meet"/>
+        <text x="92" y="48" font-family="Arial,Helvetica,sans-serif" font-size="26" font-weight="800" fill="#fff">MUNGWELE AI</text>
+        <text x="92" y="83" font-family="Arial,Helvetica,sans-serif" font-size="25" font-weight="700" fill="#fff">@${xml(nickname)}</text>
+        <rect x="92" y="95" width="184" height="5" rx="2.5" fill="url(#accent)"/>
+      </g>
+    </svg>
+  `;
   return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
@@ -112,7 +182,7 @@ async function transcode(input: Buffer, kind: Kind, format: string, community: b
     if (community) {
       const wm = await watermarkBuffer(ownerName);
       const meta = await pipeline.metadata();
-      const targetWidth = Math.min(560, Math.max(220, Math.round((meta.width || info.width || 1024) * 0.42)));
+      const targetWidth = Math.min(460, Math.max(200, Math.round((meta.width || info.width || 1024) * 0.38)));
       const resized = await sharp(wm).resize({ width: targetWidth }).png().toBuffer();
       pipeline = pipeline.composite([{ input: resized, gravity:'southeast', blend:'over' }]);
     }
@@ -127,6 +197,7 @@ async function transcode(input: Buffer, kind: Kind, format: string, community: b
 
   try {
     await fs.writeFile(inputPath, input);
+
     if (kind === 'music') {
       const args = ['-y', '-i', inputPath];
       if (info.ext === 'wav') args.push('-c:a', 'pcm_s16le');
@@ -141,30 +212,34 @@ async function transcode(input: Buffer, kind: Kind, format: string, community: b
       await runFfmpeg(args);
     } else {
       const height = info.height || 480;
-      const args = ['-y', '-i', inputPath];
-      if (community) {
-        const wmPath = path.join(dir, 'watermark.png');
-        await fs.writeFile(wmPath, await watermarkBuffer(ownerName));
-        args.push(
-          '-i', wmPath,
-          '-filter_complex', `[0:v]scale=-2:${height}:flags=lanczos[base];[1:v]scale='min(560,iw)':'-1'[wm];[base][wm]overlay=W-w-24:H-h-24[outv]`,
-          '-map', '[outv]',
-          '-map', '0:a?',
-        );
-      } else {
-        args.push('-vf', `scale=-2:${height}:flags=lanczos`);
-      }
-      args.push(
+      const wmHeight = Math.max(40, Math.min(92, Math.round(height * 0.09)));
+      const padding = Math.max(10, Math.min(30, Math.round(height * 0.025)));
+      const wmPath = path.join(dir, 'watermark.png');
+
+      await fs.writeFile(wmPath, await watermarkBuffer(ownerName));
+
+      const args = [
+        '-y',
+        '-i', inputPath,
+        '-i', wmPath,
+        '-filter_complex',
+        `[0:v]scale=-2:${height}:flags=lanczos[base];[1:v]scale=-1:${wmHeight}[wm];[base][wm]overlay=${padding}:H-h-${padding}:format=auto[outv]`,
+        '-map', '[outv]',
+        '-map', '0:a?',
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-crf', '20',
         '-c:a', 'aac',
         '-b:a', '160k',
+        '-metadata', 'artist', `MUNGWELE AI • ${ownerName}`,
+        '-metadata', 'comment', `Vidéo signée automatiquement par MUNGWELE AI • @${ownerName}`,
         '-movflags', '+faststart',
         outputPath,
-      );
+      ];
+
       await runFfmpeg(args);
     }
+
     return { bytes: await fs.readFile(outputPath), ...info };
   } finally {
     await fs.rm(dir, { recursive:true, force:true }).catch(() => undefined);
@@ -210,7 +285,7 @@ async function sendMedia(requester: Requester, generationId: string, format: str
   if (!upstream.ok) throw Object.assign(new Error('Impossible de récupérer le fichier source.'), { status: 502 });
 
   const input = Buffer.from(await upstream.arrayBuffer());
-  const ownerName = String(generation.authorName || generation.ownerName || 'Créateur MUNGWELE');
+  const ownerName = await resolveOwnerName(generation);
   const output = await transcode(input, kind, format, community, ownerName);
   const safeTitle = String(generation.title || 'creation').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 60) || 'creation';
   const filename = `${community ? 'mungwele-community' : 'mungwele'}-${safeTitle}.${output.ext}`;
@@ -276,9 +351,6 @@ export function installMediaDownload() {
   if (installed) return;
   installed = true;
 
-  // Express appelle app.get('env') et d'autres getters pendant son initialisation.
-  // Ne jamais enregistrer la route de téléchargement pendant ces appels internes :
-  // on attend la première vraie déclaration de route HTTP (chemin commençant par '/').
   express.application.get = function patchedGet(route: any, ...handlers: any[]) {
     const isRealRouteDeclaration = typeof route === 'string' && route.startsWith('/') && handlers.length > 0;
 
@@ -286,9 +358,6 @@ export function installMediaDownload() {
       return originalGet.call(this, route, ...handlers);
     }
 
-    // À partir d'ici l'application Express est complètement initialisée.
-    // On restaure app.get puis on ajoute notre endpoint avant la première route du serveur,
-    // ce qui garantit aussi qu'il se trouve avant le fallback SPA/Vite.
     express.application.get = originalGet;
     originalGet.call(this, '/api/media/download', mediaDownloadHandler);
     return originalGet.call(this, route, ...handlers);
