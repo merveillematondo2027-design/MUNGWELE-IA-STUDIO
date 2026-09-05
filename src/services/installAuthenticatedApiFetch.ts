@@ -8,7 +8,10 @@ export function installAuthenticatedApiFetch() {
   const originalFetch = window.fetch.bind(window);
   const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-    const protectedApi = url.startsWith('/api/generate/') || url.startsWith('/api/media/download');
+    const protectedApi =
+      url.startsWith('/api/generate/')
+      || url.startsWith('/api/media/download')
+      || url.startsWith('/api/market-cash/');
     if (!protectedApi) return originalFetch(input, init);
 
     const currentUser = auth.currentUser;
