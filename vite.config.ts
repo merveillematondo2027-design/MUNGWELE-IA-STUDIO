@@ -10,6 +10,12 @@ export default defineConfig(() => ({
       '@': path.resolve(__dirname, '.'),
     },
   },
+  // The QR scanner is loaded on demand by the Market-Cash checkout. Explicitly
+  // prebundle it so Google AI Studio does not have to discover/re-optimize the
+  // dependency when the scanner is opened for the first time.
+  optimizeDeps: {
+    include: ['@zxing/browser'],
+  },
   server: {
     host: '0.0.0.0',
     port: 3000,
