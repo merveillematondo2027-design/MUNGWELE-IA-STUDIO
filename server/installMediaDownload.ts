@@ -38,8 +38,14 @@ function pruneTickets() {
   }
 }
 
+function queryValue(req: Request, key: string) {
+  const query = (req as Request & { query?: Record<string, unknown> }).query || {};
+  const value = query[key];
+  return Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '');
+}
+
 async function authenticatedUser(req: Request): Promise<Requester | null> {
-  const header = String(req.headers.authorization || '');
+  const header = String(req.headers?.authorization || '');
   if (!header.startsWith('Bearer ')) return null;
   const token = header.slice(7).trim();
   if (!token) return null;
@@ -222,7 +228,7 @@ async function mediaDownloadHandler(req: Request, res: Response) {
   try {
     pruneTickets();
 
-    const ticketId = String(req.query.ticket || '');
+    const ticketId = queryValue(req, 'ticket');
     if (ticketId) {
       const ticket = downloadTickets.get(ticketId);
       downloadTickets.delete(ticketId);
@@ -235,11 +241,11 @@ async function mediaDownloadHandler(req: Request, res: Response) {
     const requester = await authenticatedUser(req);
     if (!requester) return res.status(401).json({ error:'Connexion requise pour télécharger.' });
 
-    const generationId = String(req.query.generationId || '');
-    const format = String(req.query.format || '');
-    const community = String(req.query.community || '') === '1';
+    const generationId = queryValue(req, 'generationId');
+    const format = queryValue(req, 'format');
+    const community = queryValue(req, 'community') === '1';
 
-    if (String(req.query.prepare || '') === '1') {
+    if (queryValue(req, 'prepare') === '1') {
       await loadAuthorizedGeneration(requester, generationId, format, community);
       const ticket = randomUUID();
       downloadTickets.set(ticket, {
@@ -259,7 +265,10 @@ async function mediaDownloadHandler(req: Request, res: Response) {
   } catch (error:any) {
     console.warn('[MEDIA_DOWNLOAD_WARNING]', error);
     const status = Number(error?.status || 500);
-    return res.status(status >= 400 && status < 600 ? status : 500).json({ error:error?.message || 'Téléchargement impossible.' });
+    if (res && typeof (res as Response).status === 'function') {
+      return res.status(status >= 400 && status < 600 ? status : 500).json({ error:error?.message || 'Téléchargement impossible.' });
+    }
+    throw error;
   }
 }
 
@@ -267,9 +276,19 @@ export function installMediaDownload() {
   if (installed) return;
   installed = true;
 
-  // server-entry.ts installe ce module avant le chargement de server.ts.
-  // On enregistre la route média sur la même instance Express avant le fallback SPA.
+  // Express appelle app.get('env') et d'autres getters pendant son initialisation.
+  // Ne jamais enregistrer la route de téléchargement pendant ces appels internes :
+  // on attend la première vraie déclaration de route HTTP (chemin commençant par '/').
   express.application.get = function patchedGet(route: any, ...handlers: any[]) {
+    const isRealRouteDeclaration = typeof route === 'string' && route.startsWith('/') && handlers.length > 0;
+
+    if (!isRealRouteDeclaration) {
+      return originalGet.call(this, route, ...handlers);
+    }
+
+    // À partir d'ici l'application Express est complètement initialisée.
+    // On restaure app.get puis on ajoute notre endpoint avant la première route du serveur,
+    // ce qui garantit aussi qu'il se trouve avant le fallback SPA/Vite.
     express.application.get = originalGet;
     originalGet.call(this, '/api/media/download', mediaDownloadHandler);
     return originalGet.call(this, route, ...handlers);
