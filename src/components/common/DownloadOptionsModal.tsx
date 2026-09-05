@@ -4,6 +4,18 @@ import type { GenerationRecord } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { allDownloadOptions, downloadLevelLabel, downloadOptions } from '../../services/downloadPolicy';
 
+function expectedMimePrefix(extension: string) {
+  if (extension === 'mp4') return 'video/';
+  if (extension === 'mp3' || extension === 'wav') return 'audio/';
+  if (extension === 'jpg' || extension === 'png' || extension === 'webp') return 'image/';
+  return '';
+}
+
+function safeFallbackName(item: GenerationRecord, extension: string) {
+  const type = item.type === 'clips' ? 'video' : item.type;
+  return `mungwele-${type}-${item.id}.${extension}`;
+}
+
 export const DownloadOptionsModal: React.FC<{
   item: GenerationRecord | null;
   onClose: () => void;
@@ -21,25 +33,58 @@ export const DownloadOptionsModal: React.FC<{
     if (!allowedIds.has(optionId)) { setActiveTab('subscription'); onClose(); return; }
     setDownloading(optionId);
     try {
+      const selected = all.find((option) => option.id === optionId);
+      const extension = selected?.extension || (item.type === 'video' || item.type === 'clips' ? 'mp4' : item.type === 'image' ? 'png' : 'mp3');
       const params = new URLSearchParams({ generationId: item.id, format: optionId, community: community ? '1' : '0' });
       const response = await fetch(`/api/media/download?${params.toString()}`);
+
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data?.error || 'Téléchargement impossible.');
       }
+
+      const contentType = (response.headers.get('content-type') || '').toLowerCase();
+      if (contentType.includes('text/html') || contentType.includes('application/json')) {
+        throw new Error('Le serveur a renvoyé une page au lieu du fichier média. Rechargez l’application puis réessayez.');
+      }
+
       const blob = await response.blob();
+      const expectedPrefix = expectedMimePrefix(extension);
+      if (expectedPrefix && blob.type && !blob.type.toLowerCase().startsWith(expectedPrefix) && blob.type !== 'application/octet-stream') {
+        throw new Error(`Le fichier reçu n’est pas un média ${extension.toUpperCase()} valide.`);
+      }
+
       const disposition = response.headers.get('content-disposition') || '';
       const match = /filename="?([^";]+)"?/i.exec(disposition);
-      const filename = match?.[1] || `mungwele-${item.id}`;
+      let filename = match?.[1]?.trim() || safeFallbackName(item, extension);
+      if (!filename.toLowerCase().endsWith(`.${extension.toLowerCase()}`)) filename = `${filename}.${extension}`;
+
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
-      anchor.href = url; anchor.download = filename; anchor.style.display = 'none';
-      document.body.appendChild(anchor); anchor.click(); anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
-      addNotification('success', 'Téléchargement lancé', community ? `Le fichier signé MUNGWELE AI • ${ownerName || 'Créateur'} est prêt.` : 'Votre fichier est prêt dans le format choisi.');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      // Sur Android, laisser l'URL blob disponible assez longtemps permet au
+      // gestionnaire de téléchargement de terminer l'enregistrement du média.
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+
+      addNotification(
+        'success',
+        'Téléchargement lancé',
+        community
+          ? `Le fichier signé MUNGWELE AI • ${ownerName || 'Créateur'} est enregistré au bon format.`
+          : `Votre fichier ${extension.toUpperCase()} est en cours d’enregistrement sur le téléphone.`,
+      );
       onClose();
-    } catch (error: any) { addNotification('error', 'Téléchargement impossible', error?.message || 'Réessayez dans un instant.'); }
-    finally { setDownloading(null); }
+    } catch (error: any) {
+      addNotification('error', 'Téléchargement impossible', error?.message || 'Réessayez dans un instant.');
+    } finally {
+      setDownloading(null);
+    }
   };
 
   return <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md" onClick={onClose}>
