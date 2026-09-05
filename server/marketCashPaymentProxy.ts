@@ -63,6 +63,13 @@ function normalizeAttemptId(value: unknown) {
   return candidate;
 }
 
+function normalizeCaptureReference(value: unknown) {
+  const raw = String(value || '').trim();
+  const match = raw.match(/(?:MARKET-CASH-CARD\s*:\s*)?(MCL-[A-Z0-9_-]{4,120})/i);
+  if (!match?.[1]) throw httpError('QR/NFC Market-Cash non reconnu.', 400, 'CARD_REFERENCE_INVALID');
+  return match[1].toUpperCase();
+}
+
 async function authenticatedUser(req: express.Request) {
   const header = String(req.headers.authorization || '');
   if (!header.startsWith('Bearer ')) throw httpError('Connexion requise pour payer.', 401, 'AUTH_REQUIRED');
@@ -338,6 +345,44 @@ async function settlePurchase(params: {
   return response;
 }
 
+async function marketCashCaptureHandler(req: express.Request, res: express.Response) {
+  const apiKey = process.env.MARKET_CASH_API_KEY?.trim();
+  const endpoint = process.env.MARKET_CASH_API_URL?.trim() || DEFAULT_MARKET_CASH_ENDPOINT;
+  if (!apiKey) return res.status(503).json({ resolved: false, error: 'Market-Cash n’est pas configuré.', code: 'MARKET_CASH_NOT_CONFIGURED' });
+
+  try {
+    await authenticatedUser(req);
+    const cardReference = normalizeCaptureReference(req.body?.cardReference);
+    const upstream = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'User-Agent': 'mungwele-ia-studio/market-cash-capture',
+      },
+      body: JSON.stringify({ operation: 'resolve-card', cardReference }),
+    });
+    const payload: any = await upstream.json().catch(() => ({}));
+    if (!upstream.ok || payload?.resolved !== true) {
+      const status = upstream.status >= 400 && upstream.status < 600 ? upstream.status : 422;
+      return res.status(status).json({ resolved: false, error: 'Cette carte Market-Cash n’a pas pu être reconnue.', code: String(payload?.code || 'CARD_REFERENCE_NOT_FOUND') });
+    }
+    return res.json({
+      resolved: true,
+      cardNumber: cleanDigits(payload.cardNumber),
+      cardHolder: String(payload.cardHolder || '').trim(),
+      expiry: String(payload.expiry || '').trim(),
+      cardLast4: String(payload.cardLast4 || '').trim(),
+    });
+  } catch (error: any) {
+    const status = Number(error?.status || 500);
+    const code = String(error?.code || 'MARKET_CASH_CAPTURE_ERROR');
+    console.warn('[MUNGWELE_MARKET_CASH_CAPTURE_ERROR]', code, String(error?.message || ''));
+    return res.status(status >= 400 && status < 600 ? status : 500).json({ resolved: false, error: String(error?.message || 'Erreur de lecture Market-Cash.'), code });
+  }
+}
+
 async function marketCashHandler(req: express.Request, res: express.Response) {
   const apiKey = process.env.MARKET_CASH_API_KEY?.trim();
   const endpoint = process.env.MARKET_CASH_API_URL?.trim() || DEFAULT_MARKET_CASH_ENDPOINT;
@@ -445,6 +490,7 @@ export function installMarketCashPaymentProxy() {
           mode: 'market-cash-live-card-api',
         });
       });
+      this.post('/api/market-cash/card-capture', marketCashCaptureHandler);
       this.post('/api/market-cash/payments', marketCashHandler);
     }
 
