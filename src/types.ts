@@ -156,6 +156,7 @@ export interface ApiProviderSetting {
 }
 
 export interface AppSettings {
+  pricingVersion?: number;
   siteName: string;
   slogan: string;
   maintenanceMode: boolean;
