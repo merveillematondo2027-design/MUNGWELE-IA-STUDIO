@@ -7,7 +7,20 @@ import dotenv from 'dotenv';
 import { generateVideo, type VideoModel as VeoVideoModel, type VeoAspectRatio, type VideoDuration } from './server/veo';
 import { generateOmniVideo } from './server/omni';
 import { createElevenMusicPlan, generateElevenMusicFromPlan, type ElevenMusicPlan } from './server/elevenMusic';
-import { VIDEO_CREDIT_COSTS, assertMonetizationSafe, assertMusicMonetizationSafe, musicCreditsForDurationMs, type MonetizedVideoModel } from './server/pricing';
+import {
+  CLIP_LAUNCH_EXAMPLES,
+  PRICING_VERSION,
+  SEEDANCE_LAUNCH_EXAMPLES,
+  VIDEO_CREDIT_COSTS,
+  assertImageMonetizationSafe,
+  assertMonetizationSafe,
+  assertMusicMonetizationSafe,
+  clipCreditsForDurationSeconds,
+  imageCreditsForRequest,
+  musicCreditsForDurationMs,
+  seedanceCreditsForRequest,
+  type MonetizedVideoModel,
+} from './server/pricing';
 
 dotenv.config();
 
@@ -31,30 +44,47 @@ const now = () => new Date().toISOString();
 let generations: any[] = [];
 const technicalLogs: any[] = [];
 const musicConfigured = () => !!(process.env.ELEVENLABS_API_KEY || process.env.MUSIC_PROVIDER_API_KEY);
+const runwayConfigured = () => !!(process.env.RUNWAY_API_KEY || process.env.RUNWAYML_API_SECRET);
 const musicQuotes = new Map<string, { description: string; plan: ElevenMusicPlan; credits: number; providerCostUsd: number; expiresAt: number }>();
 
 const VIDEO_MODELS: Record<MonetizedVideoModel, { name: string; model: string; allowed: VideoDuration[]; usdPerSecond: number }> = {
-  omni: { name: 'Gemini Omni 1.1 Flash', model: 'gemini-omni-1.1-flash', allowed: [4, 6, 8], usdPerSecond: 0.10 },
+  omni: { name: 'Google Omni Références', model: 'gemini-omni-1.1-flash', allowed: [4, 6, 8], usdPerSecond: 0.10 },
   lite: { name: 'Veo 3.1 Lite', model: 'veo-3.1-lite-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.05 },
   fast: { name: 'Veo 3.1 Fast', model: 'veo-3.1-fast-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.10 },
   pro: { name: 'Veo 3.1 Pro', model: 'veo-3.1-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.40 },
 };
 
+const imageBaseCredits = imageCreditsForRequest(0).credits;
+const musicMinuteCredits = musicCreditsForDurationMs(60000).credits;
+
 let appSettings = {
+  pricingVersion: PRICING_VERSION,
   siteName: 'MUNGWELE IA STUDIO',
   slogan: 'Imaginez. Générez. Créez sans limites.',
   maintenanceMode: false,
   announcementBanner: 'MUNGWELE IA STUDIO — Image, Vidéo et Musique par prompt.',
-  creditCosts: { imageStandard: 8, imageHd: 8, video5s: 20, video10s: 40, musicTrack: 20, promptEnhance: 0 },
+  creditCosts: {
+    imageStandard: imageBaseCredits,
+    imageHd: imageBaseCredits,
+    video5s: VIDEO_CREDIT_COSTS.lite[4],
+    video10s: VIDEO_CREDIT_COSTS.fast[8],
+    musicTrack: musicMinuteCredits,
+    promptEnhance: 0,
+  },
 };
 
 let apiProviders: any[] = [
-  { id: 'prov-openai-image', name: 'OpenAI GPT-Image', providerKey: 'openai', category: 'image', enabled: true, isConfigured: !!process.env.OPENAI_API_KEY, isDemoFallback: false, modelName: 'gpt-image-2', latencyAvgMs: 0, creditCost: 8 },
-  { id: 'prov-video-omni', name: 'Gemini Omni 1.1 Flash', providerKey: 'gemini', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.omni.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.omni[4] },
+  { id: 'prov-openai-image', name: 'OpenAI GPT-Image-2', providerKey: 'openai', category: 'image', enabled: true, isConfigured: !!process.env.OPENAI_API_KEY, isDemoFallback: false, modelName: 'gpt-image-2', latencyAvgMs: 0, creditCost: imageBaseCredits },
   { id: 'prov-video-lite', name: 'Veo 3.1 Lite', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.lite.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.lite[4] },
   { id: 'prov-video-fast', name: 'Veo 3.1 Fast', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.fast.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.fast[4] },
   { id: 'prov-video-pro', name: 'Veo 3.1 Pro', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.pro.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.pro[4] },
-  { id: 'prov-eleven-music', name: 'ElevenLabs Music', providerKey: 'elevenlabs', category: 'music', enabled: true, isConfigured: musicConfigured(), isDemoFallback: false, modelName: 'music_v2', latencyAvgMs: 0, creditCost: 20 },
+  { id: 'prov-video-omni', name: 'Google Omni Références', providerKey: 'gemini', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.omni.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.omni[4] },
+  { id: 'prov-seedance-mini', name: 'Seedance 2 Mini', providerKey: 'runway', category: 'video', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'seedance2_mini', latencyAvgMs: 0, creditCost: SEEDANCE_LAUNCH_EXAMPLES.mini720[10] },
+  { id: 'prov-seedance-fast', name: 'Seedance 2 Fast', providerKey: 'runway', category: 'video', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'seedance2_fast', latencyAvgMs: 0, creditCost: SEEDANCE_LAUNCH_EXAMPLES.fast720[10] },
+  { id: 'prov-seedance-2', name: 'Seedance 2', providerKey: 'runway', category: 'video', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'seedance2', latencyAvgMs: 0, creditCost: SEEDANCE_LAUNCH_EXAMPLES.standard720[10] },
+  { id: 'prov-seedance-25', name: 'Seedance 2.5', providerKey: 'runway', category: 'video', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'seedance2_5', latencyAvgMs: 0, creditCost: SEEDANCE_LAUNCH_EXAMPLES.seedance25_720[10] },
+  { id: 'prov-runway-act-two', name: 'Runway Act-Two', providerKey: 'runway', category: 'clips', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'act_two', latencyAvgMs: 0, creditCost: CLIP_LAUNCH_EXAMPLES[10] },
+  { id: 'prov-eleven-music', name: 'ElevenLabs Music', providerKey: 'elevenlabs', category: 'music', enabled: true, isConfigured: musicConfigured(), isDemoFallback: false, modelName: 'music_v2', latencyAvgMs: 0, creditCost: musicMinuteCredits },
   { id: 'prov-gemini-assistant', name: 'Gemini Prompt Assistant', providerKey: 'gemini', category: 'text', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: 'gemini-3.7-flash', latencyAvgMs: 0, creditCost: 0 },
 ];
 
@@ -84,6 +114,8 @@ async function openAIImage(prompt: string, referenceImages: string[] = []) {
     const form = new FormData();
     form.append('model', 'gpt-image-2');
     form.append('prompt', prompt);
+    form.append('quality', 'medium');
+    form.append('size', '1024x1024');
     binaries.forEach((binary, index) => {
       if (!binary) return;
       form.append('image[]', new Blob([binary.bytes], { type: binary.mimeType }), `reference-${index + 1}.png`);
@@ -98,7 +130,7 @@ async function openAIImage(prompt: string, referenceImages: string[] = []) {
   const response = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'gpt-image-2', prompt }),
+    body: JSON.stringify({ model: 'gpt-image-2', prompt, quality: 'medium', size: '1024x1024' }),
   });
   const payload: any = await response.json().catch(() => ({}));
   if (!response.ok) throw Object.assign(new Error(payload?.error?.message || `OpenAI image error ${response.status}`), { status: response.status });
@@ -106,11 +138,57 @@ async function openAIImage(prompt: string, referenceImages: string[] = []) {
   return `data:image/png;base64,${payload.data[0].b64_json}`;
 }
 
-app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'MUNGWELE IA STUDIO', openAIImageConfigured: !!process.env.OPENAI_API_KEY, geminiConfigured: !!process.env.GEMINI_API_KEY, elevenMusicConfigured: musicConfigured(), videoModels: Object.keys(VIDEO_MODELS), timestamp: now() }));
+app.get('/api/health', (_req, res) => res.json({
+  status: 'ok',
+  app: 'MUNGWELE IA STUDIO',
+  pricingVersion: PRICING_VERSION,
+  openAIImageConfigured: !!process.env.OPENAI_API_KEY,
+  geminiConfigured: !!process.env.GEMINI_API_KEY,
+  runwayConfigured: runwayConfigured(),
+  elevenMusicConfigured: musicConfigured(),
+  videoModels: Object.keys(VIDEO_MODELS),
+  timestamp: now(),
+}));
 
 app.get('/api/settings', (_req, res) => {
-  apiProviders = apiProviders.map((p) => ({ ...p, isConfigured: p.category === 'image' ? !!process.env.OPENAI_API_KEY : p.category === 'video' || p.category === 'text' ? !!process.env.GEMINI_API_KEY : p.category === 'music' ? musicConfigured() : p.isConfigured }));
-  res.json({ settings: appSettings, providers: apiProviders, videoModels: VIDEO_MODELS, videoCreditCosts: VIDEO_CREDIT_COSTS });
+  apiProviders = apiProviders.map((p) => {
+    const configured = p.providerKey === 'openai'
+      ? !!process.env.OPENAI_API_KEY
+      : p.providerKey === 'runway'
+        ? runwayConfigured()
+        : p.providerKey === 'elevenlabs'
+          ? musicConfigured()
+          : p.providerKey === 'veo' || p.providerKey === 'gemini'
+            ? !!process.env.GEMINI_API_KEY
+            : p.isConfigured;
+    return { ...p, isConfigured: configured };
+  });
+  res.json({
+    settings: appSettings,
+    providers: apiProviders,
+    videoModels: VIDEO_MODELS,
+    videoCreditCosts: VIDEO_CREDIT_COSTS,
+    seedanceCreditExamples: SEEDANCE_LAUNCH_EXAMPLES,
+    clipCreditExamples: CLIP_LAUNCH_EXAMPLES,
+  });
+});
+
+app.post('/api/pricing/seedance', (req, res) => {
+  try {
+    const model = String(req.body?.model || 'seedance2_5') as 'seedance2_mini' | 'seedance2_fast' | 'seedance2' | 'seedance2_5';
+    const resolution = String(req.body?.resolution || '720p') as '480p' | '720p' | '1080p' | '4k';
+    const durationSeconds = Number(req.body?.durationSeconds || 10);
+    const inputVideoSeconds = Number(req.body?.inputVideoSeconds || 0);
+    const quote = seedanceCreditsForRequest(model, durationSeconds, { resolution, inputVideoSeconds });
+    return res.json({ supplier: 'Runway Dev', model, ...quote, markupPercent: 33.33 });
+  } catch (error: any) {
+    return res.status(400).json({ error: String(error?.message || 'Devis Seedance invalide.') });
+  }
+});
+
+app.post('/api/pricing/clips', (req, res) => {
+  const quote = clipCreditsForDurationSeconds(Number(req.body?.durationSeconds || 15));
+  return res.json({ supplier: 'Runway Dev', model: 'act_two', ...quote, markupPercent: 33.33 });
 });
 
 app.post('/api/ai/enhance-prompt', async (req, res) => {
@@ -147,16 +225,36 @@ app.post('/api/generate/image', async (req, res) => {
   const providerPrompt = refs.length
     ? `MODIFICATION STRICTE. Utilise toutes les images fournies comme références. Préserve les identités, objets, styles ou éléments demandés et applique uniquement cette instruction : ${finalPrompt}`
     : `Crée une image en suivant précisément cette demande, sans ajouter d'éléments non demandés : ${finalPrompt}`;
+  const imagePricing = imageCreditsForRequest(refs.length);
   try {
+    assertImageMonetizationSafe(refs.length, imagePricing.credits);
     const imageUrl = await openAIImage(providerPrompt, refs);
-    const generation = { id: `gen-img-${Date.now()}`, userId: userId || 'usr-current', type: 'image', title: prompt.slice(0, 60), prompt, enhancedPrompt: finalPrompt, provider: 'OpenAI', model: 'gpt-image-2', status: 'completed', progress: 100, resultUrl: imageUrl, thumbnailUrl: imageUrl, creditsUsed: 8, isPublic: false, settings: { style: 'prompt-only', aspectRatio: 'auto', quality: 'high', quantity: 1, referenceImage: Boolean(refs.length), referenceImages: refs.length ? refs : undefined }, createdAt: now(), updatedAt: now() };
+    const generation = {
+      id: `gen-img-${Date.now()}`,
+      userId: userId || 'usr-current',
+      type: 'image',
+      title: prompt.slice(0, 60),
+      prompt,
+      enhancedPrompt: finalPrompt,
+      provider: 'OpenAI',
+      model: 'gpt-image-2',
+      status: 'completed',
+      progress: 100,
+      resultUrl: imageUrl,
+      thumbnailUrl: imageUrl,
+      creditsUsed: imagePricing.credits,
+      isPublic: false,
+      settings: { style: 'prompt-only', aspectRatio: '1:1', quality: 'standard', quantity: 1, referenceImage: Boolean(refs.length), referenceImages: refs.length ? refs : undefined },
+      createdAt: now(),
+      updatedAt: now(),
+    };
     generations.unshift(generation);
-    addLog('success', 'Studio Image', refs.length ? `Image modifiée avec ${refs.length} référence(s) OpenAI.` : 'Image générée avec OpenAI.');
+    addLog('success', 'Studio Image', refs.length ? `Image modifiée avec ${refs.length} référence(s) OpenAI pour ${imagePricing.credits} crédits.` : `Image générée avec OpenAI pour ${imagePricing.credits} crédits.`);
     return res.json({ success: true, generation, images: [imageUrl] });
   } catch (error: any) {
     addLog('error', 'Studio Image', String(error?.message || error));
     const status = Number(error?.status || 500);
-    return res.status(status === 400 || status === 401 || status === 403 || status === 429 ? status : 500).json({ error: quotaError(error) ? 'Quota ou limite OpenAI Image atteint.' : String(error?.message || 'La génération OpenAI Image a échoué.') });
+    return res.status(status === 400 || status === 401 || status === 403 || status === 429 || status === 503 ? status : 500).json({ error: quotaError(error) ? 'Quota ou limite OpenAI Image atteint.' : String(error?.message || 'La génération OpenAI Image a échoué.') });
   }
 });
 
@@ -174,7 +272,7 @@ app.post('/api/generate/video', async (req, res) => {
     ? referenceImages.filter((item: unknown): item is string => typeof item === 'string' && item.startsWith('data:image/')).slice(0, 6)
     : [];
   if (endImage && !startImage) return res.status(400).json({ error: 'Une image de fin nécessite une image de départ.', code: 'START_IMAGE_REQUIRED' });
-  if (refs.length > 0 && safeModel !== 'omni') return res.status(400).json({ error: 'Les références multiples utilisent Gemini Omni. Sélectionnez Omni pour ce projet.', code: 'OMNI_REQUIRED_FOR_REFERENCES' });
+  if (refs.length > 0 && safeModel !== 'omni') return res.status(400).json({ error: 'Les références multiples utilisent le flux Google Références. Sélectionnez ce mode pour ce projet.', code: 'OMNI_REQUIRED_FOR_REFERENCES' });
   const effectiveDuration: VideoDuration = endImage ? 8 : safeDuration;
   const creditsUsed = VIDEO_CREDIT_COSTS[safeModel][effectiveDuration];
 
@@ -212,6 +310,7 @@ app.post('/api/music/quote', async (req, res) => {
       quoteId,
       creditCost: pricing.credits,
       estimatedDurationSeconds: pricing.durationSeconds,
+      markupPercent: 50,
       expiresInSeconds: 600,
     });
   } catch (error: any) {
