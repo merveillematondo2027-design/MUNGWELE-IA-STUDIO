@@ -11,9 +11,9 @@ import { adminAuth, adminDb } from './firebaseAdmin';
 const originalGet = express.application.get;
 let installed = false;
 
-type Kind = 'image'|'video'|'clips'|'music';
-type OutputInfo = { ext:string; mime:string; height?:number; width?:number; bitrate?:string };
-type Requester = { uid:string; role:string; plan:string; level:number };
+type Kind = 'image' | 'video' | 'clips' | 'music';
+type OutputInfo = { ext: string; mime: string; height?: number; width?: number; bitrate?: string };
+type Requester = { uid: string; role: string; plan: string; level: number };
 type DownloadTicket = {
   requester: Requester;
   generationId: string;
@@ -23,9 +23,19 @@ type DownloadTicket = {
 };
 
 const FORMAT_LEVEL: Record<string, number> = {
-  'video-480':0,'video-780':1,'video-1080':2,'video-1440':3,'video-2160':3,
-  'image-jpg-1024':0,'image-webp-1600':1,'image-png-2048':2,'image-png-4096':3,
-  'audio-mp3-128':0,'audio-mp3-192':1,'audio-mp3-320':2,'audio-wav':3,
+  'video-480': 0,
+  'video-780': 1,
+  'video-1080': 2,
+  'video-1440': 3,
+  'video-2160': 3,
+  'image-jpg-1024': 0,
+  'image-webp-1600': 1,
+  'image-png-2048': 2,
+  'image-png-4096': 3,
+  'audio-mp3-128': 0,
+  'audio-mp3-192': 1,
+  'audio-mp3-320': 2,
+  'audio-wav': 3,
 };
 
 const downloadTickets = new Map<string, DownloadTicket>();
@@ -49,6 +59,7 @@ async function authenticatedUser(req: Request): Promise<Requester | null> {
   if (!header.startsWith('Bearer ')) return null;
   const token = header.slice(7).trim();
   if (!token) return null;
+
   const decoded = await adminAuth.verifyIdToken(token);
   const snap = await adminDb.collection('users').doc(decoded.uid).get();
   const data = snap.data() || {};
@@ -59,24 +70,30 @@ async function authenticatedUser(req: Request): Promise<Requester | null> {
 }
 
 function outputInfo(format: string): OutputInfo | null {
-  if (format === 'video-480') return { ext:'mp4', mime:'video/mp4', height:480 };
-  if (format === 'video-780') return { ext:'mp4', mime:'video/mp4', height:780 };
-  if (format === 'video-1080') return { ext:'mp4', mime:'video/mp4', height:1080 };
-  if (format === 'video-1440') return { ext:'mp4', mime:'video/mp4', height:1440 };
-  if (format === 'video-2160') return { ext:'mp4', mime:'video/mp4', height:2160 };
-  if (format === 'image-jpg-1024') return { ext:'jpg', mime:'image/jpeg', width:1024 };
-  if (format === 'image-webp-1600') return { ext:'webp', mime:'image/webp', width:1600 };
-  if (format === 'image-png-2048') return { ext:'png', mime:'image/png', width:2048 };
-  if (format === 'image-png-4096') return { ext:'png', mime:'image/png', width:4096 };
-  if (format === 'audio-mp3-128') return { ext:'mp3', mime:'audio/mpeg', bitrate:'128k' };
-  if (format === 'audio-mp3-192') return { ext:'mp3', mime:'audio/mpeg', bitrate:'192k' };
-  if (format === 'audio-mp3-320') return { ext:'mp3', mime:'audio/mpeg', bitrate:'320k' };
-  if (format === 'audio-wav') return { ext:'wav', mime:'audio/wav', bitrate:'' };
+  if (format === 'video-480') return { ext: 'mp4', mime: 'video/mp4', height: 480 };
+  if (format === 'video-780') return { ext: 'mp4', mime: 'video/mp4', height: 780 };
+  if (format === 'video-1080') return { ext: 'mp4', mime: 'video/mp4', height: 1080 };
+  if (format === 'video-1440') return { ext: 'mp4', mime: 'video/mp4', height: 1440 };
+  if (format === 'video-2160') return { ext: 'mp4', mime: 'video/mp4', height: 2160 };
+  if (format === 'image-jpg-1024') return { ext: 'jpg', mime: 'image/jpeg', width: 1024 };
+  if (format === 'image-webp-1600') return { ext: 'webp', mime: 'image/webp', width: 1600 };
+  if (format === 'image-png-2048') return { ext: 'png', mime: 'image/png', width: 2048 };
+  if (format === 'image-png-4096') return { ext: 'png', mime: 'image/png', width: 4096 };
+  if (format === 'audio-mp3-128') return { ext: 'mp3', mime: 'audio/mpeg', bitrate: '128k' };
+  if (format === 'audio-mp3-192') return { ext: 'mp3', mime: 'audio/mpeg', bitrate: '192k' };
+  if (format === 'audio-mp3-320') return { ext: 'mp3', mime: 'audio/mpeg', bitrate: '320k' };
+  if (format === 'audio-wav') return { ext: 'wav', mime: 'audio/wav', bitrate: '' };
   return null;
 }
 
 function xml(value: string) {
-  return value.replace(/[<>&"']/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c] || c));
+  return value.replace(/[<>&"']/g, (c) => ({
+    '<': '&lt;',
+    '>': '&gt;',
+    '&': '&amp;',
+    '"': '&quot;',
+    "'": '&apos;',
+  }[c] || c));
 }
 
 function cleanPublicName(value: unknown) {
@@ -86,6 +103,11 @@ function cleanPublicName(value: unknown) {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 28);
+}
+
+function publicHandle(value: unknown) {
+  const name = cleanPublicName(value) || 'createur';
+  return `@${name}`;
 }
 
 async function resolveOwnerName(generation: any) {
@@ -100,7 +122,7 @@ async function resolveOwnerName(generation: any) {
   if (explicit) return explicit;
 
   const userId = String(generation.userId || '').trim();
-  if (!userId) return 'Créateur MUNGWELE';
+  if (!userId) return 'createur';
 
   try {
     const [mdigiSnap, userSnap] = await Promise.all([
@@ -124,9 +146,13 @@ async function resolveOwnerName(generation: any) {
     console.warn('[MEDIA_DOWNLOAD_OWNER_NAME_WARNING]', error);
   }
 
-  return 'Créateur MUNGWELE';
+  return 'createur';
 }
 
+/**
+ * Social-style signature: official MUNGWELE logo + @M.Digi nickname on ONE line.
+ * The words "MUNGWELE AI" are intentionally not repeated: the logo already carries the brand.
+ */
 async function watermarkBuffer(ownerName: string) {
   const markPath = path.join(process.cwd(), 'src/assets/mungwele-ai-official-mark.svg');
   let mark = '';
@@ -137,25 +163,17 @@ async function watermarkBuffer(ownerName: string) {
   }
 
   const encoded = Buffer.from(mark).toString('base64');
-  const nickname = cleanPublicName(ownerName) || 'Créateur MUNGWELE';
-
+  const handle = publicHandle(ownerName);
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="430" height="120">
+    <svg xmlns="http://www.w3.org/2000/svg" width="560" height="92">
       <defs>
-        <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stop-color="#ff39d0"/>
-          <stop offset=".48" stop-color="#6c57ff"/>
-          <stop offset="1" stop-color="#18e86a"/>
-        </linearGradient>
-        <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity=".85"/>
+        <filter id="shadow" x="-30%" y="-40%" width="170%" height="180%">
+          <feDropShadow dx="0" dy="3" stdDeviation="3.5" flood-color="#000" flood-opacity=".88"/>
         </filter>
       </defs>
       <g filter="url(#shadow)" opacity=".96">
-        <image href="data:image/svg+xml;base64,${encoded}" x="0" y="12" width="82" height="82" preserveAspectRatio="xMidYMid meet"/>
-        <text x="92" y="48" font-family="Arial,Helvetica,sans-serif" font-size="26" font-weight="800" fill="#fff">MUNGWELE AI</text>
-        <text x="92" y="83" font-family="Arial,Helvetica,sans-serif" font-size="25" font-weight="700" fill="#fff">@${xml(nickname)}</text>
-        <rect x="92" y="95" width="184" height="5" rx="2.5" fill="url(#accent)"/>
+        <image href="data:image/svg+xml;base64,${encoded}" x="0" y="6" width="78" height="78" preserveAspectRatio="xMidYMid meet"/>
+        <text x="88" y="58" font-family="Arial,Helvetica,sans-serif" font-size="31" font-weight="800" fill="#fff">${xml(handle)}</text>
       </g>
     </svg>
   `;
@@ -164,14 +182,22 @@ async function watermarkBuffer(ownerName: string) {
 
 async function runFfmpeg(args: string[]) {
   if (!ffmpegPath) throw new Error('Convertisseur vidéo/audio indisponible.');
+
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(ffmpegPath, args, { stdio:['ignore','ignore','pipe'] });
+    const child = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
-    child.stderr.on('data', (chunk) => { stderr += String(chunk); if (stderr.length > 12000) stderr = stderr.slice(-12000); });
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+      if (stderr.length > 12000) stderr = stderr.slice(-12000);
+    });
     child.on('error', reject);
     child.on('close', (code) => {
       if (code === 0) return resolve();
-      console.warn('[MEDIA_FFMPEG_ERROR]', { code, args: args.filter((value) => !value.includes('comment=')), stderr: stderr.slice(-4000) });
+      console.warn('[MEDIA_FFMPEG_ERROR]', {
+        code,
+        args: args.filter((value) => !value.includes('comment=')),
+        stderr: stderr.slice(-4000),
+      });
       reject(new Error('La conversion du média a échoué. Réessayez avec une autre qualité ou dans quelques instants.'));
     });
   });
@@ -182,16 +208,22 @@ async function transcode(input: Buffer, kind: Kind, format: string, community: b
   if (!info) throw new Error('Format de téléchargement invalide.');
 
   if (kind === 'image') {
-    let pipeline = sharp(input).resize({ width: info.width || 1024, withoutEnlargement: false, fit:'inside' });
+    let pipeline = sharp(input).resize({
+      width: info.width || 1024,
+      withoutEnlargement: false,
+      fit: 'inside',
+    });
+
     if (community) {
       const wm = await watermarkBuffer(ownerName);
       const meta = await pipeline.metadata();
       const targetWidth = Math.min(460, Math.max(200, Math.round((meta.width || info.width || 1024) * 0.38)));
       const resized = await sharp(wm).resize({ width: targetWidth }).png().toBuffer();
-      pipeline = pipeline.composite([{ input: resized, gravity:'southeast', blend:'over' }]);
+      pipeline = pipeline.composite([{ input: resized, gravity: 'southeast', blend: 'over' }]);
     }
-    if (info.ext === 'jpg') return { bytes: await pipeline.jpeg({ quality:90 }).toBuffer(), ...info };
-    if (info.ext === 'webp') return { bytes: await pipeline.webp({ quality:92 }).toBuffer(), ...info };
+
+    if (info.ext === 'jpg') return { bytes: await pipeline.jpeg({ quality: 90 }).toBuffer(), ...info };
+    if (info.ext === 'webp') return { bytes: await pipeline.webp({ quality: 92 }).toBuffer(), ...info };
     return { bytes: await pipeline.png().toBuffer(), ...info };
   }
 
@@ -208,36 +240,50 @@ async function transcode(input: Buffer, kind: Kind, format: string, community: b
       else args.push('-c:a', 'libmp3lame', '-b:a', info.bitrate || '192k', '-f', 'mp3');
       if (community) {
         args.push(
-          '-metadata', `artist=MUNGWELE AI • ${ownerName}`,
-          '-metadata', `comment=Téléchargé depuis la communauté MUNGWELE AI • Propriétaire: ${ownerName}`,
+          '-metadata', `artist=${publicHandle(ownerName)}`,
+          '-metadata', `comment=Téléchargé depuis la communauté MUNGWELE • ${publicHandle(ownerName)}`,
         );
       }
       args.push(outputPath);
       await runFfmpeg(args);
     } else {
       const height = info.height || 480;
-      const wmHeight = Math.max(40, Math.min(92, Math.round(height * 0.09)));
-      const padding = Math.max(10, Math.min(30, Math.round(height * 0.025)));
+      const wmHeight = Math.max(32, Math.min(74, Math.round(height * 0.075)));
+      const padding = Math.max(10, Math.min(28, Math.round(height * 0.025)));
       const wmPath = path.join(dir, 'watermark.png');
 
       await fs.writeFile(wmPath, await watermarkBuffer(ownerName));
 
+      /*
+       * Android/Samsung Gallery compatibility is intentional here.
+       * Source AI videos can arrive as H.264 High 4:4:4 / yuv444p. Many Android
+       * media indexers can play their audio but cannot decode a thumbnail/video frame.
+       * We always produce ordinary AVC/H.264 yuv420p in an MP4/avc1 container.
+       */
       const args = [
         '-y',
         '-i', inputPath,
         '-i', wmPath,
         '-filter_complex',
-        `[0:v]scale=-2:${height}:flags=lanczos[base];[1:v]scale=-1:${wmHeight}[wm];[base][wm]overlay=${padding}:H-h-${padding}:format=auto[outv]`,
+        `[0:v]scale=-2:${height}:flags=lanczos,setsar=1[base];[1:v]scale=-1:${wmHeight}[wm];[base][wm]overlay=${padding}:H-h-${padding}:format=auto,format=yuv420p[outv]`,
         '-map', '[outv]',
-        '-map', '0:a?',
+        '-map', '0:a:0?',
         '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        '-profile:v', 'high',
+        '-tag:v', 'avc1',
         '-preset', 'veryfast',
         '-crf', '20',
         '-c:a', 'aac',
+        '-ar', '48000',
+        '-ac', '2',
         '-b:a', '160k',
-        '-metadata', `artist=MUNGWELE AI • ${ownerName}`,
-        '-metadata', `comment=Vidéo signée automatiquement par MUNGWELE AI • @${ownerName}`,
+        '-metadata', `artist=${publicHandle(ownerName)}`,
+        '-metadata', `comment=Vidéo MUNGWELE • ${publicHandle(ownerName)}`,
+        '-metadata:s:v:0', 'handler_name=VideoHandler',
+        '-metadata:s:a:0', 'handler_name=SoundHandler',
         '-movflags', '+faststart',
+        '-brand', 'mp42',
         '-f', 'mp4',
         outputPath,
       ];
@@ -247,7 +293,7 @@ async function transcode(input: Buffer, kind: Kind, format: string, community: b
 
     return { bytes: await fs.readFile(outputPath), ...info };
   } finally {
-    await fs.rm(dir, { recursive:true, force:true }).catch(() => undefined);
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 
@@ -264,9 +310,9 @@ async function loadAuthorizedGeneration(requester: Requester, generationId: stri
   const snap = await adminDb.collection('generations').doc(generationId).get();
   if (!snap.exists) throw Object.assign(new Error('Création introuvable.'), { status: 404 });
 
-  const generation:any = { id:snap.id, ...snap.data() };
+  const generation: any = { id: snap.id, ...snap.data() };
   const kind = generation.type as Kind;
-  if (!['image','video','clips','music'].includes(kind)) {
+  if (!['image', 'video', 'clips', 'music'].includes(kind)) {
     throw Object.assign(new Error('Type de création non téléchargeable.'), { status: 415 });
   }
 
@@ -292,7 +338,13 @@ async function sendMedia(requester: Requester, generationId: string, format: str
   const input = Buffer.from(await upstream.arrayBuffer());
   const ownerName = await resolveOwnerName(generation);
   const output = await transcode(input, kind, format, community, ownerName);
-  const safeTitle = String(generation.title || 'creation').replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').slice(0, 60) || 'creation';
+  const safeTitle = String(generation.title || 'creation')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 42) || 'creation';
   const filename = `${community ? 'mungwele-community' : 'mungwele'}-${safeTitle}.${output.ext}`;
 
   res.setHeader('Content-Type', output.mime);
@@ -313,13 +365,15 @@ async function mediaDownloadHandler(req: Request, res: Response) {
       const ticket = downloadTickets.get(ticketId);
       downloadTickets.delete(ticketId);
       if (!ticket || ticket.expiresAt <= Date.now()) {
-        return res.status(410).json({ error:'Le lien de téléchargement a expiré. Relancez le téléchargement depuis MUNGWELE IA STUDIO.' });
+        return res.status(410).json({
+          error: 'Le lien de téléchargement a expiré. Relancez le téléchargement depuis MUNGWELE IA STUDIO.',
+        });
       }
       return await sendMedia(ticket.requester, ticket.generationId, ticket.format, ticket.community, res);
     }
 
     const requester = await authenticatedUser(req);
-    if (!requester) return res.status(401).json({ error:'Connexion requise pour télécharger.' });
+    if (!requester) return res.status(401).json({ error: 'Connexion requise pour télécharger.' });
 
     const generationId = queryValue(req, 'generationId');
     const format = queryValue(req, 'format');
@@ -342,11 +396,13 @@ async function mediaDownloadHandler(req: Request, res: Response) {
     }
 
     return await sendMedia(requester, generationId, format, community, res);
-  } catch (error:any) {
+  } catch (error: any) {
     console.warn('[MEDIA_DOWNLOAD_WARNING]', error);
     const status = Number(error?.status || 500);
     if (res && typeof (res as Response).status === 'function') {
-      return res.status(status >= 400 && status < 600 ? status : 500).json({ error:error?.message || 'Téléchargement impossible.' });
+      return res.status(status >= 400 && status < 600 ? status : 500).json({
+        error: error?.message || 'Téléchargement impossible.',
+      });
     }
     throw error;
   }
