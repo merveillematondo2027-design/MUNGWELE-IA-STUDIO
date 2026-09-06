@@ -48,7 +48,7 @@ export type VideoDuration = 4 | 6 | 8;
 export type ExtendedVideoDuration = 4 | 5 | 6 | 8 | 10 | 15 | 30;
 export type VideoResolution = '480p' | '720p' | '780p' | '1080p' | '1440p' | '2k' | '4k';
 export type VideoType = 'social' | 'commercial' | 'realistic' | 'cinematic' | 'action' | 'comedy' | 'drama' | 'romantic_series' | '3d' | 'anime' | 'talking' | 'effects' | 'music_clip' | 'custom';
-export type VideoEngineKey = 'veo-lite' | 'veo-fast' | 'veo-pro' | 'omni' | 'runway-gen45' | 'minimax-h3' | 'kling-v3-pro' | 'seedance-25';
+export type VideoEngineKey = 'veo-lite' | 'veo-fast' | 'veo-pro' | 'omni' | 'seedance-2-mini' | 'seedance-2-fast' | 'seedance-2' | 'seedance-2-5' | 'runway-act-two';
 
 export interface VideoGenerationSettings {
   style?: 'cinematic' | 'commercial' | 'realistic' | '3d_animation' | 'social_media' | 'music_clip' | 'prompt-only';
