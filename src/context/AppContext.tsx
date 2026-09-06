@@ -13,29 +13,35 @@ import {
   AppSettings,
   ApiProviderSetting,
 } from '../types';
+import {
+  ANNUAL_DISCOUNT_PERCENT,
+  LAUNCH_CREDIT_PACKS,
+  LAUNCH_LEGACY_CREDIT_COSTS,
+  LAUNCH_SUBSCRIPTION_PLANS,
+  PRICING_VERSION,
+} from '../config/commercialPricing';
 
 const EMPTY_USER: UserProfile = {
   id: '', name: 'Invité', email: '', avatar: '', role: 'user', status: 'active',
   credits: 0, plan: 'free', totalGenerations: 0, createdAt: '',
 };
 
+const launchPlans: AppSettings['subscriptionPlans'] = LAUNCH_SUBSCRIPTION_PLANS.map((plan) => ({
+  ...plan,
+  features: [...plan.features],
+}));
+const launchPacks: AppSettings['creditPacks'] = LAUNCH_CREDIT_PACKS.map((pack) => ({ ...pack }));
+
 export const DEFAULT_APP_SETTINGS: AppSettings = {
+  pricingVersion: PRICING_VERSION,
   siteName: 'MUNGWELE IA STUDIO',
   slogan: 'Imaginez. Générez. Créez sans limites.',
   maintenanceMode: false,
   announcementBanner: 'Bienvenue sur MUNGWELE IA STUDIO — Génération IA nouvelle génération !',
-  annualDiscountPercent: 20,
-  subscriptionPlans: [
-    { id: 'free', name: 'Gratuit', priceMonth: 0, creditsMonthly: 0, maxDownloadResolution: 'standard', features: ['100 crédits de bienvenue une seule fois', 'Génération avec crédits achetés', 'Téléchargement HD réservé aux abonnés'] },
-    { id: 'creator', name: 'Creator', priceMonth: 10, creditsMonthly: 600, popular: true, maxDownloadResolution: '720p', features: ['600 crédits chaque mois', 'Téléchargement vidéo 720p', 'Accès Lite, Fast et Pro selon le solde'] },
-    { id: 'pro', name: 'Pro', priceMonth: 25, creditsMonthly: 1600, maxDownloadResolution: '1080p', features: ['1 600 crédits chaque mois', 'Téléchargement vidéo jusqu’à 1080p', 'Priorité sur les fonctions premium'] },
-  ],
-  creditPacks: [
-    { id: 'pack-200', name: 'Essentiel', credits: 200, priceUsd: 4, enabled: true },
-    { id: 'pack-500', name: 'Créateur', credits: 500, priceUsd: 9, enabled: true },
-    { id: 'pack-1200', name: 'Studio', credits: 1200, priceUsd: 20, enabled: true },
-  ],
-  creditCosts: { imageStandard: 5, imageHd: 8, video5s: 15, video10s: 25, musicTrack: 10, promptEnhance: 0 },
+  annualDiscountPercent: ANNUAL_DISCOUNT_PERCENT,
+  subscriptionPlans: launchPlans,
+  creditPacks: launchPacks,
+  creditCosts: { ...LAUNCH_LEGACY_CREDIT_COSTS },
 };
 
 interface AppContextType {
@@ -125,7 +131,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     fetch('/api/settings').then((r) => r.ok ? r.json() : null).then((data) => {
       if (!data) return;
-      if (data.settings) setAppSettings((prev) => ({ ...prev, ...data.settings, subscriptionPlans: prev.subscriptionPlans, creditPacks: prev.creditPacks }));
+      if (data.settings) {
+        const incoming = data.settings as Partial<AppSettings>;
+        const pricingMatches = Number(incoming.pricingVersion) === PRICING_VERSION;
+        setAppSettings((prev) => ({
+          ...prev,
+          ...incoming,
+          pricingVersion: PRICING_VERSION,
+          annualDiscountPercent: pricingMatches && Number.isFinite(Number(incoming.annualDiscountPercent)) ? Number(incoming.annualDiscountPercent) : prev.annualDiscountPercent,
+          subscriptionPlans: pricingMatches && Array.isArray(incoming.subscriptionPlans) ? incoming.subscriptionPlans : prev.subscriptionPlans,
+          creditPacks: pricingMatches && Array.isArray(incoming.creditPacks) ? incoming.creditPacks : prev.creditPacks,
+          creditCosts: pricingMatches && incoming.creditCosts ? incoming.creditCosts : prev.creditCosts,
+        }));
+      }
       if (data.providers) setProviders(data.providers);
     }).catch((err) => console.warn('Settings sync warning:', err));
   }, []);
@@ -136,7 +154,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return onSnapshot(pricingRef, (snapshot) => {
       if (!snapshot.exists()) return;
       const data = snapshot.data() as Partial<AppSettings>;
-      setAppSettings((prev) => ({ ...prev, ...data, subscriptionPlans: Array.isArray(data.subscriptionPlans) ? data.subscriptionPlans : prev.subscriptionPlans, creditPacks: Array.isArray(data.creditPacks) ? data.creditPacks : prev.creditPacks }));
+      if (Number(data.pricingVersion) !== PRICING_VERSION) {
+        console.warn(`[MUNGWELE_PRICING_VERSION] Firestore pricing ignored: expected ${PRICING_VERSION}, received ${String(data.pricingVersion || 'legacy')}.`);
+        return;
+      }
+      setAppSettings((prev) => ({
+        ...prev,
+        ...data,
+        pricingVersion: PRICING_VERSION,
+        subscriptionPlans: Array.isArray(data.subscriptionPlans) ? data.subscriptionPlans : prev.subscriptionPlans,
+        creditPacks: Array.isArray(data.creditPacks) ? data.creditPacks : prev.creditPacks,
+      }));
     }, (error) => console.warn('Firestore pricing sync warning:', error));
   }, [user.id]);
 
@@ -261,7 +289,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const updateAppSettings = (newSettings: Partial<AppSettings>) => setAppSettings((prev) => ({ ...prev, ...newSettings }));
+  const updateAppSettings = (newSettings: Partial<AppSettings>) => setAppSettings((prev) => ({ ...prev, ...newSettings, pricingVersion: PRICING_VERSION }));
   const toggleProvider = async (id: string, enabled: boolean) => {
     setProviders((prev) => prev.map((p) => p.id === id ? { ...p, enabled } : p));
     try { await fetch('/api/admin/providers/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ providerId: id, enabled }) }); } catch {}
