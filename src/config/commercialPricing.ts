@@ -95,12 +95,12 @@ export function videoCreditsForRequest(
   if (rate == null) throw new Error(`${model} ne prend pas en charge ${resolution}.`);
   const providerCostUsd = rate * duration;
   const baseCredits = creditsForProviderCost(providerCostUsd);
-  // Omni image inputs are token-billed. Five credits/reference is a deliberately
-  // simple launch surcharge that safely covers current input cost and orchestration.
-  const referenceCount = Math.max(0, Math.min(8, Math.floor(Number(options.referenceImageCount) || 0)));
-  const referenceCredits = model === 'omni' ? referenceCount * 5 : 0;
+  // Current Omni image-input token cost is tiny compared with the video output.
+  // It is absorbed by the rounded launch rate so the browser and server always
+  // display exactly the same video cost regardless of the number of references.
+  const referenceCredits = 0;
   return {
-    credits: baseCredits + referenceCredits,
+    credits: baseCredits,
     baseCredits,
     referenceCredits,
     providerCostUsd: Number(providerCostUsd.toFixed(4)),
