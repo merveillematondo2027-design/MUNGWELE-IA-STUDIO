@@ -18,6 +18,7 @@ import { AdminView } from './components/views/AdminView';
 import { AdminWorkspaceView } from './components/views/AdminWorkspaceView';
 import { HelpView } from './components/views/HelpView';
 import { NotificationToast } from './components/common/NotificationToast';
+import { InstallAppButton } from './components/common/InstallAppButton';
 import { MediaViewerModal } from './components/common/MediaViewerModal';
 import { AuthModal } from './components/views/AuthModal';
 import { subscribeToFirebaseUser } from './services/authService';
@@ -101,7 +102,7 @@ const MainLayout: React.FC = () => {
       {!needsLogin&&activeTab==='admin-home'&&renderAdmin('home')}{!needsLogin&&activeTab==='admin-users'&&renderAdmin('users')}{!needsLogin&&activeTab==='admin-credits'&&renderAdmin('credits')}{!needsLogin&&activeTab==='admin-subscriptions'&&renderAdmin('subscriptions')}{!needsLogin&&activeTab==='admin-library'&&renderAdmin('library')}{!needsLogin&&activeTab==='admin-logs'&&renderAdmin('logs')}{!needsLogin&&activeTab==='admin-usage'&&renderAdmin('usage')}
       {!needsLogin&&activeTab==='help'&&<HelpView/>}
     </motion.div></AnimatePresence></main></div>
-    <NotificationToast/><MediaViewerModal media={activeMediaModal} onClose={()=>setActiveMediaModal(null)}/><AuthModal/>
+    <InstallAppButton/><NotificationToast/><MediaViewerModal media={activeMediaModal} onClose={()=>setActiveMediaModal(null)}/><AuthModal/>
   </div>;
 };
 
