@@ -40,8 +40,8 @@ export const VIDEO_ENGINES: Record<VideoEngineKey, VideoEngineProfile> = {
   },
   omni: {
     key: 'omni', label: 'Gemini Omni Fast', provider: 'Google', availability: 'connected',
-    maxSeconds: 10, durations: [4, 5, 6, 8, 10], supportsAudioReference: false, supportsLipSync: false,
-    supportsImages: true, strengths: ['références', 'édition', 'continuité', 'jusqu’à 10 s'], estimatedUsdPerSecond: 0.10,
+    maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false,
+    supportsImages: true, strengths: ['références', 'édition', 'continuité', 'rapide'], estimatedUsdPerSecond: 0.10,
   },
   'seedance-2-5': {
     key: 'seedance-2-5', label: 'Seedance 2.5', provider: 'Runway Dev', availability: 'planned',
