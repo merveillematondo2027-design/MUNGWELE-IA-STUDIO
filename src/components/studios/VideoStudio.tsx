@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Download, Film, Loader2, Plus, Send, Settings2, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type {
+  ExtendedVideoDuration,
   GenerationRecord,
-  VideoDuration,
   VideoEngineKey,
   VideoGenerationSettings,
   VideoModel,
@@ -13,9 +13,9 @@ import {
   VIDEO_ENGINES,
   VIDEO_TYPE_ROUTING,
   defaultConnectedEngine,
-  recommendedConnectedEngines,
+  recommendedEnginesForType,
 } from '../../config/videoRouting';
-import { videoCreditsForRequest } from '../../config/commercialPricing';
+import { videoEngineCreditsForRequest } from '../../config/commercialPricing';
 import { DownloadOptionsModal } from '../common/DownloadOptionsModal';
 
 const ENGINE_TO_MODEL: Partial<Record<VideoEngineKey, VideoModel>> = {
@@ -43,9 +43,10 @@ const TYPE_ORDER: VideoType[] = [
 ];
 
 const MAX_OMNI_REFERENCES = 6;
-const SETTINGS_KEY = 'mungwele.video.smart-routing.v3';
+const SETTINGS_KEY = 'mungwele.video.smart-routing.v4';
 const NEW_PROJECT_KEY = 'mungwele.new.project';
 const RESUME_PROJECT_KEY = 'mungwele.resume.project';
+const EXTENDED_DURATIONS: ExtendedVideoDuration[] = [4, 5, 6, 8, 10, 15, 30];
 
 function fileToDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -54,6 +55,10 @@ function fileToDataUrl(file: File) {
     reader.onerror = () => reject(reader.error || new Error('Lecture image impossible.'));
     reader.readAsDataURL(file);
   });
+}
+
+function isExtendedDuration(value: unknown): value is ExtendedVideoDuration {
+  return EXTENDED_DURATIONS.includes(Number(value) as ExtendedVideoDuration);
 }
 
 export const VideoStudio: React.FC = () => {
@@ -73,7 +78,7 @@ export const VideoStudio: React.FC = () => {
   const [prompt, setPrompt] = useState('');
   const [videoType, setVideoType] = useState<VideoType>('social');
   const [engineKey, setEngineKey] = useState<VideoEngineKey>('veo-lite');
-  const [duration, setDuration] = useState<VideoDuration>(8);
+  const [duration, setDuration] = useState<ExtendedVideoDuration>(8);
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>('9:16');
   const [startImage, setStartImage] = useState<string | null>(null);
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
@@ -86,16 +91,14 @@ export const VideoStudio: React.FC = () => {
   const imageInput = useRef<HTMLInputElement | null>(null);
 
   const typeMeta = VIDEO_TYPE_ROUTING[videoType];
-  const recommendedEngines = useMemo(() => recommendedConnectedEngines(videoType, 3), [videoType]);
-  const referenceImageCount = (startImage ? 1 : 0) + referenceImages.length;
+  const recommendedEngines = useMemo(() => recommendedEnginesForType(videoType, 3), [videoType]);
 
-  // A single first-frame image is supported directly by Veo and must not force
-  // the more expensive compatibility route. Omni is reserved for true
-  // multi-reference projects until the normal Veo endpoint supports them here.
+  // Multiple visual references use Omni automatically. A single first-frame
+  // image remains on the selected Veo engine, which is much cheaper.
   const usesOmni = referenceImages.length > 0;
   const effectiveEngine = usesOmni ? VIDEO_ENGINES.omni : VIDEO_ENGINES[engineKey];
   const effectiveModel: VideoModel = usesOmni ? 'omni' : (ENGINE_TO_MODEL[engineKey] || 'fast');
-  const creditQuote = videoCreditsForRequest(effectiveModel, duration, { referenceImageCount });
+  const creditQuote = videoEngineCreditsForRequest(effectiveEngine.key, duration);
   const creditCost = creditQuote.credits;
 
   useEffect(() => {
@@ -104,17 +107,17 @@ export const VideoStudio: React.FC = () => {
       if (saved?.videoType && VIDEO_TYPE_ROUTING[saved.videoType as VideoType]) {
         const savedType = saved.videoType as VideoType;
         setVideoType(savedType);
-        const allowed = recommendedConnectedEngines(savedType, 3).map((engine) => engine.key);
-        if (saved?.engineKey && saved.engineKey !== 'omni' && allowed.includes(saved.engineKey as VideoEngineKey)) {
+        const allowed = recommendedEnginesForType(savedType, 3).map((engine) => engine.key);
+        if (saved?.engineKey && allowed.includes(saved.engineKey as VideoEngineKey)) {
           setEngineKey(saved.engineKey as VideoEngineKey);
         } else {
           setEngineKey(defaultConnectedEngine(savedType).key);
         }
       }
-      if (saved?.duration === 4 || saved?.duration === 6 || saved?.duration === 8) setDuration(saved.duration);
+      if (isExtendedDuration(saved?.duration)) setDuration(saved.duration);
       if (saved?.aspectRatio === '16:9' || saved?.aspectRatio === '9:16') setAspectRatio(saved.aspectRatio);
     } catch {
-      // Keep launch defaults when a previous local preference is malformed.
+      // Keep launch defaults when an old local preference is malformed.
     }
   }, []);
 
@@ -122,8 +125,8 @@ export const VideoStudio: React.FC = () => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({ videoType, engineKey, duration, aspectRatio }));
   }, [videoType, engineKey, duration, aspectRatio]);
 
-  // Home/module entry means NEW project. Historical generations belong in the
-  // Library and only return here through its explicit "Reprendre" action.
+  // Home/module entry always starts a new video project. History stays in the
+  // Library and only returns through the explicit "Reprendre" action.
   useEffect(() => {
     const newProject = sessionStorage.getItem(NEW_PROJECT_KEY);
     if (newProject === 'video') {
@@ -146,15 +149,9 @@ export const VideoStudio: React.FC = () => {
       setPrompt(project.prompt || '');
       const settings = project.settings as VideoGenerationSettings;
       if (settings?.videoType) setVideoType(settings.videoType);
-      if (settings?.engineKey && VIDEO_ENGINES[settings.engineKey]?.availability === 'connected') {
-        setEngineKey(settings.engineKey);
-      }
-      if (settings?.duration === 4 || settings?.duration === 6 || settings?.duration === 8) {
-        setDuration(settings.duration);
-      }
-      if (settings?.aspectRatio === '16:9' || settings?.aspectRatio === '9:16') {
-        setAspectRatio(settings.aspectRatio);
-      }
+      if (settings?.engineKey && VIDEO_ENGINES[settings.engineKey]) setEngineKey(settings.engineKey);
+      if (isExtendedDuration(settings?.duration)) setDuration(settings.duration);
+      if (settings?.aspectRatio === '16:9' || settings?.aspectRatio === '9:16') setAspectRatio(settings.aspectRatio);
       if (typeof settings?.startImage === 'string') setStartImage(settings.startImage);
       if (Array.isArray(settings?.referenceImages)) {
         setReferenceImages(settings.referenceImages.filter((item): item is string => typeof item === 'string'));
@@ -173,17 +170,19 @@ export const VideoStudio: React.FC = () => {
     setImageToVideoTransfer(null);
   }, [imageToVideoTransfer, setImageToVideoTransfer]);
 
-  // If a type changes and a previously selected engine no longer belongs to
-  // its short compatibility list, immediately fall back to the cheapest valid
-  // connected engine.
+  useEffect(() => {
+    if (!usesOmni) return;
+    if (!VIDEO_ENGINES.omni.durations.includes(duration)) setDuration(8);
+  }, [usesOmni, duration]);
+
   useEffect(() => {
     if (usesOmni) return;
     const allowed = recommendedEngines.map((engine) => engine.key);
     if (!allowed.includes(engineKey)) {
-      const best = recommendedEngines[0] || defaultConnectedEngine(videoType);
+      const best = defaultConnectedEngine(videoType);
       setEngineKey(best.key);
       if (!best.durations.includes(duration)) {
-        setDuration((best.durations.includes(8) ? 8 : best.durations[0]) as VideoDuration);
+        setDuration((best.durations.includes(8) ? 8 : best.durations[0]) as ExtendedVideoDuration);
       }
     }
   }, [videoType, recommendedEngines, engineKey, duration, usesOmni]);
@@ -203,7 +202,7 @@ export const VideoStudio: React.FC = () => {
     const best = defaultConnectedEngine(next);
     setEngineKey(best.key);
     if (!best.durations.includes(duration)) {
-      setDuration((best.durations.includes(8) ? 8 : best.durations[0]) as VideoDuration);
+      setDuration((best.durations.includes(8) ? 8 : best.durations[0]) as ExtendedVideoDuration);
     }
     setAspectRatio(next === 'social' ? '9:16' : '16:9');
     setTypeListOpen(false);
@@ -212,13 +211,24 @@ export const VideoStudio: React.FC = () => {
 
   const chooseEngine = (key: VideoEngineKey) => {
     const allowed = recommendedEngines.some((engine) => engine.key === key);
+    if (!allowed) return;
+
     const engine = VIDEO_ENGINES[key];
-    if (!allowed || engine.availability !== 'connected') return;
     setEngineKey(key);
     if (!engine.durations.includes(duration)) {
-      setDuration((engine.durations.includes(8) ? 8 : engine.durations[0]) as VideoDuration);
+      const preferred = engine.durations.includes(8) ? 8 : engine.durations[0];
+      setDuration(preferred as ExtendedVideoDuration);
     }
+    setCurrentResult(null);
     setEngineListOpen(false);
+
+    if (engine.availability !== 'connected') {
+      addNotification(
+        'info',
+        'Bientôt disponible',
+        `${engine.label} est déjà préparé dans MUNGWELE, mais la génération Runway sera activée prochainement. Vous pouvez voir ses durées et son tarif dès maintenant.`,
+      );
+    }
   };
 
   const loadImages = async (files: FileList) => {
@@ -257,10 +267,8 @@ export const VideoStudio: React.FC = () => {
   };
 
   const engineCredits = (key: VideoEngineKey) => {
-    const model = ENGINE_TO_MODEL[key];
-    if (!model) return null;
     try {
-      return videoCreditsForRequest(model, duration).credits;
+      return videoEngineCreditsForRequest(key, duration).credits;
     } catch {
       return null;
     }
@@ -270,6 +278,15 @@ export const VideoStudio: React.FC = () => {
     if (isGenerating) return;
     if (!prompt.trim()) {
       addNotification('warning', 'Prompt requis', 'Décrivez la vidéo que vous voulez créer.');
+      return;
+    }
+
+    if (effectiveEngine.availability !== 'connected') {
+      addNotification(
+        'info',
+        'Bientôt disponible',
+        `${effectiveEngine.label} n’est pas encore activé en production. Choisissez un moteur Google disponible pour générer maintenant.`,
+      );
       return;
     }
 
@@ -334,7 +351,7 @@ export const VideoStudio: React.FC = () => {
       <div className="mb-4 flex items-center justify-between px-1">
         <div>
           <h1 className="text-xl font-black text-white sm:text-2xl">Studio Vidéo</h1>
-          <p className="mt-1 text-xs text-gray-500">Nouveau projet. Choisissez le type, MUNGWELE recommande les moteurs compatibles les moins coûteux.</p>
+          <p className="mt-1 text-xs text-gray-500">Nouveau projet. Le type propose 2 à 3 moteurs adaptés et privilégie le coût fournisseur le plus bas.</p>
         </div>
         <span className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-bold text-amber-300">
           {creditCost} crédits
@@ -442,7 +459,7 @@ export const VideoStudio: React.FC = () => {
           </div>
           <div className="flex items-center justify-between px-3 pb-1 pt-2 text-[10px] text-gray-600">
             <span>{typeMeta.label} • {effectiveEngine.label} • {duration}s</span>
-            <span>{creditCost} crédits</span>
+            <span>{effectiveEngine.availability === 'connected' ? `${creditCost} crédits` : `${creditCost} cr • bientôt`}</span>
           </div>
         </div>
       </div>
@@ -453,7 +470,7 @@ export const VideoStudio: React.FC = () => {
             <div className="flex items-center justify-between border-b border-white/10 p-5">
               <div>
                 <h2 className="text-lg font-black text-white">Réglages Vidéo</h2>
-                <p className="text-xs text-gray-500">Le type détermine 2 à 3 moteurs compatibles, classés par coût fournisseur.</p>
+                <p className="text-xs text-gray-500">Le moteur choisi contrôle automatiquement les durées disponibles et le tarif.</p>
               </div>
               <button type="button" onClick={() => setSettingsOpen(false)} className="rounded-xl bg-white/[0.05] p-2">
                 <X className="h-4 w-4" />
@@ -508,7 +525,7 @@ export const VideoStudio: React.FC = () => {
                 <p className="mb-2 text-[11px] font-black uppercase tracking-[0.12em] text-gray-500">Moteur de génération</p>
                 {usesOmni ? (
                   <div className="rounded-2xl border border-purple-400/25 bg-purple-500/10 px-4 py-3">
-                    <p className="text-sm font-black text-purple-100">Google Omni Références</p>
+                    <p className="text-sm font-black text-purple-100">Gemini Omni Fast</p>
                     <p className="mt-1 text-[10px] leading-4 text-purple-300/70">Plusieurs images sont utilisées : MUNGWELE active automatiquement le flux multi-références.</p>
                   </div>
                 ) : (
@@ -520,7 +537,7 @@ export const VideoStudio: React.FC = () => {
                     >
                       <div>
                         <p className="text-sm font-black text-white">{VIDEO_ENGINES[engineKey].label}</p>
-                        <p className="mt-1 text-[10px] text-gray-500">{recommendedEngines.length} moteur{recommendedEngines.length > 1 ? 's' : ''} compatible{recommendedEngines.length > 1 ? 's' : ''} • moins cher recommandé en premier</p>
+                        <p className="mt-1 text-[10px] text-gray-500">{recommendedEngines.length} moteurs compatibles • tarif recalculé selon durée</p>
                       </div>
                       <ChevronDown className={`h-4 w-4 text-gray-400 transition ${engineListOpen ? 'rotate-180' : ''}`} />
                     </button>
@@ -530,6 +547,7 @@ export const VideoStudio: React.FC = () => {
                         {recommendedEngines.map((engine, index) => {
                           const active = engine.key === engineKey;
                           const credits = engineCredits(engine.key);
+                          const available = engine.availability === 'connected';
                           return (
                             <button
                               type="button"
@@ -543,12 +561,12 @@ export const VideoStudio: React.FC = () => {
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center justify-between gap-3">
                                   <p className="truncate text-xs font-black text-white">{engine.label}</p>
-                                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${index === 0 ? 'bg-emerald-500/10 text-emerald-300' : 'bg-white/[0.05] text-gray-400'}`}>
-                                    {index === 0 ? 'Économique' : credits != null ? `${credits} cr` : 'Option'}
+                                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${available ? index === 0 ? 'bg-emerald-500/10 text-emerald-300' : 'bg-blue-500/10 text-blue-300' : 'bg-amber-500/10 text-amber-300'}`}>
+                                    {available ? (index === 0 ? 'Économique' : credits != null ? `${credits} cr` : 'Disponible') : 'Bientôt'}
                                   </span>
                                 </div>
                                 <p className="mt-1 line-clamp-1 text-[9px] text-gray-600">
-                                  {engine.provider} • env. ${engine.estimatedUsdPerSecond?.toFixed(2)}/s fournisseur • {engine.strengths.slice(0, 2).join(' • ')}
+                                  {engine.provider} • jusqu’à {engine.maxSeconds}s • {engine.strengths.slice(0, 2).join(' • ')}
                                 </p>
                               </div>
                             </button>
@@ -561,21 +579,22 @@ export const VideoStudio: React.FC = () => {
               </section>
 
               <section className="mt-6">
-                <p className="mb-2 text-[11px] font-black uppercase tracking-[0.12em] text-gray-500">Durée disponible maintenant</p>
-                <div className="flex gap-2">
-                  {([4, 6, 8] as VideoDuration[])
-                    .filter((item) => effectiveEngine.durations.includes(item))
-                    .map((item) => (
-                      <button
-                        type="button"
-                        key={item}
-                        onClick={() => setDuration(item)}
-                        className={`rounded-xl border px-4 py-2 text-xs font-black ${duration === item ? 'border-pink-400/35 bg-pink-500/10 text-pink-200' : 'border-white/10 text-gray-400'}`}
-                      >
-                        {item}s
-                      </button>
-                    ))}
+                <p className="mb-2 text-[11px] font-black uppercase tracking-[0.12em] text-gray-500">Durée pour {effectiveEngine.label}</p>
+                <div className="flex flex-wrap gap-2">
+                  {effectiveEngine.durations.map((item) => (
+                    <button
+                      type="button"
+                      key={item}
+                      onClick={() => setDuration(item)}
+                      className={`rounded-xl border px-4 py-2 text-xs font-black ${duration === item ? 'border-pink-400/35 bg-pink-500/10 text-pink-200' : 'border-white/10 text-gray-400'}`}
+                    >
+                      {item}s
+                    </button>
+                  ))}
                 </div>
+                {effectiveEngine.availability !== 'connected' && (
+                  <p className="mt-2 text-[10px] leading-4 text-amber-300/80">Aperçu tarifaire uniquement : ce moteur Runway sera activé prochainement.</p>
+                )}
               </section>
 
               <section className="mt-6">
