@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import express from 'express';
 import { adminAuth, adminDb } from './firebaseAdmin';
+import {
+  ANNUAL_DISCOUNT_PERCENT,
+  LAUNCH_CREDIT_PACKS,
+  LAUNCH_SUBSCRIPTION_PLANS,
+  PRICING_VERSION,
+} from '../src/config/commercialPricing';
 
 const INSTALL_FLAG = Symbol.for('mungwele.marketCashPaymentProxyInstalled');
 const APP_FLAG = Symbol.for('mungwele.marketCashRoutesMounted');
@@ -37,16 +43,10 @@ type ResolvedTarget = {
 };
 
 const DEFAULT_PRICING = {
-  annualDiscountPercent: 20,
-  creditPacks: [
-    { id: 'pack-200', name: 'Essentiel', credits: 200, priceUsd: 4, enabled: true },
-    { id: 'pack-500', name: 'Créateur', credits: 500, priceUsd: 9, enabled: true },
-    { id: 'pack-1200', name: 'Studio', credits: 1200, priceUsd: 20, enabled: true },
-  ],
-  subscriptionPlans: [
-    { id: 'creator', name: 'Creator', priceMonth: 10, creditsMonthly: 600 },
-    { id: 'pro', name: 'Pro', priceMonth: 25, creditsMonthly: 1600 },
-  ],
+  pricingVersion: PRICING_VERSION,
+  annualDiscountPercent: ANNUAL_DISCOUNT_PERCENT,
+  creditPacks: LAUNCH_CREDIT_PACKS.map((pack) => ({ ...pack })),
+  subscriptionPlans: LAUNCH_SUBSCRIPTION_PLANS.map((plan) => ({ ...plan, features: [...plan.features] })),
 };
 
 const cleanDigits = (value: unknown) => String(value ?? '').replace(/\D/g, '');
@@ -88,7 +88,9 @@ async function loadPricing() {
   try {
     const snap = await adminDb.doc('appSettings/pricing').get();
     const data: any = snap.data() || {};
+    if (Number(data.pricingVersion) !== PRICING_VERSION) return DEFAULT_PRICING;
     return {
+      pricingVersion: PRICING_VERSION,
       annualDiscountPercent: Number.isFinite(Number(data.annualDiscountPercent))
         ? Number(data.annualDiscountPercent)
         : DEFAULT_PRICING.annualDiscountPercent,
@@ -181,7 +183,6 @@ function marketCashMessage(code: string) {
     CARD_NOT_FOUND: 'Cette carte n’existe pas dans Market-Cash.',
     CARD_INACTIVE: 'Cette carte Market-Cash n’est pas active.',
     CARD_ACCOUNT_INACTIVE: 'Le compte carte Market-Cash n’est pas actif.',
-    HOLDER_MISMATCH: 'Le nom du titulaire ne correspond pas à la carte Market-Cash.',
     EXPIRY_MISMATCH: 'La date d’expiration ne correspond pas à la carte Market-Cash.',
     EXPIRY_INVALID: 'La date d’expiration est invalide.',
     CVV_INVALID: 'Le CVV Market-Cash est incorrect.',
@@ -296,6 +297,7 @@ async function settlePurchase(params: {
       marketCashReference: params.marketCash.reference || null,
       externalReference: params.externalReference,
       amountPaidUsd: params.target.amountUsd,
+      pricingVersion: PRICING_VERSION,
       createdAt: nowIso,
     });
 
@@ -327,6 +329,7 @@ async function settlePurchase(params: {
       targetId: params.target.targetId,
       amountUsd: params.target.amountUsd,
       creditsAdded: params.target.creditsAdded,
+      pricingVersion: PRICING_VERSION,
       marketCashReference: params.marketCash.reference || null,
       externalReference: params.externalReference,
       result: response,
