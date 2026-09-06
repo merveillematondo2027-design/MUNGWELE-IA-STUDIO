@@ -1,5 +1,4 @@
 import type { ExtendedVideoDuration, VideoEngineKey, VideoType } from '../types';
-import { VIDEO_PROVIDER_USD_PER_SECOND } from './commercialPricing';
 
 export type EngineAvailability = 'connected' | 'planned';
 
@@ -17,34 +16,39 @@ export interface VideoEngineProfile {
   estimatedUsdPerSecond?: number;
 }
 
+// Launch supplier set is intentionally small:
+// - Google Gemini API: Veo 3.1 Lite / Fast / Standard.
+// - Runway Dev: Seedance 2 family and Seedance 2.5.
+// - Runway Act-Two is reserved for the dedicated Clips studio.
+// Gemini Omni remains only as a compatibility engine for the already-working
+// multi-reference flow and is not promoted as an additional supplier.
 export const VIDEO_ENGINES: Record<VideoEngineKey, VideoEngineProfile> = {
-  'veo-lite': { key: 'veo-lite', label: 'Veo 3.1 Lite', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: false, strengths: ['économique', 'publicité', 'réseaux sociaux'], estimatedUsdPerSecond: VIDEO_PROVIDER_USD_PER_SECOND.lite['720p'] || 0.05 },
-  'veo-fast': { key: 'veo-fast', label: 'Veo 3.1 Fast', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: false, strengths: ['rapide', 'réaliste', 'publicité'], estimatedUsdPerSecond: VIDEO_PROVIDER_USD_PER_SECOND.fast['720p'] || 0.10 },
-  'veo-pro': { key: 'veo-pro', label: 'Veo 3.1 Pro', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: false, strengths: ['cinématique', 'premium', 'dialogue'], estimatedUsdPerSecond: VIDEO_PROVIDER_USD_PER_SECOND.pro['720p'] || 0.40 },
-  omni: { key: 'omni', label: 'Gemini Omni Flash', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: true, strengths: ['références multiples', 'image vers vidéo', 'édition'], estimatedUsdPerSecond: VIDEO_PROVIDER_USD_PER_SECOND.omni['720p'] || 0.10 },
-  'runway-gen45': { key: 'runway-gen45', label: 'Runway Gen-4.5', provider: 'Runway', availability: 'planned', maxSeconds: 10, durations: [5, 10], supportsAudioReference: false, supportsLipSync: false, supportsImages: true, strengths: ['cinématique', 'mouvements caméra', 'effets', 'drame'], estimatedUsdPerSecond: 0.12 },
-  'minimax-h3': { key: 'minimax-h3', label: 'MiniMax H3', provider: 'MiniMax', availability: 'planned', maxSeconds: 15, durations: [5, 10, 15], supportsAudioReference: true, supportsLipSync: false, supportsImages: true, strengths: ['action', 'audio référence', 'clip musical', 'multimodal'], estimatedUsdPerSecond: 0.15 },
-  'kling-v3-pro': { key: 'kling-v3-pro', label: 'Kling V3 Pro', provider: 'Kling', availability: 'planned', maxSeconds: 15, durations: [5, 10, 15], supportsAudioReference: true, supportsLipSync: true, supportsImages: true, strengths: ['personnage', 'lip-sync', 'réalisme humain', 'performance', 'romance'], estimatedUsdPerSecond: 0.168 },
-  // Public launch benchmark while the official ByteDance connection is not enabled:
-  // 720p Seedance 2.5 through Runway routing is currently about $0.30/second.
-  'seedance-25': { key: 'seedance-25', label: 'Seedance 2.5', provider: 'ByteDance', availability: 'planned', maxSeconds: 30, durations: [5, 10, 15, 30], supportsAudioReference: true, supportsLipSync: false, supportsImages: true, strengths: ['séquences longues', 'action', 'animation', 'multi-scènes', 'série'], estimatedUsdPerSecond: 0.30 },
+  'veo-lite': { key: 'veo-lite', label: 'Veo 3.1 Lite', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: true, strengths: ['économique', 'publicité', 'réseaux sociaux'], estimatedUsdPerSecond: 0.05 },
+  'veo-fast': { key: 'veo-fast', label: 'Veo 3.1 Fast', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: true, strengths: ['rapide', 'réaliste', 'publicité', 'audio natif'], estimatedUsdPerSecond: 0.10 },
+  'veo-pro': { key: 'veo-pro', label: 'Veo 3.1 Pro', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: true, strengths: ['cinématique', 'premium', 'dialogue', 'audio natif'], estimatedUsdPerSecond: 0.40 },
+  omni: { key: 'omni', label: 'Google Omni Références', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: true, strengths: ['compatibilité références multiples', 'image vers vidéo'], estimatedUsdPerSecond: 0.10 },
+  'seedance-2-mini': { key: 'seedance-2-mini', label: 'Seedance 2 Mini', provider: 'Runway Dev', availability: 'planned', maxSeconds: 15, durations: [4, 5, 6, 8, 10, 15], supportsAudioReference: true, supportsLipSync: false, supportsImages: true, strengths: ['économique', 'séquences longues', 'social', 'multimodal'], estimatedUsdPerSecond: 0.16 },
+  'seedance-2-fast': { key: 'seedance-2-fast', label: 'Seedance 2 Fast', provider: 'Runway Dev', availability: 'planned', maxSeconds: 15, durations: [4, 5, 6, 8, 10, 15], supportsAudioReference: true, supportsLipSync: false, supportsImages: true, strengths: ['rapide', 'action', 'réseaux sociaux', 'multimodal'], estimatedUsdPerSecond: 0.29 },
+  'seedance-2': { key: 'seedance-2', label: 'Seedance 2', provider: 'Runway Dev', availability: 'planned', maxSeconds: 15, durations: [4, 5, 6, 8, 10, 15], supportsAudioReference: true, supportsLipSync: false, supportsImages: true, strengths: ['cinématique', 'action', 'multi-scènes', 'jusqu’à 4K'], estimatedUsdPerSecond: 0.36 },
+  'seedance-2-5': { key: 'seedance-2-5', label: 'Seedance 2.5', provider: 'Runway Dev', availability: 'planned', maxSeconds: 30, durations: [4, 5, 6, 8, 10, 15, 30], supportsAudioReference: true, supportsLipSync: false, supportsImages: true, strengths: ['10–30 secondes', 'audio et références', 'multi-scènes', '1080p'], estimatedUsdPerSecond: 0.30 },
+  'runway-act-two': { key: 'runway-act-two', label: 'Runway Act-Two', provider: 'Runway Dev', availability: 'planned', maxSeconds: 30, durations: [5, 10, 15, 30], supportsAudioReference: true, supportsLipSync: true, supportsImages: true, strengths: ['clip', 'performance', 'personnage', 'lip-sync'], estimatedUsdPerSecond: 0.05 },
 };
 
 export const VIDEO_TYPE_ROUTING: Record<VideoType, { label: string; description: string; badge: string; engines: VideoEngineKey[]; defaultEngine: VideoEngineKey }> = {
-  social: { label: 'Reel / Réseaux sociaux', badge: 'Recommandé', description: 'TikTok, Reels, Shorts, stories et formats verticaux rapides.', engines: ['veo-lite', 'veo-fast', 'seedance-25'], defaultEngine: 'veo-lite' },
-  commercial: { label: 'Publicité / Produit', badge: 'Business', description: 'Produit, marque, démonstration et campagne publicitaire.', engines: ['veo-fast', 'veo-pro', 'runway-gen45'], defaultEngine: 'veo-fast' },
-  realistic: { label: 'Réaliste / Personnes', badge: 'Réel', description: 'Humains, lifestyle, influenceurs et rendu naturel.', engines: ['veo-pro', 'kling-v3-pro', 'veo-fast'], defaultEngine: 'veo-pro' },
-  cinematic: { label: 'Cinématique / Film', badge: 'Cinéma', description: 'Plans cinéma, narration visuelle et rendu premium.', engines: ['veo-pro', 'runway-gen45', 'seedance-25'], defaultEngine: 'veo-pro' },
-  action: { label: 'Action', badge: 'Dynamique', description: 'Mouvements rapides, cascades, poursuites et scènes dynamiques.', engines: ['minimax-h3', 'seedance-25', 'veo-pro'], defaultEngine: 'veo-pro' },
-  comedy: { label: 'Comédie / Dialogue', badge: 'Dialogue', description: 'Scènes légères, personnages expressifs et dialogue.', engines: ['kling-v3-pro', 'veo-pro', 'seedance-25'], defaultEngine: 'veo-pro' },
-  drama: { label: 'Drame', badge: 'Émotion', description: 'Jeu d’acteur, tension, émotions fortes et mise en scène narrative.', engines: ['kling-v3-pro', 'runway-gen45', 'veo-pro', 'seedance-25'], defaultEngine: 'veo-pro' },
-  romantic_series: { label: 'Série romantique', badge: 'Série', description: 'Couples, continuité de personnages, dialogues et scènes émotionnelles.', engines: ['kling-v3-pro', 'seedance-25', 'veo-pro', 'runway-gen45'], defaultEngine: 'veo-pro' },
-  '3d': { label: 'Animation 3D', badge: '3D', description: 'Objets, personnages et univers 3D.', engines: ['seedance-25', 'runway-gen45', 'veo-pro'], defaultEngine: 'veo-pro' },
-  anime: { label: 'Anime / Illustration', badge: 'Stylisé', description: 'Anime, illustration animée et stylisation.', engines: ['seedance-25', 'runway-gen45', 'veo-fast'], defaultEngine: 'veo-fast' },
-  talking: { label: 'Présentateur / Parlant', badge: 'Lip-sync', description: 'Personnage, présentation, discours et synchronisation labiale.', engines: ['kling-v3-pro', 'veo-pro'], defaultEngine: 'veo-pro' },
-  effects: { label: 'Effets / Transformation', badge: 'VFX', description: 'Transitions, métamorphoses et effets visuels créatifs.', engines: ['runway-gen45', 'minimax-h3', 'veo-pro'], defaultEngine: 'veo-pro' },
-  music_clip: { label: 'Clip musical', badge: 'Musique', description: 'Chanson, performance, rythme et narration musicale.', engines: ['minimax-h3', 'kling-v3-pro', 'seedance-25'], defaultEngine: 'minimax-h3' },
-  custom: { label: 'Personnalisé', badge: 'Auto', description: 'MUNGWELE choisit le moteur selon votre demande.', engines: ['veo-fast', 'veo-pro', 'omni', 'runway-gen45', 'minimax-h3', 'kling-v3-pro', 'seedance-25'], defaultEngine: 'veo-fast' },
+  social: { label: 'Reel / Réseaux sociaux', badge: 'Recommandé', description: 'TikTok, Reels, Shorts, stories et formats verticaux rapides.', engines: ['veo-lite', 'veo-fast', 'seedance-2-mini', 'seedance-2-fast', 'seedance-2-5'], defaultEngine: 'veo-lite' },
+  commercial: { label: 'Publicité / Produit', badge: 'Business', description: 'Produit, marque, démonstration et campagne publicitaire.', engines: ['veo-fast', 'veo-pro', 'seedance-2-fast', 'seedance-2-5'], defaultEngine: 'veo-fast' },
+  realistic: { label: 'Réaliste / Personnes', badge: 'Réel', description: 'Humains, lifestyle, influenceurs et rendu naturel.', engines: ['veo-pro', 'veo-fast', 'seedance-2-5'], defaultEngine: 'veo-pro' },
+  cinematic: { label: 'Cinématique / Film', badge: 'Cinéma', description: 'Plans cinéma, narration visuelle et rendu premium.', engines: ['veo-pro', 'seedance-2', 'seedance-2-5'], defaultEngine: 'veo-pro' },
+  action: { label: 'Action', badge: 'Dynamique', description: 'Mouvements rapides, cascades, poursuites et scènes dynamiques.', engines: ['seedance-2-fast', 'seedance-2-5', 'veo-pro'], defaultEngine: 'veo-pro' },
+  comedy: { label: 'Comédie / Dialogue', badge: 'Dialogue', description: 'Scènes légères, personnages expressifs et dialogue.', engines: ['veo-pro', 'seedance-2-5'], defaultEngine: 'veo-pro' },
+  drama: { label: 'Drame', badge: 'Émotion', description: 'Jeu d’acteur, tension, émotions fortes et mise en scène narrative.', engines: ['veo-pro', 'seedance-2-5', 'seedance-2'], defaultEngine: 'veo-pro' },
+  romantic_series: { label: 'Série romantique', badge: 'Série', description: 'Couples, continuité de personnages, dialogues et scènes émotionnelles.', engines: ['seedance-2-5', 'veo-pro', 'seedance-2'], defaultEngine: 'veo-pro' },
+  '3d': { label: 'Animation 3D', badge: '3D', description: 'Objets, personnages et univers 3D.', engines: ['seedance-2', 'seedance-2-5', 'veo-pro'], defaultEngine: 'veo-pro' },
+  anime: { label: 'Anime / Illustration', badge: 'Stylisé', description: 'Anime, illustration animée et stylisation.', engines: ['seedance-2-mini', 'seedance-2-5', 'veo-fast'], defaultEngine: 'veo-fast' },
+  talking: { label: 'Présentateur / Parlant', badge: 'Dialogue', description: 'Personnage, présentation, discours et synchronisation visuelle.', engines: ['veo-pro', 'seedance-2-5'], defaultEngine: 'veo-pro' },
+  effects: { label: 'Effets / Transformation', badge: 'VFX', description: 'Transitions, métamorphoses et effets visuels créatifs.', engines: ['seedance-2', 'seedance-2-5', 'veo-pro'], defaultEngine: 'veo-pro' },
+  music_clip: { label: 'Clip musical', badge: 'Musique', description: 'Chanson, performance, rythme et narration musicale.', engines: ['runway-act-two', 'seedance-2-5'], defaultEngine: 'runway-act-two' },
+  custom: { label: 'Personnalisé', badge: 'Auto', description: 'MUNGWELE choisit le moteur selon votre demande.', engines: ['veo-fast', 'veo-pro', 'veo-lite', 'seedance-2-mini', 'seedance-2-fast', 'seedance-2', 'seedance-2-5'], defaultEngine: 'veo-fast' },
 };
 
 export function connectedEnginesForType(type: VideoType) {
