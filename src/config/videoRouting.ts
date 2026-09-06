@@ -1,4 +1,5 @@
 import type { ExtendedVideoDuration, VideoEngineKey, VideoType } from '../types';
+import { VIDEO_PROVIDER_USD_PER_SECOND } from './commercialPricing';
 
 export type EngineAvailability = 'connected' | 'planned';
 
@@ -17,14 +18,16 @@ export interface VideoEngineProfile {
 }
 
 export const VIDEO_ENGINES: Record<VideoEngineKey, VideoEngineProfile> = {
-  'veo-lite': { key: 'veo-lite', label: 'Veo 3.1 Lite', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: false, strengths: ['économique', 'publicité', 'réseaux sociaux'], estimatedUsdPerSecond: 0.05 },
-  'veo-fast': { key: 'veo-fast', label: 'Veo 3.1 Fast', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: false, strengths: ['rapide', 'réaliste', 'publicité'], estimatedUsdPerSecond: 0.10 },
-  'veo-pro': { key: 'veo-pro', label: 'Veo 3.1 Pro', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: false, strengths: ['cinématique', 'premium', 'dialogue'], estimatedUsdPerSecond: 0.40 },
-  omni: { key: 'omni', label: 'Gemini Omni Flash', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: true, strengths: ['références multiples', 'image vers vidéo', 'édition'], estimatedUsdPerSecond: 0.10 },
+  'veo-lite': { key: 'veo-lite', label: 'Veo 3.1 Lite', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: false, strengths: ['économique', 'publicité', 'réseaux sociaux'], estimatedUsdPerSecond: VIDEO_PROVIDER_USD_PER_SECOND.lite['720p'] || 0.05 },
+  'veo-fast': { key: 'veo-fast', label: 'Veo 3.1 Fast', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: false, strengths: ['rapide', 'réaliste', 'publicité'], estimatedUsdPerSecond: VIDEO_PROVIDER_USD_PER_SECOND.fast['720p'] || 0.10 },
+  'veo-pro': { key: 'veo-pro', label: 'Veo 3.1 Pro', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: false, strengths: ['cinématique', 'premium', 'dialogue'], estimatedUsdPerSecond: VIDEO_PROVIDER_USD_PER_SECOND.pro['720p'] || 0.40 },
+  omni: { key: 'omni', label: 'Gemini Omni Flash', provider: 'Google', availability: 'connected', maxSeconds: 8, durations: [4, 6, 8], supportsAudioReference: false, supportsLipSync: false, supportsImages: true, strengths: ['références multiples', 'image vers vidéo', 'édition'], estimatedUsdPerSecond: VIDEO_PROVIDER_USD_PER_SECOND.omni['720p'] || 0.10 },
   'runway-gen45': { key: 'runway-gen45', label: 'Runway Gen-4.5', provider: 'Runway', availability: 'planned', maxSeconds: 10, durations: [5, 10], supportsAudioReference: false, supportsLipSync: false, supportsImages: true, strengths: ['cinématique', 'mouvements caméra', 'effets', 'drame'], estimatedUsdPerSecond: 0.12 },
   'minimax-h3': { key: 'minimax-h3', label: 'MiniMax H3', provider: 'MiniMax', availability: 'planned', maxSeconds: 15, durations: [5, 10, 15], supportsAudioReference: true, supportsLipSync: false, supportsImages: true, strengths: ['action', 'audio référence', 'clip musical', 'multimodal'], estimatedUsdPerSecond: 0.15 },
   'kling-v3-pro': { key: 'kling-v3-pro', label: 'Kling V3 Pro', provider: 'Kling', availability: 'planned', maxSeconds: 15, durations: [5, 10, 15], supportsAudioReference: true, supportsLipSync: true, supportsImages: true, strengths: ['personnage', 'lip-sync', 'réalisme humain', 'performance', 'romance'], estimatedUsdPerSecond: 0.168 },
-  'seedance-25': { key: 'seedance-25', label: 'Seedance 2.5', provider: 'ByteDance', availability: 'planned', maxSeconds: 30, durations: [5, 10, 15, 30], supportsAudioReference: true, supportsLipSync: false, supportsImages: true, strengths: ['séquences longues', 'action', 'animation', 'multi-scènes', 'série'], estimatedUsdPerSecond: 0.10 },
+  // Public launch benchmark while the official ByteDance connection is not enabled:
+  // 720p Seedance 2.5 through Runway routing is currently about $0.30/second.
+  'seedance-25': { key: 'seedance-25', label: 'Seedance 2.5', provider: 'ByteDance', availability: 'planned', maxSeconds: 30, durations: [5, 10, 15, 30], supportsAudioReference: true, supportsLipSync: false, supportsImages: true, strengths: ['séquences longues', 'action', 'animation', 'multi-scènes', 'série'], estimatedUsdPerSecond: 0.30 },
 };
 
 export const VIDEO_TYPE_ROUTING: Record<VideoType, { label: string; description: string; badge: string; engines: VideoEngineKey[]; defaultEngine: VideoEngineKey }> = {
