@@ -167,9 +167,13 @@ async function runFfmpeg(args: string[]) {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(ffmpegPath, args, { stdio:['ignore','ignore','pipe'] });
     let stderr = '';
-    child.stderr.on('data', (chunk) => { stderr += String(chunk).slice(-4000); });
+    child.stderr.on('data', (chunk) => { stderr += String(chunk); if (stderr.length > 12000) stderr = stderr.slice(-12000); });
     child.on('error', reject);
-    child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`Conversion média échouée (${code}). ${stderr.slice(-900)}`)));
+    child.on('close', (code) => {
+      if (code === 0) return resolve();
+      console.warn('[MEDIA_FFMPEG_ERROR]', { code, args: args.filter((value) => !value.includes('comment=')), stderr: stderr.slice(-4000) });
+      reject(new Error('La conversion du média a échoué. Réessayez avec une autre qualité ou dans quelques instants.'));
+    });
   });
 }
 
@@ -200,12 +204,12 @@ async function transcode(input: Buffer, kind: Kind, format: string, community: b
 
     if (kind === 'music') {
       const args = ['-y', '-i', inputPath];
-      if (info.ext === 'wav') args.push('-c:a', 'pcm_s16le');
-      else args.push('-c:a', 'libmp3lame', '-b:a', info.bitrate || '192k');
+      if (info.ext === 'wav') args.push('-c:a', 'pcm_s16le', '-f', 'wav');
+      else args.push('-c:a', 'libmp3lame', '-b:a', info.bitrate || '192k', '-f', 'mp3');
       if (community) {
         args.push(
-          '-metadata', 'artist', `MUNGWELE AI • ${ownerName}`,
-          '-metadata', 'comment', `Téléchargé depuis la communauté MUNGWELE AI • Propriétaire: ${ownerName}`,
+          '-metadata', `artist=MUNGWELE AI • ${ownerName}`,
+          '-metadata', `comment=Téléchargé depuis la communauté MUNGWELE AI • Propriétaire: ${ownerName}`,
         );
       }
       args.push(outputPath);
@@ -231,9 +235,10 @@ async function transcode(input: Buffer, kind: Kind, format: string, community: b
         '-crf', '20',
         '-c:a', 'aac',
         '-b:a', '160k',
-        '-metadata', 'artist', `MUNGWELE AI • ${ownerName}`,
-        '-metadata', 'comment', `Vidéo signée automatiquement par MUNGWELE AI • @${ownerName}`,
+        '-metadata', `artist=MUNGWELE AI • ${ownerName}`,
+        '-metadata', `comment=Vidéo signée automatiquement par MUNGWELE AI • @${ownerName}`,
         '-movflags', '+faststart',
+        '-f', 'mp4',
         outputPath,
       ];
 
@@ -287,7 +292,7 @@ async function sendMedia(requester: Requester, generationId: string, format: str
   const input = Buffer.from(await upstream.arrayBuffer());
   const ownerName = await resolveOwnerName(generation);
   const output = await transcode(input, kind, format, community, ownerName);
-  const safeTitle = String(generation.title || 'creation').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 60) || 'creation';
+  const safeTitle = String(generation.title || 'creation').replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').slice(0, 60) || 'creation';
   const filename = `${community ? 'mungwele-community' : 'mungwele'}-${safeTitle}.${output.ext}`;
 
   res.setHeader('Content-Type', output.mime);
