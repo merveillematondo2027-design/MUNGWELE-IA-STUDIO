@@ -1,21 +1,18 @@
-export const PRICING_VERSION = 2026090603;
+export const PRICING_VERSION = 2026090701;
 
 // MUNGWELE launch policy
-// - Image/video/clips: provider cost + 33.33% commercial markup.
-// - Music: provider cost + 50% commercial markup.
-// - One credit balance is shared by packs and subscriptions, so the conversion
-//   floor must remain profitable for the lowest-value credit we currently sell.
-export const PROVIDER_MARKUP_RATE = 1 / 3;
+// - Packs are intentionally simple: $5/500, $10/1,100, $20/2,500.
+// - The $20 pack is the best-value reference: $0.008 per credit.
+// - Standard image/video/clips pricing keeps at least 20% gross markup against
+//   supplier cost when credits come from the best-value pack. The $10 pack
+//   yields about 36.36% and the $5 pack about 50% on the same generation.
+// - Music keeps the stronger 50% supplier markup requested for ElevenLabs.
+export const PROVIDER_MARKUP_RATE = 0.20;
 export const PROVIDER_RETAIL_MULTIPLIER = 1 + PROVIDER_MARKUP_RATE;
 export const MUSIC_PROVIDER_MARKUP_RATE = 0.50;
 export const MUSIC_RETAIL_MULTIPLIER = 1 + MUSIC_PROVIDER_MARKUP_RATE;
 export const ANNUAL_DISCOUNT_PERCENT = 10;
-
-// Studio is currently the best-value recurring offer: $20 / 3,000 credits.
-// Using that value as the common floor removes the previous over-conservative
-// 0.006 USD floor while still preserving the target provider markup even for
-// the cheapest credits in circulation.
-export const MIN_USD_REVENUE_PER_CREDIT = 20 / 3000;
+export const MIN_USD_REVENUE_PER_CREDIT = 20 / 2500;
 
 export const LAUNCH_SUBSCRIPTION_PLANS = [
   {
@@ -33,46 +30,41 @@ export const LAUNCH_SUBSCRIPTION_PLANS = [
     creditsMonthly: 500,
     popular: true,
     maxDownloadResolution: '720p',
-    features: ['500 crédits chaque mois', 'Téléchargement vidéo jusqu’à 720p', 'Image, vidéo et musique avec tous les moteurs connectés selon le solde'],
+    features: ['500 crédits chaque mois', 'Téléchargement vidéo jusqu’à 720p', 'Image, vidéo et musique avec les moteurs disponibles'],
   },
   {
     id: 'pro',
     name: 'Pro',
     priceMonth: 10,
-    creditsMonthly: 1250,
+    creditsMonthly: 1100,
     maxDownloadResolution: '1080p',
-    features: ['1 250 crédits chaque mois', 'Téléchargement vidéo jusqu’à 1080p', 'Priorité sur les moteurs premium et projets plus lourds'],
+    features: ['1 100 crédits chaque mois', 'Téléchargement vidéo jusqu’à 1080p', 'Accès aux moteurs premium selon le solde'],
   },
   {
     id: 'studio',
     name: 'Studio',
     priceMonth: 20,
-    creditsMonthly: 3000,
+    creditsMonthly: 2500,
     maxDownloadResolution: '4k',
-    features: ['3 000 crédits chaque mois', 'Téléchargement vidéo jusqu’à 4K', 'Meilleure valeur par crédit pour les créateurs intensifs'],
+    features: ['2 500 crédits chaque mois', 'Téléchargement vidéo jusqu’à 4K', 'Meilleure valeur par crédit pour les créateurs intensifs'],
   },
 ] as const;
 
 export const LAUNCH_CREDIT_PACKS = [
-  { id: 'pack-300', name: 'Essentiel', credits: 300, priceUsd: 3, enabled: true },
-  { id: 'pack-800', name: 'Créateur', credits: 800, priceUsd: 7, enabled: true },
-  { id: 'pack-1600', name: 'Pro', credits: 1600, priceUsd: 13, enabled: true },
-  { id: 'pack-3000', name: 'Studio', credits: 3000, priceUsd: 22, enabled: true },
+  { id: 'pack-500', name: 'Essentiel', credits: 500, priceUsd: 5, enabled: true },
+  { id: 'pack-1100', name: 'Créateur', credits: 1100, priceUsd: 10, enabled: true },
+  { id: 'pack-2500', name: 'Studio', credits: 2500, priceUsd: 20, enabled: true },
 ] as const;
 
 export type LaunchVideoModel = 'omni' | 'lite' | 'fast' | 'pro';
 export type LaunchVideoDuration = 4 | 6 | 8;
 export type LaunchVideoResolution = '720p' | '1080p' | '4k';
 
-// Direct Google Gemini API paid-tier rates, USD per generated second.
-// MUNGWELE currently renders the connected Veo flow in 720p; 1080p/4K rates
-// remain here so the quote engine is ready when those settings are exposed.
+// Direct Google Gemini API paid-tier effective rates, USD per generated second.
 export const VIDEO_PROVIDER_USD_PER_SECOND: Record<LaunchVideoModel, Record<LaunchVideoResolution, number | null>> = {
   lite: { '720p': 0.05, '1080p': 0.08, '4k': null },
   fast: { '720p': 0.10, '1080p': 0.12, '4k': 0.30 },
   pro: { '720p': 0.40, '1080p': 0.40, '4k': 0.60 },
-  // Compatibility engine used by the existing multi-reference flow. It is not
-  // promoted as a separate launch supplier; Google remains the supplier.
   omni: { '720p': 0.10, '1080p': 0.152, '4k': 0.304 },
 };
 
@@ -86,9 +78,7 @@ export interface SeedanceRate {
   minimumProviderUsd?: number;
 }
 
-// Runway Dev sells one developer credit for $0.01. These USD rates are the
-// published Runway Dev rates converted to dollars. Runway is the selected API
-// supplier for the Seedance family and for the dedicated clip engine Act-Two.
+// Runway Dev sells one developer credit for $0.01.
 export const RUNWAY_USD_PER_CREDIT = 0.01;
 export const SEEDANCE_PROVIDER_RATES: Record<SeedanceModel, Partial<Record<SeedanceResolution, SeedanceRate>>> = {
   seedance2_mini: {
@@ -119,16 +109,22 @@ export const SEEDANCE_MODEL_LIMITS: Record<SeedanceModel, { minSeconds: number; 
   seedance2_5: { minSeconds: 4, maxSeconds: 30, defaultResolution: '720p' },
 };
 
+// Runway HappyHorse 1.0: 15 Runway credits/s at 720p and 30/s at 1080p.
+export type HappyHorseResolution = '720p' | '1080p';
+export const HAPPYHORSE_USD_PER_SECOND: Record<HappyHorseResolution, number> = {
+  '720p': 0.15,
+  '1080p': 0.30,
+};
+export const HAPPYHORSE_MIN_SECONDS = 3;
+export const HAPPYHORSE_MAX_SECONDS = 15;
+
 export const ELEVEN_MUSIC_USD_PER_MINUTE = 0.15;
 
-// GPT-Image-2 is token-priced by OpenAI. MUNGWELE launches it in a controlled
-// 1K medium profile. The base estimate mirrors the current medium 1K output
-// cost and we keep a small per-reference input reserve for edits.
+// GPT-Image-2 medium 1K launch estimate and small reserve for edit references.
 export const GPT_IMAGE_2_MEDIUM_ESTIMATED_USD = 0.053;
 export const GPT_IMAGE_REFERENCE_ESTIMATED_USD = 0.01;
 
-// Runway Act-Two is the one dedicated MUNGWELE Clips provider/model at launch.
-// 5 Runway credits/s × $0.01 = $0.05/s.
+// Runway Act-Two: 5 Runway credits/s × $0.01 = $0.05/s.
 export const RUNWAY_ACT_TWO_USD_PER_SECOND = 0.05;
 export const RUNWAY_ACT_TWO_MIN_SECONDS = 3;
 export const RUNWAY_ACT_TWO_MAX_SECONDS = 30;
@@ -158,8 +154,6 @@ export function videoCreditsForRequest(
   }
   const providerCostUsd = rate * duration;
   const baseCredits = creditsForProviderCost(providerCostUsd);
-  // Current Google image-input cost is absorbed by the rounded output quote so
-  // client and server keep the same price for the compatibility Omni flow.
   const referenceCredits = 0;
   return {
     credits: baseCredits,
@@ -167,6 +161,20 @@ export function videoCreditsForRequest(
     referenceCredits,
     providerCostUsd: Number(providerCostUsd.toFixed(4)),
     estimatedRetailUsd: Number((providerCostUsd * PROVIDER_RETAIL_MULTIPLIER).toFixed(4)),
+    resolution,
+  };
+}
+
+export function omniCreditsForRequest(durationSeconds: number, resolution: LaunchVideoResolution = '720p') {
+  const duration = Math.max(3, Math.min(10, Math.round(Number(durationSeconds) || 8)));
+  const rate = VIDEO_PROVIDER_USD_PER_SECOND.omni[resolution];
+  if (rate == null) throw new Error(`Omni ne prend pas en charge ${resolution}.`);
+  const providerCostUsd = rate * duration;
+  return {
+    credits: creditsForProviderCost(providerCostUsd),
+    providerCostUsd: Number(providerCostUsd.toFixed(4)),
+    estimatedRetailUsd: Number((providerCostUsd * PROVIDER_RETAIL_MULTIPLIER).toFixed(4)),
+    durationSeconds: duration,
     resolution,
   };
 }
@@ -183,9 +191,9 @@ export const VIDEO_CREDIT_COSTS: Record<LaunchVideoModel, Record<LaunchVideoDura
     8: videoCreditsForRequest('fast', 8).credits,
   },
   omni: {
-    4: videoCreditsForRequest('omni', 4).credits,
-    6: videoCreditsForRequest('omni', 6).credits,
-    8: videoCreditsForRequest('omni', 8).credits,
+    4: omniCreditsForRequest(4).credits,
+    6: omniCreditsForRequest(6).credits,
+    8: omniCreditsForRequest(8).credits,
   },
   pro: {
     4: videoCreditsForRequest('pro', 4).credits,
@@ -222,6 +230,47 @@ export function seedanceCreditsForRequest(
   };
 }
 
+export function happyHorseCreditsForRequest(
+  durationSeconds: number,
+  resolution: HappyHorseResolution = '720p',
+) {
+  const duration = Math.max(HAPPYHORSE_MIN_SECONDS, Math.min(HAPPYHORSE_MAX_SECONDS, Math.round(Number(durationSeconds) || 8)));
+  const providerCostUsd = HAPPYHORSE_USD_PER_SECOND[resolution] * duration;
+  return {
+    credits: creditsForProviderCost(providerCostUsd),
+    providerCostUsd: Number(providerCostUsd.toFixed(4)),
+    estimatedRetailUsd: Number((providerCostUsd * PROVIDER_RETAIL_MULTIPLIER).toFixed(4)),
+    durationSeconds: duration,
+    resolution,
+  };
+}
+
+export function videoEngineCreditsForRequest(
+  engineKey: string,
+  durationSeconds: number,
+  options: { resolution?: LaunchVideoResolution | SeedanceResolution | HappyHorseResolution; inputVideoSeconds?: number } = {},
+) {
+  const duration = Math.round(Number(durationSeconds) || 8);
+  if (engineKey === 'veo-lite' || engineKey === 'veo-fast' || engineKey === 'veo-pro') {
+    if (duration !== 4 && duration !== 6 && duration !== 8) throw new Error('Veo 3.1 prend en charge 4, 6 ou 8 secondes.');
+    const model = engineKey === 'veo-lite' ? 'lite' : engineKey === 'veo-fast' ? 'fast' : 'pro';
+    return videoCreditsForRequest(model, duration, { resolution: (options.resolution as LaunchVideoResolution) || '720p' });
+  }
+  if (engineKey === 'omni') {
+    return omniCreditsForRequest(duration, (options.resolution as LaunchVideoResolution) || '720p');
+  }
+  if (engineKey === 'seedance-2-5') {
+    return seedanceCreditsForRequest('seedance2_5', duration, {
+      resolution: (options.resolution as SeedanceResolution) || '720p',
+      inputVideoSeconds: options.inputVideoSeconds,
+    });
+  }
+  if (engineKey === 'happyhorse-1') {
+    return happyHorseCreditsForRequest(duration, (options.resolution as HappyHorseResolution) || '720p');
+  }
+  throw new Error(`Moteur vidéo inconnu: ${engineKey}.`);
+}
+
 export const SEEDANCE_LAUNCH_EXAMPLES = {
   mini720: {
     10: seedanceCreditsForRequest('seedance2_mini', 10, { resolution: '720p' }).credits,
@@ -250,6 +299,15 @@ export const SEEDANCE_LAUNCH_EXAMPLES = {
     15: seedanceCreditsForRequest('seedance2_5', 15, { resolution: '1080p' }).credits,
     30: seedanceCreditsForRequest('seedance2_5', 30, { resolution: '1080p' }).credits,
   },
+} as const;
+
+export const VIDEO_ENGINE_LAUNCH_EXAMPLES = {
+  veoLite720: { 4: videoEngineCreditsForRequest('veo-lite', 4).credits, 6: videoEngineCreditsForRequest('veo-lite', 6).credits, 8: videoEngineCreditsForRequest('veo-lite', 8).credits },
+  veoFast720: { 4: videoEngineCreditsForRequest('veo-fast', 4).credits, 6: videoEngineCreditsForRequest('veo-fast', 6).credits, 8: videoEngineCreditsForRequest('veo-fast', 8).credits },
+  veoPro720: { 4: videoEngineCreditsForRequest('veo-pro', 4).credits, 6: videoEngineCreditsForRequest('veo-pro', 6).credits, 8: videoEngineCreditsForRequest('veo-pro', 8).credits },
+  omni720: { 4: videoEngineCreditsForRequest('omni', 4).credits, 6: videoEngineCreditsForRequest('omni', 6).credits, 8: videoEngineCreditsForRequest('omni', 8).credits, 10: videoEngineCreditsForRequest('omni', 10).credits },
+  seedance25720: { 4: videoEngineCreditsForRequest('seedance-2-5', 4).credits, 6: videoEngineCreditsForRequest('seedance-2-5', 6).credits, 8: videoEngineCreditsForRequest('seedance-2-5', 8).credits, 10: videoEngineCreditsForRequest('seedance-2-5', 10).credits, 15: videoEngineCreditsForRequest('seedance-2-5', 15).credits, 30: videoEngineCreditsForRequest('seedance-2-5', 30).credits },
+  happyHorse720: { 4: videoEngineCreditsForRequest('happyhorse-1', 4).credits, 6: videoEngineCreditsForRequest('happyhorse-1', 6).credits, 8: videoEngineCreditsForRequest('happyhorse-1', 8).credits, 10: videoEngineCreditsForRequest('happyhorse-1', 10).credits, 15: videoEngineCreditsForRequest('happyhorse-1', 15).credits },
 } as const;
 
 export function imageCreditsForRequest(referenceCount = 0) {
