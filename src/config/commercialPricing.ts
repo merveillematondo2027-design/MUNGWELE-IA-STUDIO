@@ -1,16 +1,21 @@
-export const PRICING_VERSION = 2026090602;
+export const PRICING_VERSION = 2026090603;
 
 // MUNGWELE launch policy
 // - Image/video/clips: provider cost + 33.33% commercial markup.
 // - Music: provider cost + 50% commercial markup.
-// The credit floor is based on the lowest commercial value we allow for a
-// MUNGWELE credit so every provider quote is converted by the same rule.
+// - One credit balance is shared by packs and subscriptions, so the conversion
+//   floor must remain profitable for the lowest-value credit we currently sell.
 export const PROVIDER_MARKUP_RATE = 1 / 3;
 export const PROVIDER_RETAIL_MULTIPLIER = 1 + PROVIDER_MARKUP_RATE;
 export const MUSIC_PROVIDER_MARKUP_RATE = 0.50;
 export const MUSIC_RETAIL_MULTIPLIER = 1 + MUSIC_PROVIDER_MARKUP_RATE;
 export const ANNUAL_DISCOUNT_PERCENT = 10;
-export const MIN_USD_REVENUE_PER_CREDIT = 0.006;
+
+// Studio is currently the best-value recurring offer: $20 / 3,000 credits.
+// Using that value as the common floor removes the previous over-conservative
+// 0.006 USD floor while still preserving the target provider markup even for
+// the cheapest credits in circulation.
+export const MIN_USD_REVENUE_PER_CREDIT = 20 / 3000;
 
 export const LAUNCH_SUBSCRIPTION_PLANS = [
   {
