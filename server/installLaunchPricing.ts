@@ -3,6 +3,9 @@ import {
   ANNUAL_DISCOUNT_PERCENT,
   CLIP_LAUNCH_EXAMPLES,
   ELEVEN_MUSIC_USD_PER_MINUTE,
+  HAPPYHORSE_MAX_SECONDS,
+  HAPPYHORSE_MIN_SECONDS,
+  HAPPYHORSE_USD_PER_SECOND,
   LAUNCH_CREDIT_PACKS,
   LAUNCH_LEGACY_CREDIT_COSTS,
   LAUNCH_SUBSCRIPTION_PLANS,
@@ -14,6 +17,7 @@ import {
   SEEDANCE_MODEL_LIMITS,
   SEEDANCE_PROVIDER_RATES,
   VIDEO_CREDIT_COSTS,
+  VIDEO_ENGINE_LAUNCH_EXAMPLES,
   imageCreditsForRequest,
   musicCreditsForDurationMs,
 } from '../src/config/commercialPricing';
@@ -30,7 +34,7 @@ export async function syncLaunchPricingCatalog() {
   await ref.set({
     pricingVersion: PRICING_VERSION,
     annualDiscountPercent: ANNUAL_DISCOUNT_PERCENT,
-    providerMarkupPercent: Number((PROVIDER_MARKUP_RATE * 100).toFixed(2)),
+    providerMarkupPercentAtBestValuePack: Number((PROVIDER_MARKUP_RATE * 100).toFixed(2)),
     musicMarkupPercent: Number((MUSIC_PROVIDER_MARKUP_RATE * 100).toFixed(2)),
     subscriptionPlans: LAUNCH_SUBSCRIPTION_PLANS.map((plan) => ({ ...plan, features: [...plan.features] })),
     creditPacks: LAUNCH_CREDIT_PACKS.map((pack) => ({ ...pack })),
@@ -45,12 +49,24 @@ export async function syncLaunchPricingCatalog() {
       veo: {
         supplier: 'Google Gemini API',
         creditCosts720p: VIDEO_CREDIT_COSTS,
+        examples: VIDEO_ENGINE_LAUNCH_EXAMPLES,
       },
       seedance: {
         supplier: 'Runway Dev',
+        launchModel: 'seedance2_5',
+        availability: 'coming_soon',
         rates: SEEDANCE_PROVIDER_RATES,
         limits: SEEDANCE_MODEL_LIMITS,
         examples: SEEDANCE_LAUNCH_EXAMPLES,
+      },
+      happyHorse: {
+        supplier: 'Runway Dev',
+        model: 'happyhorse_1_0',
+        availability: 'coming_soon',
+        usdPerSecond: HAPPYHORSE_USD_PER_SECOND,
+        minSeconds: HAPPYHORSE_MIN_SECONDS,
+        maxSeconds: HAPPYHORSE_MAX_SECONDS,
+        examples720p: VIDEO_ENGINE_LAUNCH_EXAMPLES.happyHorse720,
       },
       music: {
         supplier: 'ElevenLabs',
@@ -65,7 +81,7 @@ export async function syncLaunchPricingCatalog() {
         examples: CLIP_LAUNCH_EXAMPLES,
       },
     },
-    pricingSource: 'mungwele-launch-catalog-v2',
+    pricingSource: 'mungwele-launch-catalog-v3',
     updatedAt: now,
     createdAt: snap.data()?.createdAt || now,
   }, { merge: true });
