@@ -17,7 +17,7 @@ import {
   assertMonetizationSafe,
   assertMusicMonetizationSafe,
   clipCreditsForDurationSeconds,
-  happyHorseCreditsForRequest,
+  h3MaxCreditsForRequest,
   imageCreditsForRequest,
   musicCreditsForDurationMs,
   seedanceCreditsForRequest,
@@ -82,7 +82,7 @@ let apiProviders: any[] = [
   { id: 'prov-video-pro', name: 'Veo 3.1 Pro', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.pro.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.pro[4] },
   { id: 'prov-video-omni', name: 'Gemini Omni Fast', providerKey: 'gemini', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.omni.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.omni[4] },
   { id: 'prov-seedance-25', name: 'Seedance 2.5', providerKey: 'runway', category: 'video', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'seedance2_5', latencyAvgMs: 0, creditCost: SEEDANCE_LAUNCH_EXAMPLES.seedance25_720[10] },
-  { id: 'prov-happyhorse-1', name: 'HappyHorse 1.0', providerKey: 'runway', category: 'video', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'happyhorse_1_0', latencyAvgMs: 0, creditCost: happyHorseCreditsForRequest(10).credits },
+  { id: 'prov-h3-max', name: 'MiniMax H3 Max', providerKey: 'runway', category: 'video', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'h3_max', latencyAvgMs: 0, creditCost: h3MaxCreditsForRequest(10).credits },
   { id: 'prov-runway-act-two', name: 'Runway Act-Two', providerKey: 'runway', category: 'clips', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'act_two', latencyAvgMs: 0, creditCost: CLIP_LAUNCH_EXAMPLES[10] },
   { id: 'prov-eleven-music', name: 'ElevenLabs Music', providerKey: 'elevenlabs', category: 'music', enabled: true, isConfigured: musicConfigured(), isDemoFallback: false, modelName: 'music_v2', latencyAvgMs: 0, creditCost: musicMinuteCredits },
   { id: 'prov-gemini-assistant', name: 'Gemini Prompt Assistant', providerKey: 'gemini', category: 'text', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: 'gemini-3.7-flash', latencyAvgMs: 0, creditCost: 0 },
@@ -128,8 +128,7 @@ async function openAIImage(prompt: string, referenceImages: string[] = []) {
   }
 
   const response = await fetch('https://api.openai.com/v1/images/generations', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: 'gpt-image-2', prompt, quality: 'medium', size: '1024x1024' }),
   });
   const payload: any = await response.json().catch(() => ({}));
@@ -139,15 +138,10 @@ async function openAIImage(prompt: string, referenceImages: string[] = []) {
 }
 
 app.get('/api/health', (_req, res) => res.json({
-  status: 'ok',
-  app: 'MUNGWELE IA STUDIO',
-  pricingVersion: PRICING_VERSION,
-  openAIImageConfigured: !!process.env.OPENAI_API_KEY,
-  geminiConfigured: !!process.env.GEMINI_API_KEY,
-  runwayConfigured: runwayConfigured(),
-  elevenMusicConfigured: musicConfigured(),
-  videoModels: Object.keys(VIDEO_MODELS),
-  timestamp: now(),
+  status: 'ok', app: 'MUNGWELE IA STUDIO', pricingVersion: PRICING_VERSION,
+  openAIImageConfigured: !!process.env.OPENAI_API_KEY, geminiConfigured: !!process.env.GEMINI_API_KEY,
+  runwayConfigured: runwayConfigured(), elevenMusicConfigured: musicConfigured(),
+  videoModels: Object.keys(VIDEO_MODELS), timestamp: now(),
 }));
 
 app.get('/api/settings', (_req, res) => {
@@ -164,13 +158,10 @@ app.get('/api/settings', (_req, res) => {
     return { ...p, isConfigured: configured };
   });
   res.json({
-    settings: appSettings,
-    providers: apiProviders,
-    videoModels: VIDEO_MODELS,
-    videoCreditCosts: VIDEO_CREDIT_COSTS,
-    videoEngineExamples: VIDEO_ENGINE_LAUNCH_EXAMPLES,
+    settings: appSettings, providers: apiProviders, videoModels: VIDEO_MODELS,
+    videoCreditCosts: VIDEO_CREDIT_COSTS, videoEngineExamples: VIDEO_ENGINE_LAUNCH_EXAMPLES,
     seedanceCreditExamples: SEEDANCE_LAUNCH_EXAMPLES,
-    happyHorseCreditExamples: VIDEO_ENGINE_LAUNCH_EXAMPLES.happyHorse720,
+    h3MaxCreditExamples: VIDEO_ENGINE_LAUNCH_EXAMPLES.h3Max768,
     clipCreditExamples: CLIP_LAUNCH_EXAMPLES,
   });
 });
@@ -188,14 +179,14 @@ app.post('/api/pricing/seedance', (req, res) => {
   }
 });
 
-app.post('/api/pricing/happyhorse', (req, res) => {
+app.post('/api/pricing/h3-max', (req, res) => {
   try {
     const durationSeconds = Number(req.body?.durationSeconds || 10);
-    const resolution = String(req.body?.resolution || '720p') === '1080p' ? '1080p' : '720p';
-    const quote = happyHorseCreditsForRequest(durationSeconds, resolution);
-    return res.json({ supplier: 'Runway Dev', model: 'happyhorse_1_0', ...quote, markupPercentAtBestValuePack: 20 });
+    const resolution = String(req.body?.resolution || '768p') === '480p' ? '480p' : '768p';
+    const quote = h3MaxCreditsForRequest(durationSeconds, resolution);
+    return res.json({ supplier: 'Runway Dev', model: 'h3_max', ...quote, markupPercentAtBestValuePack: 20 });
   } catch (error: any) {
-    return res.status(400).json({ error: String(error?.message || 'Devis HappyHorse invalide.') });
+    return res.status(400).json({ error: String(error?.message || 'Devis H3 Max invalide.') });
   }
 });
 
@@ -232,9 +223,7 @@ app.post('/api/generate/image', async (req, res) => {
   const finalPrompt = String(enhancedPrompt || prompt).trim();
   const refs = Array.isArray(referenceImages)
     ? referenceImages.filter((item: unknown): item is string => typeof item === 'string' && item.startsWith('data:image/')).slice(0, 8)
-    : typeof referenceImage === 'string' && referenceImage.startsWith('data:image/')
-      ? [referenceImage]
-      : [];
+    : typeof referenceImage === 'string' && referenceImage.startsWith('data:image/') ? [referenceImage] : [];
   const providerPrompt = refs.length
     ? `MODIFICATION STRICTE. Utilise toutes les images fournies comme références. Préserve les identités, objets, styles ou éléments demandés et applique uniquement cette instruction : ${finalPrompt}`
     : `Crée une image en suivant précisément cette demande, sans ajouter d'éléments non demandés : ${finalPrompt}`;
@@ -243,23 +232,11 @@ app.post('/api/generate/image', async (req, res) => {
     assertImageMonetizationSafe(refs.length, imagePricing.credits);
     const imageUrl = await openAIImage(providerPrompt, refs);
     const generation = {
-      id: `gen-img-${Date.now()}`,
-      userId: userId || 'usr-current',
-      type: 'image',
-      title: prompt.slice(0, 60),
-      prompt,
-      enhancedPrompt: finalPrompt,
-      provider: 'OpenAI',
-      model: 'gpt-image-2',
-      status: 'completed',
-      progress: 100,
-      resultUrl: imageUrl,
-      thumbnailUrl: imageUrl,
-      creditsUsed: imagePricing.credits,
-      isPublic: false,
+      id: `gen-img-${Date.now()}`, userId: userId || 'usr-current', type: 'image', title: prompt.slice(0, 60), prompt,
+      enhancedPrompt: finalPrompt, provider: 'OpenAI', model: 'gpt-image-2', status: 'completed', progress: 100,
+      resultUrl: imageUrl, thumbnailUrl: imageUrl, creditsUsed: imagePricing.credits, isPublic: false,
       settings: { style: 'prompt-only', aspectRatio: '1:1', quality: 'standard', quantity: 1, referenceImage: Boolean(refs.length), referenceImages: refs.length ? refs : undefined },
-      createdAt: now(),
-      updatedAt: now(),
+      createdAt: now(), updatedAt: now(),
     };
     generations.unshift(generation);
     addLog('success', 'Studio Image', refs.length ? `Image modifiée avec ${refs.length} référence(s) OpenAI pour ${imagePricing.credits} crédits.` : `Image générée avec OpenAI pour ${imagePricing.credits} crédits.`);
@@ -296,7 +273,12 @@ app.post('/api/generate/video', async (req, res) => {
       ? await generateOmniVideo({ prompt: prompt.trim(), aspectRatio: safeAspectRatio, duration: effectiveDuration, resolution: '720p', startImage: typeof startImage === 'string' ? startImage : null, endImage: typeof endImage === 'string' ? endImage : null, referenceImages: refs })
       : await generateVideo(client, { model: safeModel as VeoVideoModel, prompt: prompt.trim(), aspectRatio: safeAspectRatio, duration: effectiveDuration, startImage: typeof startImage === 'string' ? startImage : null, endImage: typeof endImage === 'string' ? endImage : null });
 
-    const generation = { id: `gen-video-${Date.now()}`, userId: userId || 'usr-current', type: 'video', title: prompt.trim().slice(0, 60), prompt: prompt.trim(), enhancedPrompt: prompt.trim(), provider: 'Google', model: result.model, status: 'completed', progress: 100, resultUrl: result.resultUrl, thumbnailUrl: '', creditsUsed, isPublic: false, settings: { style: 'prompt-only', videoModel: safeModel, aspectRatio: safeAspectRatio, duration: result.duration, enableAudio: true, startImage: Boolean(startImage), endImage: Boolean(endImage), referenceImages: refs.length ? refs : undefined, resolution: '720p' }, createdAt: now(), updatedAt: now() };
+    const generation = {
+      id: `gen-video-${Date.now()}`, userId: userId || 'usr-current', type: 'video', title: prompt.trim().slice(0, 60), prompt: prompt.trim(), enhancedPrompt: prompt.trim(),
+      provider: 'Google', model: result.model, status: 'completed', progress: 100, resultUrl: result.resultUrl, thumbnailUrl: '', creditsUsed, isPublic: false,
+      settings: { style: 'prompt-only', videoModel: safeModel, aspectRatio: safeAspectRatio, duration: result.duration, enableAudio: true, startImage: Boolean(startImage), endImage: Boolean(endImage), referenceImages: refs.length ? refs : undefined, resolution: '720p' },
+      createdAt: now(), updatedAt: now(),
+    };
     generations.unshift(generation);
     addLog('success', 'Studio Vidéo', `${VIDEO_MODELS[safeModel].name} a généré ${result.duration}s en ${Math.round((Date.now() - startedAt) / 1000)}s.`);
     return res.json({ success: true, generation });
@@ -312,20 +294,13 @@ app.post('/api/music/quote', async (req, res) => {
   const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
   if (!description) return res.status(400).json({ error: 'La description musicale est requise.' });
   if (!musicConfigured()) return res.status(503).json({ error: "ElevenLabs Music n'est pas encore connecté côté serveur.", code: 'ELEVEN_MUSIC_NOT_CONFIGURED' });
-
   try {
     const plan = await createElevenMusicPlan(description);
     const pricing = musicCreditsForDurationMs(plan.durationMs);
     assertMusicMonetizationSafe(plan.durationMs, pricing.credits);
     const quoteId = `music-quote-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     musicQuotes.set(quoteId, { description, plan, credits: pricing.credits, providerCostUsd: pricing.providerCostUsd, expiresAt: Date.now() + 10 * 60 * 1000 });
-    return res.json({
-      quoteId,
-      creditCost: pricing.credits,
-      estimatedDurationSeconds: pricing.durationSeconds,
-      markupPercent: 50,
-      expiresInSeconds: 600,
-    });
+    return res.json({ quoteId, creditCost: pricing.credits, estimatedDurationSeconds: pricing.durationSeconds, markupPercent: 50, expiresInSeconds: 600 });
   } catch (error: any) {
     const status = Number(error?.status || 500);
     const message = String(error?.message || 'Impossible de calculer le coût de cette musique.');
@@ -349,7 +324,6 @@ app.post('/api/generate/music', async (req, res) => {
     musicQuotes.delete(quoteId);
     return res.status(400).json({ error: 'Le devis musique a expiré ou ne correspond plus à la description. Relancez la génération.', code: 'MUSIC_QUOTE_INVALID' });
   }
-
   const creditsUsed = quote.credits;
   assertMusicMonetizationSafe(quote.plan.durationMs, creditsUsed);
   musicQuotes.delete(quoteId);
@@ -358,33 +332,12 @@ app.post('/api/generate/music', async (req, res) => {
     const startedAt = Date.now();
     const result = await generateElevenMusicFromPlan(quote.plan);
     const generation = {
-      id: `gen-music-${Date.now()}`,
-      userId: userId || 'usr-current',
-      type: 'music',
-      title,
-      prompt: description,
-      enhancedPrompt: description,
-      provider: result.provider,
-      model: result.model,
-      status: 'completed',
-      progress: 100,
-      resultUrl: result.resultUrl,
-      thumbnailUrl: '',
-      creditsUsed,
-      isPublic: false,
+      id: `gen-music-${Date.now()}`, userId: userId || 'usr-current', type: 'music', title, prompt: description, enhancedPrompt: description,
+      provider: result.provider, model: result.model, status: 'completed', progress: 100, resultUrl: result.resultUrl, thumbnailUrl: '', creditsUsed, isPublic: false,
       audioDuration: result.durationSeconds,
-      settings: {
-        genre: 'custom',
-        mood: 'inspiring',
-        voice: quote.plan.instrumental ? 'instrumental' : 'duet',
-        isInstrumental: quote.plan.instrumental,
-        durationSeconds: result.durationSeconds,
-      },
-      providerSongId: result.songId,
-      createdAt: now(),
-      updatedAt: now(),
+      settings: { genre: 'custom', mood: 'inspiring', voice: quote.plan.instrumental ? 'instrumental' : 'duet', isInstrumental: quote.plan.instrumental, durationSeconds: result.durationSeconds },
+      providerSongId: result.songId, createdAt: now(), updatedAt: now(),
     };
-
     generations.unshift(generation);
     const provider = apiProviders.find((p) => p.id === 'prov-eleven-music');
     if (provider) provider.latencyAvgMs = Date.now() - startedAt;
@@ -394,18 +347,13 @@ app.post('/api/generate/music', async (req, res) => {
     const status = Number(error?.status || 500);
     const message = String(error?.message || 'Erreur Eleven Music inconnue.');
     addLog('error', 'Studio Musique', message);
-    return res.status(status === 400 || status === 401 || status === 402 || status === 403 || status === 422 || status === 429 || status === 503 ? status : 500).json({
-      error: quotaError(error) ? 'Quota ou limite ElevenLabs Music atteint. Vérifiez votre abonnement et votre solde ElevenLabs.' : message,
-      code: error?.code || 'ELEVEN_MUSIC_GENERATION_FAILED',
-    });
+    return res.status(status === 400 || status === 401 || status === 402 || status === 403 || status === 422 || status === 429 || status === 503 ? status : 500).json({ error: quotaError(error) ? 'Quota ou limite ElevenLabs Music atteint. Vérifiez votre abonnement et votre solde ElevenLabs.' : message, code: error?.code || 'ELEVEN_MUSIC_GENERATION_FAILED' });
   }
 });
 
 app.get('/api/generations', (_req, res) => res.json({ generations }));
 app.get('/api/community', (_req, res) => {
-  const published = generations
-    .filter((g) => g.isPublic === true && g.status === 'completed')
-    .sort((a, b) => String(b.publicAt || b.updatedAt).localeCompare(String(a.publicAt || a.updatedAt)));
+  const published = generations.filter((g) => g.isPublic === true && g.status === 'completed').sort((a, b) => String(b.publicAt || b.updatedAt).localeCompare(String(a.publicAt || a.updatedAt)));
   res.json({ generations: published });
 });
 app.post('/api/generations/:id/publish', (req, res) => {
@@ -430,22 +378,15 @@ app.post('/api/admin/settings', (req, res) => { const { creditCosts, announcemen
 
 async function startServer() {
   const httpServer = createHttpServer(app);
-
   if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      appType: 'spa',
-      server: { middlewareMode: true, hmr: { server: httpServer, protocol: 'wss', clientPort: 443, overlay: false } },
-    });
+    const vite = await createViteServer({ appType: 'spa', server: { middlewareMode: true, hmr: { server: httpServer, protocol: 'wss', clientPort: 443, overlay: false } } });
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }
-
-  httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`[MUNGWELE IA STUDIO] Server running on http://0.0.0.0:${PORT}`);
-  });
+  httpServer.listen(PORT, '0.0.0.0', () => console.log(`[MUNGWELE IA STUDIO] Server running on http://0.0.0.0:${PORT}`));
 }
 
 startServer();
