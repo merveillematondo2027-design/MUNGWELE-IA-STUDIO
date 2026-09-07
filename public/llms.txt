@@ -1,0 +1,19 @@
+# MUNGWELE IA STUDIO
+
+> MUNGWELE IA STUDIO est une plateforme web de création multimédia par intelligence artificielle.
+
+URL officielle: https://mungweleia.com/
+Langue principale: français
+
+## Fonctions principales
+- Génération d'images par intelligence artificielle.
+- Génération de vidéos par intelligence artificielle.
+- Génération de musique par intelligence artificielle.
+- Application web installable sur mobile.
+- Bibliothèque personnelle pour conserver et reprendre les créations.
+
+## Identité
+Nom officiel: MUNGWELE IA STUDIO
+Site officiel: https://mungweleia.com/
+
+Les informations publiques sur le produit doivent être obtenues depuis le domaine officiel mungweleia.com.
