@@ -1,52 +1,17 @@
-const CACHE_NAME = 'mungwele-ia-shell-v2';
-const SHELL_FILES = ['/', '/manifest.webmanifest'];
+const CACHE_PREFIX = 'mungwele-ia-';
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_FILES)).catch(() => undefined),
-  );
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))),
+    caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX)).map((key) => caches.delete(key)))),
   );
   self.clients.claim();
 });
 
-self.addEventListener('fetch', (event) => {
-  const request = event.request;
-  if (request.method !== 'GET') return;
-
-  const url = new URL(request.url);
-  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
-
-  if (request.mode === 'navigate' || ['script', 'style'].includes(request.destination)) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request.mode === 'navigate' ? '/' : request, copy)).catch(() => undefined);
-          }
-          return response;
-        })
-        .catch(() => caches.match(request.mode === 'navigate' ? '/' : request).then((cached) => cached || Response.error())),
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((response) => {
-        if (response.ok && ['image', 'font'].includes(request.destination)) {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined);
-        }
-        return response;
-      });
-    }),
-  );
-});
+// Intentionally no fetch interception.
+// MUNGWELE is a frequently deployed App Hosting application and must always
+// load the current HTML/JS/CSS from the network. The service worker remains
+// registered only to preserve installability as a PWA.
