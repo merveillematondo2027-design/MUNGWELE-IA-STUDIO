@@ -16,12 +16,11 @@ export interface VideoEngineProfile {
   estimatedUsdPerSecond?: number;
 }
 
-// Public launch catalog:
-// 1) Veo 3.1 Lite, Fast and Pro through Google Gemini API.
-// 2) Gemini Omni Fast through the existing Interactions API route.
-// 3) Seedance 2.5 and HappyHorse 1.0 through Runway Dev. These two are shown
-//    in the product now but remain blocked as "Bientôt disponible" until the
-//    production Runway adapter is enabled.
+// Public video launch catalog:
+// - Google: Veo 3.1 Lite, Fast, Pro and Gemini Omni Fast.
+// - Runway Dev preview: Seedance 2.5 and MiniMax H3 Max.
+// Runway choices are intentionally visible but blocked as "Bientôt disponible"
+// until their production adapter is connected.
 export const VIDEO_ENGINES: Record<VideoEngineKey, VideoEngineProfile> = {
   'veo-lite': {
     key: 'veo-lite', label: 'Veo 3.1 Lite', provider: 'Google', availability: 'connected',
@@ -48,10 +47,10 @@ export const VIDEO_ENGINES: Record<VideoEngineKey, VideoEngineProfile> = {
     maxSeconds: 30, durations: [4, 5, 6, 8, 10, 15, 30], supportsAudioReference: true, supportsLipSync: false,
     supportsImages: true, strengths: ['multi-scènes', 'références', 'jusqu’à 30 s', '1080p'], estimatedUsdPerSecond: 0.30,
   },
-  'happyhorse-1': {
-    key: 'happyhorse-1', label: 'HappyHorse 1.0', provider: 'Runway Dev', availability: 'planned',
-    maxSeconds: 15, durations: [4, 5, 6, 8, 10, 15], supportsAudioReference: false, supportsLipSync: false,
-    supportsImages: true, strengths: ['texte vers vidéo', 'image vers vidéo', '720p', 'jusqu’à 15 s'], estimatedUsdPerSecond: 0.15,
+  'h3-max': {
+    key: 'h3-max', label: 'MiniMax H3 Max', provider: 'Runway Dev', availability: 'planned',
+    maxSeconds: 15, durations: [5, 6, 8, 10, 15], supportsAudioReference: false, supportsLipSync: false,
+    supportsImages: true, strengths: ['économique', 'texte vers vidéo', 'image vers vidéo', 'jusqu’à 15 s'], estimatedUsdPerSecond: 0.08,
   },
   'runway-act-two': {
     key: 'runway-act-two', label: 'Runway Act-Two', provider: 'Runway Dev', availability: 'planned',
@@ -60,77 +59,70 @@ export const VIDEO_ENGINES: Record<VideoEngineKey, VideoEngineProfile> = {
   },
 };
 
-type VideoTypeRoute = {
-  label: string;
-  description: string;
-  badge: string;
-  engines: VideoEngineKey[];
-  defaultEngine: VideoEngineKey;
-};
+type VideoTypeRoute = { label: string; description: string; badge: string; engines: VideoEngineKey[]; defaultEngine: VideoEngineKey; };
 
-// Each normal video type deliberately exposes only 2–3 compatible choices.
-// The list is ordered from the lowest supplier cost that still suits the task
-// toward more expensive/specialized alternatives.
+// Only 2–3 engines appear for each type. Ordering favors the cheapest supplier
+// option that still makes sense for the requested creative result.
 export const VIDEO_TYPE_ROUTING: Record<VideoType, VideoTypeRoute> = {
   social: {
     label: 'Reel / Réseaux sociaux', badge: 'Économique',
     description: 'TikTok, Reels, Shorts, stories et formats verticaux rapides.',
-    engines: ['veo-lite', 'veo-fast', 'happyhorse-1'], defaultEngine: 'veo-lite',
+    engines: ['veo-lite', 'h3-max', 'veo-fast'], defaultEngine: 'veo-lite',
   },
   commercial: {
     label: 'Publicité / Produit', badge: 'Business',
     description: 'Produit, marque, démonstration et campagne publicitaire.',
-    engines: ['veo-lite', 'veo-fast', 'seedance-2-5'], defaultEngine: 'veo-lite',
+    engines: ['veo-lite', 'h3-max', 'veo-fast'], defaultEngine: 'veo-lite',
   },
   realistic: {
     label: 'Réaliste / Personnes', badge: 'Réel',
     description: 'Humains, lifestyle, influenceurs et rendu naturel.',
-    engines: ['veo-lite', 'veo-fast', 'happyhorse-1'], defaultEngine: 'veo-lite',
+    engines: ['veo-lite', 'h3-max', 'veo-fast'], defaultEngine: 'veo-lite',
   },
   cinematic: {
     label: 'Cinématique / Film', badge: 'Cinéma',
     description: 'Plans cinéma, narration visuelle et rendu premium.',
-    engines: ['veo-fast', 'seedance-2-5', 'veo-pro'], defaultEngine: 'veo-fast',
+    engines: ['h3-max', 'veo-fast', 'seedance-2-5'], defaultEngine: 'veo-fast',
   },
   action: {
     label: 'Action', badge: 'Dynamique',
     description: 'Mouvements rapides, cascades, poursuites et scènes dynamiques.',
-    engines: ['veo-fast', 'happyhorse-1', 'seedance-2-5'], defaultEngine: 'veo-fast',
+    engines: ['h3-max', 'veo-fast', 'seedance-2-5'], defaultEngine: 'veo-fast',
   },
   comedy: {
     label: 'Comédie / Dialogue', badge: 'Dialogue',
     description: 'Scènes légères, personnages expressifs et dialogue.',
-    engines: ['veo-fast', 'happyhorse-1', 'veo-pro'], defaultEngine: 'veo-fast',
+    engines: ['h3-max', 'veo-fast', 'veo-pro'], defaultEngine: 'veo-fast',
   },
   drama: {
     label: 'Drame', badge: 'Émotion',
     description: 'Jeu d’acteur, tension, émotions fortes et mise en scène narrative.',
-    engines: ['veo-fast', 'happyhorse-1', 'veo-pro'], defaultEngine: 'veo-fast',
+    engines: ['h3-max', 'veo-fast', 'veo-pro'], defaultEngine: 'veo-fast',
   },
   romantic_series: {
     label: 'Série romantique', badge: 'Série',
     description: 'Couples, continuité de personnages, dialogues et scènes émotionnelles.',
-    engines: ['veo-fast', 'happyhorse-1', 'seedance-2-5'], defaultEngine: 'veo-fast',
+    engines: ['h3-max', 'veo-fast', 'seedance-2-5'], defaultEngine: 'veo-fast',
   },
   '3d': {
     label: 'Animation 3D', badge: '3D',
     description: 'Objets, personnages et univers 3D.',
-    engines: ['veo-lite', 'veo-fast', 'seedance-2-5'], defaultEngine: 'veo-lite',
+    engines: ['veo-lite', 'h3-max', 'seedance-2-5'], defaultEngine: 'veo-lite',
   },
   anime: {
     label: 'Anime / Illustration', badge: 'Stylisé',
     description: 'Anime, illustration animée et stylisation.',
-    engines: ['veo-lite', 'veo-fast', 'happyhorse-1'], defaultEngine: 'veo-lite',
+    engines: ['veo-lite', 'h3-max', 'veo-fast'], defaultEngine: 'veo-lite',
   },
   talking: {
     label: 'Présentateur / Parlant', badge: 'Dialogue',
     description: 'Personnage, présentation, discours et synchronisation visuelle.',
-    engines: ['veo-fast', 'happyhorse-1', 'veo-pro'], defaultEngine: 'veo-fast',
+    engines: ['h3-max', 'veo-fast', 'veo-pro'], defaultEngine: 'veo-fast',
   },
   effects: {
     label: 'Effets / Transformation', badge: 'VFX',
     description: 'Transitions, métamorphoses et effets visuels créatifs.',
-    engines: ['omni', 'veo-fast', 'seedance-2-5'], defaultEngine: 'omni',
+    engines: ['omni', 'h3-max', 'seedance-2-5'], defaultEngine: 'omni',
   },
   music_clip: {
     label: 'Clip musical', badge: 'Musique',
@@ -140,7 +132,7 @@ export const VIDEO_TYPE_ROUTING: Record<VideoType, VideoTypeRoute> = {
   custom: {
     label: 'Personnalisé', badge: 'Auto',
     description: 'MUNGWELE propose les moteurs les plus polyvalents selon votre demande.',
-    engines: ['veo-lite', 'omni', 'seedance-2-5'], defaultEngine: 'veo-lite',
+    engines: ['veo-lite', 'h3-max', 'omni'], defaultEngine: 'veo-lite',
   },
 };
 
