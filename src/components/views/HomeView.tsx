@@ -11,6 +11,7 @@ export const HomeView: React.FC = () => {
   const openStudio = (studio: StudioType) => {
     localStorage.removeItem('mungwele.resume.project');
     sessionStorage.setItem('mungwele.new.project', studio);
+    window.dispatchEvent(new CustomEvent('mungwele:new-project', { detail: { studio } }));
     setActiveStudio(studio);
     setActiveTab(`studio-${studio}` as any);
   };
@@ -53,7 +54,7 @@ export const HomeView: React.FC = () => {
         })}
       </div>
 
-      <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-center text-[11px] leading-5 text-gray-500">MUNGWELE choisit automatiquement le moteur adapté au résultat demandé. Les réglages restent disponibles dans chaque studio.</div>
+      <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-center text-[11px] leading-5 text-gray-500">Choisissez votre moteur et vos réglages dans chaque studio. Les anciens projets restent uniquement dans la Bibliothèque.</div>
 
       <CommunityFeed compact />
     </div>
