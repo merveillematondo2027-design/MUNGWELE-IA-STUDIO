@@ -12,10 +12,12 @@ import {
   PRICING_VERSION,
   SEEDANCE_LAUNCH_EXAMPLES,
   VIDEO_CREDIT_COSTS,
+  VIDEO_ENGINE_LAUNCH_EXAMPLES,
   assertImageMonetizationSafe,
   assertMonetizationSafe,
   assertMusicMonetizationSafe,
   clipCreditsForDurationSeconds,
+  happyHorseCreditsForRequest,
   imageCreditsForRequest,
   musicCreditsForDurationMs,
   seedanceCreditsForRequest,
@@ -48,7 +50,7 @@ const runwayConfigured = () => !!(process.env.RUNWAY_API_KEY || process.env.RUNW
 const musicQuotes = new Map<string, { description: string; plan: ElevenMusicPlan; credits: number; providerCostUsd: number; expiresAt: number }>();
 
 const VIDEO_MODELS: Record<MonetizedVideoModel, { name: string; model: string; allowed: VideoDuration[]; usdPerSecond: number }> = {
-  omni: { name: 'Google Omni Références', model: 'gemini-omni-1.1-flash', allowed: [4, 6, 8], usdPerSecond: 0.10 },
+  omni: { name: 'Gemini Omni Fast', model: 'gemini-omni-1.1-flash', allowed: [4, 6, 8], usdPerSecond: 0.10 },
   lite: { name: 'Veo 3.1 Lite', model: 'veo-3.1-lite-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.05 },
   fast: { name: 'Veo 3.1 Fast', model: 'veo-3.1-fast-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.10 },
   pro: { name: 'Veo 3.1 Pro', model: 'veo-3.1-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.40 },
@@ -78,11 +80,9 @@ let apiProviders: any[] = [
   { id: 'prov-video-lite', name: 'Veo 3.1 Lite', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.lite.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.lite[4] },
   { id: 'prov-video-fast', name: 'Veo 3.1 Fast', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.fast.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.fast[4] },
   { id: 'prov-video-pro', name: 'Veo 3.1 Pro', providerKey: 'veo', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.pro.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.pro[4] },
-  { id: 'prov-video-omni', name: 'Google Omni Références', providerKey: 'gemini', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.omni.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.omni[4] },
-  { id: 'prov-seedance-mini', name: 'Seedance 2 Mini', providerKey: 'runway', category: 'video', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'seedance2_mini', latencyAvgMs: 0, creditCost: SEEDANCE_LAUNCH_EXAMPLES.mini720[10] },
-  { id: 'prov-seedance-fast', name: 'Seedance 2 Fast', providerKey: 'runway', category: 'video', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'seedance2_fast', latencyAvgMs: 0, creditCost: SEEDANCE_LAUNCH_EXAMPLES.fast720[10] },
-  { id: 'prov-seedance-2', name: 'Seedance 2', providerKey: 'runway', category: 'video', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'seedance2', latencyAvgMs: 0, creditCost: SEEDANCE_LAUNCH_EXAMPLES.standard720[10] },
+  { id: 'prov-video-omni', name: 'Gemini Omni Fast', providerKey: 'gemini', category: 'video', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: VIDEO_MODELS.omni.model, latencyAvgMs: 0, creditCost: VIDEO_CREDIT_COSTS.omni[4] },
   { id: 'prov-seedance-25', name: 'Seedance 2.5', providerKey: 'runway', category: 'video', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'seedance2_5', latencyAvgMs: 0, creditCost: SEEDANCE_LAUNCH_EXAMPLES.seedance25_720[10] },
+  { id: 'prov-happyhorse-1', name: 'HappyHorse 1.0', providerKey: 'runway', category: 'video', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'happyhorse_1_0', latencyAvgMs: 0, creditCost: happyHorseCreditsForRequest(10).credits },
   { id: 'prov-runway-act-two', name: 'Runway Act-Two', providerKey: 'runway', category: 'clips', enabled: false, isConfigured: runwayConfigured(), isDemoFallback: false, modelName: 'act_two', latencyAvgMs: 0, creditCost: CLIP_LAUNCH_EXAMPLES[10] },
   { id: 'prov-eleven-music', name: 'ElevenLabs Music', providerKey: 'elevenlabs', category: 'music', enabled: true, isConfigured: musicConfigured(), isDemoFallback: false, modelName: 'music_v2', latencyAvgMs: 0, creditCost: musicMinuteCredits },
   { id: 'prov-gemini-assistant', name: 'Gemini Prompt Assistant', providerKey: 'gemini', category: 'text', enabled: true, isConfigured: !!process.env.GEMINI_API_KEY, isDemoFallback: false, modelName: 'gemini-3.7-flash', latencyAvgMs: 0, creditCost: 0 },
@@ -168,7 +168,9 @@ app.get('/api/settings', (_req, res) => {
     providers: apiProviders,
     videoModels: VIDEO_MODELS,
     videoCreditCosts: VIDEO_CREDIT_COSTS,
+    videoEngineExamples: VIDEO_ENGINE_LAUNCH_EXAMPLES,
     seedanceCreditExamples: SEEDANCE_LAUNCH_EXAMPLES,
+    happyHorseCreditExamples: VIDEO_ENGINE_LAUNCH_EXAMPLES.happyHorse720,
     clipCreditExamples: CLIP_LAUNCH_EXAMPLES,
   });
 });
@@ -180,15 +182,26 @@ app.post('/api/pricing/seedance', (req, res) => {
     const durationSeconds = Number(req.body?.durationSeconds || 10);
     const inputVideoSeconds = Number(req.body?.inputVideoSeconds || 0);
     const quote = seedanceCreditsForRequest(model, durationSeconds, { resolution, inputVideoSeconds });
-    return res.json({ supplier: 'Runway Dev', model, ...quote, markupPercent: 33.33 });
+    return res.json({ supplier: 'Runway Dev', model, ...quote, markupPercentAtBestValuePack: 20 });
   } catch (error: any) {
     return res.status(400).json({ error: String(error?.message || 'Devis Seedance invalide.') });
   }
 });
 
+app.post('/api/pricing/happyhorse', (req, res) => {
+  try {
+    const durationSeconds = Number(req.body?.durationSeconds || 10);
+    const resolution = String(req.body?.resolution || '720p') === '1080p' ? '1080p' : '720p';
+    const quote = happyHorseCreditsForRequest(durationSeconds, resolution);
+    return res.json({ supplier: 'Runway Dev', model: 'happyhorse_1_0', ...quote, markupPercentAtBestValuePack: 20 });
+  } catch (error: any) {
+    return res.status(400).json({ error: String(error?.message || 'Devis HappyHorse invalide.') });
+  }
+});
+
 app.post('/api/pricing/clips', (req, res) => {
   const quote = clipCreditsForDurationSeconds(Number(req.body?.durationSeconds || 15));
-  return res.json({ supplier: 'Runway Dev', model: 'act_two', ...quote, markupPercent: 33.33 });
+  return res.json({ supplier: 'Runway Dev', model: 'act_two', ...quote, markupPercentAtBestValuePack: 20 });
 });
 
 app.post('/api/ai/enhance-prompt', async (req, res) => {
