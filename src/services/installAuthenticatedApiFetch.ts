@@ -57,7 +57,8 @@ export function installAuthenticatedApiFetch() {
     const protectedApi =
       url.startsWith('/api/generate/')
       || url.startsWith('/api/media/download')
-      || url.startsWith('/api/market-cash/');
+      || url.startsWith('/api/market-cash/')
+      || url.startsWith('/api/admin/provider-wallet');
     if (!protectedApi) return originalFetch(input, init);
 
     const currentUser = auth.currentUser;
