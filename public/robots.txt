@@ -1,0 +1,21 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /generated/
+
+User-agent: Googlebot
+Allow: /
+Disallow: /api/
+Disallow: /generated/
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /api/
+Disallow: /generated/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /api/
+Disallow: /generated/
+
+Sitemap: https://mungweleia.com/sitemap.xml
