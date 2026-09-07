@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { adminAuth, adminDb, adminStorage } from './firebaseAdmin';
+import { recordProviderWalletConsumption } from './providerWallet';
 
 const TARGETS = new Map([
   ['/api/generate/image', 'image'],
@@ -130,6 +131,7 @@ function backgroundGenerationMiddleware(kind: string) {
           if (res.statusCode >= 200 && res.statusCode < 300 && body?.generation) {
             const persisted = await persistMedia(uid!, { ...body.generation, userId: uid, billingPending: true, backgroundJobId: jobId });
             await adminDb.collection('generations').doc(persisted.id).set({ ...persisted, userId: uid, billingPending: true, backgroundJobId: jobId, updatedAt: iso() }, { merge: true });
+            await recordProviderWalletConsumption(persisted).catch((error) => console.warn('[PROVIDER_WALLET_CONSUMPTION_WARNING]', error));
             await jobRef.set({ status: 'completed', progress: 100, generationId: persisted.id, resultUrl: persisted.resultUrl, completedAt: iso(), updatedAt: iso() }, { merge: true });
             body = { ...body, generation: persisted, backgroundJobId: jobId, backgroundAccepted: true };
             setTimeout(() => void settleBilling(uid!, persisted).catch((error) => console.warn('[BACKGROUND_BILLING_WARNING]', error)), 120_000);
