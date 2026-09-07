@@ -153,6 +153,8 @@ service cloud.firestore {
 
     match /payments/{paymentId} { allow read: if ownsExisting() || isAdmin(); allow write: if isAdmin(); }
     match /apiProviders/{providerId} { allow read: if isAdmin(); allow write: if isAdmin(); }
+    match /providerWallets/{providerId} { allow read, write: if isAdmin(); }
+    match /providerWalletTransactions/{transactionId} { allow read, write: if isAdmin(); }
     match /{document=**} { allow read, write: if false; }
   }
 }
