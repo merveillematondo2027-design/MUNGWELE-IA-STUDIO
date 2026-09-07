@@ -5,7 +5,7 @@ import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { generateVideo, type VideoModel as VeoVideoModel, type VeoAspectRatio, type VideoDuration } from './server/veo';
-import { generateOmniVideo } from './server/omni';
+import { generateOmniVideo, type OmniDuration } from './server/omni';
 import { createElevenMusicPlan, generateElevenMusicFromPlan, type ElevenMusicPlan } from './server/elevenMusic';
 import {
   CLIP_LAUNCH_EXAMPLES,
@@ -20,6 +20,7 @@ import {
   h3MaxCreditsForRequest,
   imageCreditsForRequest,
   musicCreditsForDurationMs,
+  omniCreditsForRequest,
   seedanceCreditsForRequest,
   type MonetizedVideoModel,
 } from './server/pricing';
@@ -49,8 +50,8 @@ const musicConfigured = () => !!(process.env.ELEVENLABS_API_KEY || process.env.M
 const runwayConfigured = () => !!(process.env.RUNWAY_API_KEY || process.env.RUNWAYML_API_SECRET);
 const musicQuotes = new Map<string, { description: string; plan: ElevenMusicPlan; credits: number; providerCostUsd: number; expiresAt: number }>();
 
-const VIDEO_MODELS: Record<MonetizedVideoModel, { name: string; model: string; allowed: VideoDuration[]; usdPerSecond: number }> = {
-  omni: { name: 'Gemini Omni Fast', model: 'gemini-omni-1.1-flash', allowed: [4, 6, 8], usdPerSecond: 0.10 },
+const VIDEO_MODELS: Record<MonetizedVideoModel, { name: string; model: string; allowed: number[]; usdPerSecond: number }> = {
+  omni: { name: 'Gemini Omni Fast', model: 'gemini-omni-1.1-flash', allowed: [4, 6, 8, 10], usdPerSecond: 0.10 },
   lite: { name: 'Veo 3.1 Lite', model: 'veo-3.1-lite-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.05 },
   fast: { name: 'Veo 3.1 Fast', model: 'veo-3.1-fast-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.10 },
   pro: { name: 'Veo 3.1 Pro', model: 'veo-3.1-generate-preview', allowed: [4, 6, 8], usdPerSecond: 0.40 },
@@ -69,7 +70,7 @@ let appSettings = {
     imageStandard: imageBaseCredits,
     imageHd: imageBaseCredits,
     video5s: VIDEO_CREDIT_COSTS.lite[4],
-    video10s: VIDEO_CREDIT_COSTS.fast[8],
+    video10s: omniCreditsForRequest(10).credits,
     musicTrack: musicMinuteCredits,
     promptEnhance: 0,
   },
@@ -249,29 +250,34 @@ app.post('/api/generate/image', async (req, res) => {
 });
 
 app.post('/api/generate/video', async (req, res) => {
-  const { prompt, model = 'fast', aspectRatio = '16:9', duration = 8, startImage, endImage, referenceImages, userId } = req.body || {};
+  const { prompt, model = 'lite', aspectRatio = '16:9', duration = 8, startImage, endImage, referenceImages, userId } = req.body || {};
   if (!prompt || typeof prompt !== 'string' || !prompt.trim()) return res.status(400).json({ error: 'Le prompt vidéo est requis.' });
   const client = getAI();
   if (!client) return res.status(503).json({ error: 'La génération vidéo nécessite GEMINI_API_KEY.', code: 'VIDEO_NOT_CONFIGURED' });
 
   const safeModel: MonetizedVideoModel = model === 'omni' || model === 'lite' || model === 'pro' ? model : 'fast';
   const numeric = Number(duration);
-  const safeDuration: VideoDuration = numeric === 4 || numeric === 6 ? numeric : 8;
+  const safeVeoDuration: VideoDuration = numeric === 4 || numeric === 6 ? numeric : 8;
+  const safeOmniDuration: OmniDuration = numeric === 4 || numeric === 6 || numeric === 8 || numeric === 10 ? numeric : 8;
   const safeAspectRatio: VeoAspectRatio = aspectRatio === '9:16' ? '9:16' : '16:9';
   const refs = Array.isArray(referenceImages)
     ? referenceImages.filter((item: unknown): item is string => typeof item === 'string' && item.startsWith('data:image/')).slice(0, 6)
     : [];
   if (endImage && !startImage) return res.status(400).json({ error: 'Une image de fin nécessite une image de départ.', code: 'START_IMAGE_REQUIRED' });
-  if (refs.length > 0 && safeModel !== 'omni') return res.status(400).json({ error: 'Les références multiples utilisent le flux Google Références. Sélectionnez ce mode pour ce projet.', code: 'OMNI_REQUIRED_FOR_REFERENCES' });
-  const effectiveDuration: VideoDuration = endImage ? 8 : safeDuration;
-  const creditsUsed = VIDEO_CREDIT_COSTS[safeModel][effectiveDuration];
+  if (refs.length > 0 && safeModel !== 'omni') return res.status(400).json({ error: 'Les références multiples utilisent Gemini Omni Fast.', code: 'OMNI_REQUIRED_FOR_REFERENCES' });
+
+  const omniDuration: OmniDuration = endImage ? 8 : safeOmniDuration;
+  const veoDuration: VideoDuration = endImage ? 8 : safeVeoDuration;
+  const creditsUsed = safeModel === 'omni'
+    ? omniCreditsForRequest(omniDuration).credits
+    : VIDEO_CREDIT_COSTS[safeModel][veoDuration];
 
   try {
-    assertMonetizationSafe(safeModel, effectiveDuration, creditsUsed);
+    if (safeModel !== 'omni') assertMonetizationSafe(safeModel, veoDuration, creditsUsed);
     const startedAt = Date.now();
     const result = safeModel === 'omni'
-      ? await generateOmniVideo({ prompt: prompt.trim(), aspectRatio: safeAspectRatio, duration: effectiveDuration, resolution: '720p', startImage: typeof startImage === 'string' ? startImage : null, endImage: typeof endImage === 'string' ? endImage : null, referenceImages: refs })
-      : await generateVideo(client, { model: safeModel as VeoVideoModel, prompt: prompt.trim(), aspectRatio: safeAspectRatio, duration: effectiveDuration, startImage: typeof startImage === 'string' ? startImage : null, endImage: typeof endImage === 'string' ? endImage : null });
+      ? await generateOmniVideo({ prompt: prompt.trim(), aspectRatio: safeAspectRatio, duration: omniDuration, resolution: '720p', startImage: typeof startImage === 'string' ? startImage : null, endImage: typeof endImage === 'string' ? endImage : null, referenceImages: refs })
+      : await generateVideo(client, { model: safeModel as VeoVideoModel, prompt: prompt.trim(), aspectRatio: safeAspectRatio, duration: veoDuration, startImage: typeof startImage === 'string' ? startImage : null, endImage: typeof endImage === 'string' ? endImage : null });
 
     const generation = {
       id: `gen-video-${Date.now()}`, userId: userId || 'usr-current', type: 'video', title: prompt.trim().slice(0, 60), prompt: prompt.trim(), enhancedPrompt: prompt.trim(),
