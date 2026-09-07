@@ -1,4 +1,4 @@
-import { constants, publicEncrypt, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import express from 'express';
 import { adminAuth, adminDb } from './firebaseAdmin';
 import {
@@ -7,12 +7,17 @@ import {
   LAUNCH_SUBSCRIPTION_PLANS,
   PRICING_VERSION,
 } from '../src/config/commercialPricing';
+import {
+  getMpesaLivePublicStatus,
+  isMpesaLiveConfigured,
+  mpesaLiveMessage,
+  normalizeMpesaLiveMsisdn,
+  requestMpesaLiveC2B,
+} from './mpesaLiveClient';
 
-const INSTALL_FLAG = Symbol.for('mungwele.mobileMoneyPaymentProxyInstalled');
-const APP_FLAG = Symbol.for('mungwele.mobileMoneyRoutesMounted');
-const DEFAULT_BASE_URL = 'https://openapi.m-pesa.com';
+const INSTALL_FLAG = Symbol.for('mungwele.mobileMoneyLivePaymentProxyInstalled');
+const APP_FLAG = Symbol.for('mungwele.mobileMoneyLiveRoutesMounted');
 
-type MpesaMode = 'sandbox' | 'production';
 type TargetKind = 'subscription' | 'credits';
 type BillingCycle = 'monthly' | 'yearly';
 
@@ -38,8 +43,6 @@ const DEFAULT_PRICING = {
   subscriptionPlans: LAUNCH_SUBSCRIPTION_PLANS.map((item) => ({ ...item, features: [...item.features] })),
 };
 
-let sessionCache: { value: string; expiresAt: number } | null = null;
-
 const clean = (value: unknown, max = 120) => String(value ?? '').trim().slice(0, max);
 const money = (value: number) => Math.round(value * 100) / 100;
 
@@ -47,104 +50,11 @@ function fail(message: string, status = 400, code = 'MOBILE_MONEY_REQUEST_INVALI
   return Object.assign(new Error(message), { status, code });
 }
 
-function modeFromEnv(): MpesaMode {
-  return String(process.env.MPESA_MODE || 'sandbox').trim().toLowerCase() === 'production'
-    ? 'production'
-    : 'sandbox';
-}
-
-function config() {
-  const mode: MpesaMode = modeFromEnv();
-  return {
-    mode,
-    apiKey: clean(process.env.MPESA_API_KEY, 4096),
-    publicKey: String(process.env.MPESA_PUBLIC_KEY || '').trim(),
-    baseUrl: String(process.env.MPESA_BASE_URL || DEFAULT_BASE_URL).trim().replace(/\/$/, ''),
-    market: clean(process.env.MPESA_MARKET || 'vodacomRC', 32),
-    country: clean(process.env.MPESA_COUNTRY || 'RDC', 8),
-    currency: clean(process.env.MPESA_CURRENCY || 'USD', 8),
-    serviceProviderCode: clean(process.env.MPESA_SERVICE_PROVIDER_CODE || (mode === 'sandbox' ? '000000' : ''), 32),
-    origin: clean(process.env.MPESA_ORIGIN || '*', 255),
-    sessionTtlSeconds: Math.max(60, Number(process.env.MPESA_SESSION_TTL_SECONDS || 3000)),
-    sessionWarmupMs: Math.max(0, Math.min(30_000, Number(process.env.MPESA_SESSION_WARMUP_MS || 0))),
-  };
-}
-
-function isConfigured() {
-  const c = config();
-  return Boolean(c.apiKey && c.publicKey && c.market && c.country && c.currency && c.serviceProviderCode);
-}
-
-function normalizePublicKey(value: string) {
-  const normalized = String(value || '').replace(/\\n/g, '\n').trim();
-  if (!normalized) throw fail('Clé publique M-Pesa absente.', 503, 'MPESA_PUBLIC_KEY_MISSING');
-  if (normalized.includes('-----BEGIN')) return normalized;
-  const compact = normalized.replace(/\s+/g, '');
-  const body = compact.match(/.{1,64}/g)?.join('\n') || compact;
-  return `-----BEGIN PUBLIC KEY-----\n${body}\n-----END PUBLIC KEY-----`;
-}
-
-function encryptedApiKey(apiKey: string, publicKey: string) {
-  try {
-    return publicEncrypt(
-      { key: normalizePublicKey(publicKey), padding: constants.RSA_PKCS1_PADDING },
-      Buffer.from(apiKey, 'utf8'),
-    ).toString('base64');
-  } catch (error: any) {
-    throw fail(
-      `Impossible de préparer l'authentification M-Pesa : ${String(error?.message || error)}`,
-      503,
-      'MPESA_KEY_ENCRYPTION_FAILED',
-    );
-  }
-}
-
-function normalizeMsisdn(value: unknown, mode: MpesaMode) {
-  const digits = String(value ?? '').replace(/\D/g, '');
-  if (mode === 'sandbox') {
-    if (!/^\d{12,14}$/.test(digits)) throw fail('MSISDN sandbox invalide.', 400, 'MPESA_MSISDN_INVALID');
-    return digits;
-  }
-  if (!/^243\d{9}$/.test(digits)) {
-    throw fail('Numéro M-Pesa invalide. Utilisez le format +243XXXXXXXXX.', 400, 'MPESA_MSISDN_INVALID');
-  }
-  return digits;
-}
-
-function attemptId(value: unknown) {
+function normalizeAttemptId(value: unknown) {
   const id = clean(value, 72).replace(/[^a-zA-Z0-9_-]/g, '');
   if (!id) return randomUUID();
   if (id.length < 8) throw fail('Identifiant de tentative invalide.', 400, 'PAYMENT_ATTEMPT_INVALID');
   return id;
-}
-
-function responseMessage(code: string, fallback = '') {
-  const messages: Record<string, string> = {
-    'INS-0': 'Requête traitée avec succès.',
-    'INS-1': 'Erreur interne M-Pesa.',
-    'INS-6': 'La transaction a échoué.',
-    'INS-9': "Délai d'attente dépassé.",
-    'INS-10': 'Transaction en double.',
-    'INS-13': 'Code marchand M-Pesa invalide.',
-    'INS-15': 'Montant invalide.',
-    'INS-17': 'Référence de transaction invalide.',
-    'INS-20': 'Paramètres M-Pesa incomplets.',
-    'INS-21': 'Validation des paramètres M-Pesa échouée.',
-    'INS-26': 'Devise M-Pesa invalide.',
-    'INS-28': 'Identifiant de conversation invalide.',
-    'INS-30': "Description de l'achat invalide.",
-    'INS-990': 'Limite de valeur des transactions du client dépassée.',
-    'INS-991': 'Limite du nombre de transactions du client dépassée.',
-    'INS-993': "Limite du nombre de transactions de l'organisation dépassée.",
-    'INS-994': "Limite de valeur des transactions de l'organisation dépassée.",
-    'INS-995': 'Limite de transactions API dépassée.',
-    'INS-996': "API utilisée en dehors des heures d'utilisation autorisées.",
-    'INS-997': "L'API M-Pesa n'est pas activée.",
-    'INS-998': 'Marché M-Pesa invalide.',
-    'INS-2006': 'Solde M-Pesa insuffisant.',
-    'INS-2051': 'MSISDN M-Pesa invalide.',
-  };
-  return messages[code] || fallback || 'Paiement M-Pesa refusé.';
 }
 
 async function requireUser(req: express.Request) {
@@ -238,10 +148,12 @@ async function prepareIntent(id: string, uid: string, target: ResolvedTarget, ms
       if (data.status === 'settled' && data.result) existing = data.result;
       return;
     }
+
     tx.create(ref, {
       id,
       userId: uid,
       provider: 'mpesa',
+      environment: 'production',
       targetKind: target.kind,
       targetId: target.targetId,
       targetFingerprint: fingerprint,
@@ -257,43 +169,11 @@ async function prepareIntent(id: string, uid: string, target: ResolvedTarget, ms
   return { ref, existing };
 }
 
-async function getSessionId() {
-  const c = config();
-  if (!isConfigured()) throw fail('M-Pesa C2B n’est pas configuré côté serveur.', 503, 'MPESA_NOT_CONFIGURED');
-  if (sessionCache && sessionCache.expiresAt > Date.now() + 30_000) return sessionCache.value;
-
-  const auth = encryptedApiKey(c.apiKey, c.publicKey);
-  const environment = c.mode === 'production' ? 'openapi' : 'sandbox';
-  const endpoint = `${c.baseUrl}/${environment}/ipg/v2/${encodeURIComponent(c.market)}/getSession/`;
-  const upstream = await fetch(endpoint, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${auth}`,
-      Origin: c.origin,
-      Accept: 'application/json',
-      'User-Agent': 'mungwele-ia-studio/mpesa-session',
-    },
-  });
-  const payload: any = await upstream.json().catch(() => ({}));
-  const sessionId = clean(payload?.output_SessionID, 4096);
-  if (!upstream.ok || !sessionId) {
-    throw fail(
-      clean(payload?.output_ResponseDesc || payload?.error || `Session M-Pesa refusée (${upstream.status}).`, 300),
-      upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502,
-      'MPESA_SESSION_FAILED',
-    );
-  }
-
-  sessionCache = { value: sessionId, expiresAt: Date.now() + c.sessionTtlSeconds * 1000 };
-  if (c.sessionWarmupMs) await new Promise((resolve) => setTimeout(resolve, c.sessionWarmupMs));
-  return sessionId;
-}
-
-async function settle(id: string, uid: string, target: ResolvedTarget, mpesa: any) {
+async function settlePurchase(id: string, uid: string, target: ResolvedTarget, mpesa: any) {
   const settlementRef = adminDb.collection('mobileMoneySettlements').doc(id);
   const intentRef = adminDb.collection('mobileMoneyPaymentIntents').doc(id);
   const userRef = adminDb.collection('users').doc(uid);
-  const creditTxRef = adminDb.collection('creditTransactions').doc(`mpesa-${id}`);
+  const creditTxRef = adminDb.collection('creditTransactions').doc(`mpesa-live-${id}`);
   let result: any = null;
 
   await adminDb.runTransaction(async (tx) => {
@@ -323,7 +203,7 @@ async function settle(id: string, uid: string, target: ResolvedTarget, mpesa: an
         subscriptionCycle: target.billingCycle,
         subscriptionStartedAt: nowIso,
         subscriptionEndsAt,
-        subscriptionSource: 'mpesa',
+        subscriptionSource: 'mpesa-live',
       });
     }
 
@@ -335,6 +215,7 @@ async function settle(id: string, uid: string, target: ResolvedTarget, mpesa: an
       success: true,
       status: 'settled',
       provider: 'mpesa',
+      environment: 'production',
       transactionId,
       conversationId,
       responseCode,
@@ -352,9 +233,11 @@ async function settle(id: string, uid: string, target: ResolvedTarget, mpesa: an
       userId: uid,
       amount: target.creditsAdded,
       type: 'purchase',
-      description: target.kind === 'credits' ? `Achat ${target.creditsAdded} crédits via M-Pesa` : `${target.label} via M-Pesa`,
+      description: target.kind === 'credits'
+        ? `Achat ${target.creditsAdded} crédits via M-Pesa Live`
+        : `${target.label} via M-Pesa Live`,
       balanceAfter,
-      source: 'mpesa',
+      source: 'mpesa-live',
       mpesaTransactionId: transactionId || null,
       mpesaConversationId: conversationId || null,
       amountPaidUsd: target.amountUsd,
@@ -365,6 +248,7 @@ async function settle(id: string, uid: string, target: ResolvedTarget, mpesa: an
       id,
       userId: uid,
       provider: 'mpesa',
+      environment: 'production',
       status: 'settled',
       targetKind: target.kind,
       targetId: target.targetId,
@@ -385,8 +269,13 @@ async function settle(id: string, uid: string, target: ResolvedTarget, mpesa: an
 async function c2bHandler(req: express.Request, res: express.Response) {
   try {
     const user = await requireUser(req);
-    const c = config();
-    if (!isConfigured()) throw fail('M-Pesa C2B n’est pas encore configuré. Ajoutez les secrets serveur M-Pesa.', 503, 'MPESA_NOT_CONFIGURED');
+    if (!isMpesaLiveConfigured()) {
+      throw fail(
+        'M-Pesa C2B Live est prêt mais les identifiants de production ne sont pas encore configurés.',
+        503,
+        'MPESA_NOT_CONFIGURED',
+      );
+    }
 
     const target = await resolveTarget(req.body?.target || {});
     const requestedAmount = Number(req.body?.target?.amountUsd);
@@ -394,93 +283,84 @@ async function c2bHandler(req: express.Request, res: express.Response) {
       throw fail('Le prix affiché a changé. Rechargez la page.', 409, 'PRICE_CHANGED');
     }
 
-    const msisdn = normalizeMsisdn(req.body?.msisdn, c.mode);
-    const id = attemptId(req.body?.attemptId);
+    const msisdn = normalizeMpesaLiveMsisdn(req.body?.msisdn);
+    const id = normalizeAttemptId(req.body?.attemptId);
     const intent = await prepareIntent(id, user.uid, target, msisdn);
     if (intent.existing) return res.json(intent.existing);
 
-    const sessionId = await getSessionId();
     const seed = id.replace(/[^a-zA-Z0-9]/g, '');
     const thirdPartyConversationId = `MIA${seed}`.slice(0, 40);
     const transactionReference = `MIA${Date.now().toString(36)}${seed.slice(-6)}`.slice(0, 20);
-    const environment = c.mode === 'production' ? 'openapi' : 'sandbox';
-    const endpoint = `${c.baseUrl}/${environment}/ipg/v2/${encodeURIComponent(c.market)}/c2bPayment/singleStage/`;
+    const purchasedItemsDescription = clean(target.label.replace(/[^a-zA-Z0-9 À-ÿ._-]/g, ''), 120) || 'MUNGWELE';
 
-    const upstream = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${sessionId}`,
-        Origin: c.origin,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'User-Agent': 'mungwele-ia-studio/mpesa-c2b',
-      },
-      body: JSON.stringify({
-        input_Amount: target.amountUsd.toFixed(2),
-        input_Country: c.country,
-        input_Currency: c.currency,
-        input_CustomerMSISDN: msisdn,
-        input_ServiceProviderCode: c.serviceProviderCode,
-        input_ThirdPartyConversationID: thirdPartyConversationId,
-        input_TransactionReference: transactionReference,
-        input_PurchasedItemsDesc: clean(target.label.replace(/[^a-zA-Z0-9 À-ÿ._-]/g, ''), 120) || 'MUNGWELE',
-      }),
+    const { response, payload } = await requestMpesaLiveC2B({
+      amountUsd: target.amountUsd,
+      msisdn,
+      thirdPartyConversationId,
+      transactionReference,
+      purchasedItemsDescription,
     });
 
-    const payload: any = await upstream.json().catch(() => ({}));
     const code = clean(payload?.output_ResponseCode, 32);
     const description = clean(payload?.output_ResponseDesc, 300);
 
-    if (upstream.ok && code === 'INS-0') {
+    if (response.ok && code === 'INS-0') {
       if (clean(payload?.output_TransactionID, 120)) {
-        return res.json(await settle(id, user.uid, target, payload));
+        return res.json(await settlePurchase(id, user.uid, target, payload));
       }
+
       await intent.ref.set({
         status: 'pending',
+        environment: 'production',
         responseCode: code,
         responseDesc: description,
         mpesaConversationId: clean(payload?.output_ConversationID, 120) || null,
         updatedAt: new Date().toISOString(),
       }, { merge: true });
+
       return res.status(202).json({
         success: true,
         status: 'pending',
         provider: 'mpesa',
+        environment: 'production',
         responseCode: code,
         conversationId: clean(payload?.output_ConversationID, 120),
-        message: description || 'Paiement M-Pesa initié. Confirmation en attente.',
+        message: description || 'Paiement M-Pesa Live initié. Confirmation du client en attente.',
       });
     }
 
     await intent.ref.set({
       status: 'failed',
+      environment: 'production',
       responseCode: code || null,
       responseDesc: description || null,
       updatedAt: new Date().toISOString(),
     }, { merge: true }).catch(() => undefined);
 
-    return res.status(upstream.status >= 400 && upstream.status < 600 ? upstream.status : 402).json({
+    return res.status(response.status >= 400 && response.status < 600 ? response.status : 402).json({
       success: false,
       status: 'failed',
       provider: 'mpesa',
+      environment: 'production',
       responseCode: code,
-      error: responseMessage(code, description),
+      error: mpesaLiveMessage(code, description),
     });
   } catch (error: any) {
     const status = Number(error?.status || 500);
     const code = clean(error?.code || 'MPESA_C2B_ERROR', 80);
-    console.warn('[MUNGWELE_MPESA_C2B_ERROR]', code, String(error?.message || ''));
+    console.warn('[MUNGWELE_MPESA_LIVE_C2B_ERROR]', code, String(error?.message || ''));
     return res.status(status >= 400 && status < 600 ? status : 500).json({
       success: false,
       status: 'failed',
       provider: 'mpesa',
-      error: String(error?.message || 'Erreur M-Pesa inconnue.'),
+      environment: 'production',
+      error: String(error?.message || 'Erreur M-Pesa Live inconnue.'),
       code,
     });
   }
 }
 
-export function installMobileMoneyPaymentProxy() {
+export function installMobileMoneyLivePaymentProxy() {
   const expressAny = express as any;
   if (expressAny[INSTALL_FLAG]) return;
   expressAny[INSTALL_FLAG] = true;
@@ -491,18 +371,19 @@ export function installMobileMoneyPaymentProxy() {
     if (!this[APP_FLAG]) {
       this[APP_FLAG] = true;
       this.get('/api/mobile-money/status', (_req: express.Request, res: express.Response) => {
-        const c = config();
+        const mpesa = getMpesaLivePublicStatus();
         res.json({
-          mode: c.mode,
-          currency: c.currency,
-          country: c.country,
+          mode: 'production',
+          currency: mpesa.currency,
+          country: mpesa.country,
           providers: {
             mpesa: {
               enabled: true,
-              configured: isConfigured(),
-              market: c.market,
-              serviceProviderCodeConfigured: Boolean(c.serviceProviderCode),
-              testMsisdnSuccess: c.mode === 'sandbox' ? '000000000001' : undefined,
+              configured: mpesa.configured,
+              market: mpesa.market,
+              environment: 'production',
+              endpointFamily: mpesa.endpointFamily,
+              serviceProviderCodeConfigured: mpesa.serviceProviderCodeConfigured,
             },
             airtel: { enabled: false, configured: false, status: 'prepared' },
             orange: { enabled: false, configured: false, status: 'prepared' },

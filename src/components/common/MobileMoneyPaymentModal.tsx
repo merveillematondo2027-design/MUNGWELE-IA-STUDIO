@@ -14,16 +14,6 @@ export type MobileMoneyPaymentModalProps = {
   onSuccess?: (transactionId?: string) => void;
 };
 
-const SANDBOX_SCENARIOS = [
-  { msisdn: '000000000001', label: 'Paiement réussi' },
-  { msisdn: '000000000002', label: "Délai d'attente dépassé" },
-  { msisdn: '000000000003', label: 'Expiration USSD' },
-  { msisdn: '000000000004', label: 'PIN incorrect' },
-  { msisdn: '000000000005', label: 'Erreur interne' },
-  { msisdn: '000000000007', label: 'Montant invalide' },
-  { msisdn: '000000000008', label: 'Solde insuffisant' },
-] as const;
-
 export const MobileMoneyPaymentModal: React.FC<MobileMoneyPaymentModalProps> = ({ target, onClose, onSuccess }) => {
   const [provider, setProvider] = useState<MobileMoneyProvider>('mpesa');
   const [status, setStatus] = useState<MobileMoneyStatus | null>(null);
@@ -41,7 +31,6 @@ export const MobileMoneyPaymentModal: React.FC<MobileMoneyPaymentModalProps> = (
       .then((next) => {
         if (!active) return;
         setStatus(next);
-        if (next.mode === 'sandbox') setMsisdn(next.providers.mpesa.testMsisdnSuccess || '000000000001');
       })
       .catch((reason: any) => {
         if (!active) return;
@@ -61,11 +50,11 @@ export const MobileMoneyPaymentModal: React.FC<MobileMoneyPaymentModalProps> = (
     setSuccess('');
     setPending('');
     if (!providerConfigured) {
-      setError('M-Pesa est prêt dans MUNGWELE, mais les variables serveur ne sont pas encore renseignées.');
+      setError('M-Pesa Live est prêt dans MUNGWELE, mais les identifiants de production ne sont pas encore renseignés.');
       return;
     }
     if (!msisdn.trim()) {
-      setError('Saisissez le numéro M-Pesa.');
+      setError('Saisissez le numéro M-Pesa du client.');
       return;
     }
 
@@ -83,7 +72,7 @@ export const MobileMoneyPaymentModal: React.FC<MobileMoneyPaymentModalProps> = (
         onSuccess?.(reference);
         return;
       }
-      setPending(result.message || 'Paiement initié. Confirmation en attente.');
+      setPending(result.message || 'Paiement initié. Confirmation M-Pesa en attente.');
     } catch (reason: any) {
       setError(String(reason?.message || reason));
     } finally {
@@ -91,16 +80,14 @@ export const MobileMoneyPaymentModal: React.FC<MobileMoneyPaymentModalProps> = (
     }
   };
 
-  const sandbox = status?.mode === 'sandbox';
-
   return (
     <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm">
       <div className="max-h-[96vh] w-full max-w-lg overflow-y-auto rounded-[28px] border border-white/10 bg-[#0d1420] shadow-2xl">
         <div className="border-b border-white/10 p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-950/30 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-300"><RadioTower className="h-3.5 w-3.5" /> Mobile Money RDC</div>
-              <p className="mt-4 text-xs text-gray-400">Paiement à MUNGWELE IA STUDIO</p>
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-950/30 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-300"><RadioTower className="h-3.5 w-3.5" /> M-Pesa Live · RDC</div>
+              <p className="mt-4 text-xs text-gray-400">Paiement réel à MUNGWELE IA STUDIO</p>
               <h3 className="mt-1 text-xl font-black text-white">{target.label}</h3>
               <p className="mt-2 text-3xl font-black text-white">${target.amountUsd.toFixed(2)} <span className="text-xs text-gray-400">USD</span></p>
             </div>
@@ -110,37 +97,26 @@ export const MobileMoneyPaymentModal: React.FC<MobileMoneyPaymentModalProps> = (
 
         <form onSubmit={submit} className="space-y-5 p-5 sm:p-6">
           <div className="grid grid-cols-3 gap-2">
-            <button type="button" onClick={() => setProvider('mpesa')} className={`rounded-2xl border p-3 text-left ${provider === 'mpesa' ? 'border-red-500/50 bg-red-950/25' : 'border-white/10 bg-white/[0.03]'}`}><Smartphone className="h-5 w-5 text-red-300" /><p className="mt-2 text-xs font-black text-white">M-Pesa</p><p className="mt-1 text-[10px] text-gray-500">C2B</p></button>
+            <button type="button" onClick={() => setProvider('mpesa')} className={`rounded-2xl border p-3 text-left ${provider === 'mpesa' ? 'border-red-500/50 bg-red-950/25' : 'border-white/10 bg-white/[0.03]'}`}><Smartphone className="h-5 w-5 text-red-300" /><p className="mt-2 text-xs font-black text-white">M-Pesa</p><p className="mt-1 text-[10px] text-emerald-400">C2B Production</p></button>
             <button type="button" disabled className="rounded-2xl border border-white/10 bg-white/[0.02] p-3 text-left opacity-55"><Smartphone className="h-5 w-5 text-red-200" /><p className="mt-2 text-xs font-black text-white">Airtel Money</p><p className="mt-1 text-[10px] text-gray-500">Préparé</p></button>
             <button type="button" disabled className="rounded-2xl border border-white/10 bg-white/[0.02] p-3 text-left opacity-55"><Smartphone className="h-5 w-5 text-orange-300" /><p className="mt-2 text-xs font-black text-white">Orange Money</p><p className="mt-1 text-[10px] text-gray-500">Préparé</p></button>
           </div>
 
           {statusError && <div className="rounded-2xl border border-rose-500/20 bg-rose-950/20 p-3 text-xs text-rose-200">{statusError}</div>}
 
-          {sandbox && (
-            <div className="rounded-2xl border border-amber-500/20 bg-amber-950/15 p-4">
-              <div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" /><div><p className="text-sm font-black text-white">Mode Sandbox M-Pesa</p><p className="mt-1 text-[11px] leading-5 text-gray-400">Aucun argent réel n'est débité. Choisissez un scénario de test fourni par M-Pesa.</p></div></div>
-              <select value={msisdn} onChange={(event) => { setMsisdn(event.target.value); attemptIdRef.current = crypto.randomUUID(); }} className="mt-3 w-full rounded-xl border border-white/10 bg-[#111a29] px-3 py-3 text-xs text-white outline-none">
-                {SANDBOX_SCENARIOS.map((item) => <option key={item.msisdn} value={item.msisdn}>{item.label} — {item.msisdn}</option>)}
-              </select>
-            </div>
-          )}
+          <label className="block space-y-2"><span className="text-xs font-bold text-gray-300">Numéro M-Pesa</span><input value={msisdn} onChange={(event) => { setMsisdn(event.target.value); attemptIdRef.current = crypto.randomUUID(); }} inputMode="tel" autoComplete="tel" placeholder="+243 8XX XXX XXX" className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none focus:border-red-500/50" /></label>
 
-          {!sandbox && (
-            <label className="block space-y-2"><span className="text-xs font-bold text-gray-300">Numéro M-Pesa</span><input value={msisdn} onChange={(event) => { setMsisdn(event.target.value); attemptIdRef.current = crypto.randomUUID(); }} inputMode="tel" placeholder="+243 8XX XXX XXX" className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none focus:border-red-500/50" /></label>
-          )}
-
-          <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-[11px] leading-5 text-gray-400">
-            {sandbox ? 'Le sandbox simule la réponse C2B. En production, le client recevra la demande M-Pesa et confirmera avec son PIN dans le canal M-Pesa.' : 'Vous confirmez le paiement directement avec M-Pesa. MUNGWELE ne demande et ne conserve jamais votre PIN M-Pesa.'}
+          <div className="rounded-2xl border border-emerald-500/15 bg-emerald-950/10 p-4">
+            <div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" /><div><p className="text-sm font-black text-white">Paiement M-Pesa réel</p><p className="mt-1 text-[11px] leading-5 text-gray-400">Après l’envoi de la demande C2B, le client confirme dans le canal sécurisé M-Pesa. MUNGWELE ne demande, ne reçoit et ne conserve jamais le PIN M-Pesa.</p></div></div>
           </div>
 
-          {!status ? <div className="flex items-center gap-2 text-xs text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Vérification de M-Pesa…</div> : !providerConfigured ? <div className="rounded-2xl border border-cyan-500/20 bg-cyan-950/15 p-3 text-xs text-cyan-100">Intégration C2B installée. Ajoutez maintenant <strong>MPESA_API_KEY</strong> et <strong>MPESA_PUBLIC_KEY</strong> dans les secrets serveur pour activer le bouton.</div> : null}
+          {!status ? <div className="flex items-center gap-2 text-xs text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Vérification du connecteur M-Pesa Live…</div> : !providerConfigured ? <div className="rounded-2xl border border-cyan-500/20 bg-cyan-950/15 p-3 text-xs leading-5 text-cyan-100">Connecteur Production installé. Il sera activé uniquement après ajout des vrais <strong>MPESA_API_KEY</strong>, <strong>MPESA_PUBLIC_KEY</strong> et <strong>MPESA_SERVICE_PROVIDER_CODE</strong> côté serveur.</div> : <div className="rounded-2xl border border-emerald-500/20 bg-emerald-950/15 p-3 text-xs text-emerald-100">M-Pesa C2B Production est configuré côté serveur.</div>}
 
           {error && <div className="rounded-2xl border border-rose-500/20 bg-rose-950/20 p-3 text-xs text-rose-200">{error}</div>}
           {pending && <div className="flex items-start gap-2 rounded-2xl border border-amber-500/20 bg-amber-950/15 p-3 text-xs text-amber-100"><Clock3 className="mt-0.5 h-4 w-4 shrink-0" />{pending}</div>}
           {success && <div className="flex items-start gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-950/20 p-3 text-xs text-emerald-100"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />{success}</div>}
 
-          <button type="submit" disabled={busy || !status || !providerConfigured} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 py-3.5 text-xs font-black text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-45">{busy ? <><Loader2 className="h-4 w-4 animate-spin" /> Paiement en cours…</> : sandbox ? 'Tester le paiement M-Pesa' : 'Payer avec M-Pesa'}</button>
+          <button type="submit" disabled={busy || !status || !providerConfigured} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 py-3.5 text-xs font-black text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-45">{busy ? <><Loader2 className="h-4 w-4 animate-spin" /> Demande M-Pesa en cours…</> : 'Payer avec M-Pesa'}</button>
         </form>
       </div>
     </div>

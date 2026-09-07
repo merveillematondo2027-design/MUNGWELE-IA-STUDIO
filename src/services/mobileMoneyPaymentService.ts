@@ -4,7 +4,7 @@ import type { MarketCashPaymentTarget } from './marketCashPaymentService';
 export type MobileMoneyProvider = 'mpesa' | 'airtel' | 'orange';
 
 export type MobileMoneyStatus = {
-  mode: 'sandbox' | 'production';
+  mode: 'production';
   currency: string;
   country: string;
   providers: {
@@ -12,8 +12,9 @@ export type MobileMoneyStatus = {
       enabled: boolean;
       configured: boolean;
       market?: string;
+      environment?: 'production';
+      endpointFamily?: string;
       serviceProviderCodeConfigured?: boolean;
-      testMsisdnSuccess?: string;
     };
     airtel: { enabled: boolean; configured: boolean; status?: string };
     orange: { enabled: boolean; configured: boolean; status?: string };
@@ -24,6 +25,7 @@ export type MobileMoneyPaymentResult = {
   success: boolean;
   status: 'settled' | 'pending' | 'failed';
   provider: MobileMoneyProvider;
+  environment?: 'production';
   transactionId?: string;
   conversationId?: string;
   responseCode?: string;
