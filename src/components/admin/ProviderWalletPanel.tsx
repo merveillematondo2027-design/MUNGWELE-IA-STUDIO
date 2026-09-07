@@ -1,7 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { collection, doc, onSnapshot, runTransaction } from 'firebase/firestore';
-import { CircleDollarSign, Plus, Video } from 'lucide-react';
-import { db } from '../../lib/firebase';
+import React, { useCallback, useMemo, useState } from 'react';
+import { CircleDollarSign, Plus, RefreshCw, Video } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 const GOOGLE_CREDITS_PER_USD = 150;
@@ -34,6 +32,8 @@ type ProviderWalletTransaction = {
   createdAt: string;
 };
 
+type WalletPayload = { wallet?: Partial<ProviderWallet>; transactions?: ProviderWalletTransaction[]; error?: string };
+
 const emptyWallet: ProviderWallet = {
   providerId: 'google',
   label: 'Google Gemini / Veo',
@@ -54,21 +54,32 @@ export const ProviderWalletPanel: React.FC = () => {
   const [transactions, setTransactions] = useState<ProviderWalletTransaction[]>([]);
   const [amount, setAmount] = useState('10');
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const applyPayload = useCallback((payload: WalletPayload) => {
+    setWallet({ ...emptyWallet, ...(payload.wallet || {}) } as ProviderWallet);
+    setTransactions(Array.isArray(payload.transactions) ? payload.transactions.slice(0, 12) : []);
+  }, []);
+
+  const loadWallet = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
+    try {
+      const response = await fetch('/api/admin/provider-wallet/google', { cache: 'no-store' });
+      const payload = await response.json().catch(() => ({})) as WalletPayload;
+      if (!response.ok) throw new Error(payload.error || 'Impossible de lire le magasin API.');
+      applyPayload(payload);
+    } catch (error: any) {
+      if (!quiet) addNotification('error', 'Magasin API indisponible', error?.message || 'Impossible de charger le solde fournisseur.');
+    } finally {
+      if (!quiet) setLoading(false);
+    }
+  }, [addNotification, applyPayload]);
 
   React.useEffect(() => {
-    const walletRef = doc(db, 'providerWallets', 'google');
-    const unsubWallet = onSnapshot(walletRef, (snapshot) => {
-      setWallet(snapshot.exists() ? ({ ...emptyWallet, ...(snapshot.data() as Partial<ProviderWallet>) } as ProviderWallet) : emptyWallet);
-    });
-    const unsubTx = onSnapshot(collection(db, 'providerWalletTransactions'), (snapshot) => {
-      setTransactions(snapshot.docs
-        .map((item) => ({ id: item.id, ...(item.data() as Omit<ProviderWalletTransaction, 'id'>) }))
-        .filter((item) => item.providerId === 'google')
-        .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
-        .slice(0, 12));
-    });
-    return () => { unsubWallet(); unsubTx(); };
-  }, []);
+    void loadWallet();
+    const timer = window.setInterval(() => void loadWallet(true), 15000);
+    return () => window.clearInterval(timer);
+  }, [loadWallet]);
 
   const remaining4s = useMemo(() => Math.max(0, Math.floor(Math.max(0, wallet.balanceUsd) / VEO_LITE_4S_USD)), [wallet.balanceUsd]);
   const remaining8s = useMemo(() => Math.max(0, Math.floor(Math.max(0, wallet.balanceUsd) / VEO_LITE_8S_USD)), [wallet.balanceUsd]);
@@ -81,38 +92,14 @@ export const ProviderWalletPanel: React.FC = () => {
     }
     setSaving(true);
     try {
-      const walletRef = doc(db, 'providerWallets', 'google');
-      const txId = `google-deposit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const txRef = doc(db, 'providerWalletTransactions', txId);
-      const createdAt = new Date().toISOString();
-      await runTransaction(db, async (transaction) => {
-        const snapshot = await transaction.get(walletRef);
-        const current = snapshot.exists() ? ({ ...emptyWallet, ...(snapshot.data() as Partial<ProviderWallet>) } as ProviderWallet) : emptyWallet;
-        const nextBalance = roundUsd(Number(current.balanceUsd || 0) + amountUsd);
-        const nextDeposited = roundUsd(Number(current.totalDepositedUsd || 0) + amountUsd);
-        const nextWallet: ProviderWallet = {
-          ...current,
-          providerId: 'google',
-          label: 'Google Gemini / Veo',
-          balanceUsd: nextBalance,
-          totalDepositedUsd: nextDeposited,
-          totalSpentUsd: roundUsd(Number(current.totalSpentUsd || 0)),
-          creditsPerUsd: GOOGLE_CREDITS_PER_USD,
-          equivalentCreditsRemaining: capacityCredits(nextBalance),
-          createdAt: current.createdAt || createdAt,
-          updatedAt: createdAt,
-        };
-        transaction.set(walletRef, nextWallet, { merge: true });
-        transaction.set(txRef, {
-          providerId: 'google',
-          type: 'deposit',
-          amountUsd,
-          equivalentCredits: Math.round(amountUsd * GOOGLE_CREDITS_PER_USD),
-          balanceAfterUsd: nextBalance,
-          description: `Dépôt Google API +$${amountUsd.toFixed(2)}`,
-          createdAt,
-        });
+      const response = await fetch('/api/admin/provider-wallet/google/deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amountUsd }),
       });
+      const payload = await response.json().catch(() => ({})) as WalletPayload;
+      if (!response.ok) throw new Error(payload.error || 'Impossible de mettre à jour le magasin API.');
+      applyPayload(payload);
       addNotification('success', 'Dépôt API enregistré', `$${amountUsd.toFixed(2)} ajoutés, soit environ ${Math.round(amountUsd * GOOGLE_CREDITS_PER_USD)} crédits de capacité.`);
       setAmount('');
     } catch (error: any) {
@@ -134,7 +121,7 @@ export const ProviderWalletPanel: React.FC = () => {
         </div>
         <div className={`rounded-2xl border px-4 py-3 text-right ${low ? 'border-amber-500/30 bg-amber-500/10' : 'border-emerald-500/20 bg-emerald-500/[0.06]'}`}>
           <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Solde API estimé</p>
-          <p className="mt-1 text-3xl font-black text-white">{fmtUsd(wallet.balanceUsd)}</p>
+          <p className="mt-1 text-3xl font-black text-white">{loading ? '…' : fmtUsd(wallet.balanceUsd)}</p>
           <p className="mt-1 text-[10px] text-gray-500">{capacityCredits(wallet.balanceUsd).toLocaleString('fr-FR')} crédits de capacité</p>
         </div>
       </div>
@@ -147,7 +134,7 @@ export const ProviderWalletPanel: React.FC = () => {
       </div>
 
       <div className="mt-5 rounded-2xl border border-white/10 bg-[#081226] p-4">
-        <p className="text-xs font-black text-white">Ajouter un dépôt Google API</p>
+        <div className="flex items-center justify-between gap-3"><p className="text-xs font-black text-white">Ajouter un dépôt Google API</p><button onClick={() => void loadWallet()} className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-gray-400"><RefreshCw className="h-3.5 w-3.5" /></button></div>
         <div className="mt-3 flex gap-2">
           <div className="flex min-w-0 flex-1 items-center rounded-xl border border-white/10 bg-black/20 px-3"><span className="mr-2 font-black text-emerald-300">$</span><input value={amount} onChange={(event) => setAmount(event.target.value)} type="number" min="0.01" step="0.01" placeholder="10.00" className="min-w-0 flex-1 bg-transparent py-3 text-sm font-bold text-white outline-none" /></div>
           <button onClick={addDeposit} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-black text-white disabled:opacity-50"><Plus className="h-4 w-4" />{saving ? 'Ajout…' : 'Ajouter'}</button>
