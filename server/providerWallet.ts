@@ -1,7 +1,17 @@
 import { adminDb } from './firebaseAdmin';
 import { omniCreditsForRequest, videoCreditsForRequest } from './pricing';
 
-const GOOGLE_CREDITS_PER_USD = 150;
+export const GOOGLE_CREDITS_PER_USD = 150;
+
+const GOOGLE_EMPTY_WALLET = {
+  providerId: 'google',
+  label: 'Google Gemini / Veo',
+  balanceUsd: 0,
+  totalDepositedUsd: 0,
+  totalSpentUsd: 0,
+  creditsPerUsd: GOOGLE_CREDITS_PER_USD,
+  equivalentCreditsRemaining: 0,
+};
 
 function iso() { return new Date().toISOString(); }
 function roundUsd(value: number) { return Math.round((Number(value) || 0) * 10000) / 10000; }
@@ -27,6 +37,60 @@ function googleVideoProviderCostUsd(generation: any) {
 
   const creditsUsed = Math.max(0, Number(generation?.creditsUsed || 0));
   return creditsUsed ? roundUsd(creditsUsed / GOOGLE_CREDITS_PER_USD) : null;
+}
+
+export async function readGoogleProviderWallet() {
+  const [walletSnap, txSnap] = await Promise.all([
+    adminDb.collection('providerWallets').doc('google').get(),
+    adminDb.collection('providerWalletTransactions').where('providerId', '==', 'google').limit(80).get(),
+  ]);
+  const wallet = walletSnap.exists ? { ...GOOGLE_EMPTY_WALLET, ...(walletSnap.data() || {}) } : GOOGLE_EMPTY_WALLET;
+  const transactions = txSnap.docs
+    .map((item) => ({ id: item.id, ...item.data() }))
+    .sort((a: any, b: any) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+    .slice(0, 20);
+  return { wallet, transactions };
+}
+
+export async function addGoogleProviderDeposit(amountUsdInput: number, actorId: string) {
+  const amountUsd = roundUsd(Number(amountUsdInput));
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) throw Object.assign(new Error('Le montant du dépôt doit être supérieur à 0.'), { status: 400 });
+  if (amountUsd > 100000) throw Object.assign(new Error('Montant de dépôt trop élevé.'), { status: 400 });
+
+  const walletRef = adminDb.collection('providerWallets').doc('google');
+  const txRef = adminDb.collection('providerWalletTransactions').doc(`google-deposit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const createdAt = iso();
+
+  await adminDb.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(walletRef);
+    const current: any = snapshot.exists ? { ...GOOGLE_EMPTY_WALLET, ...(snapshot.data() || {}) } : GOOGLE_EMPTY_WALLET;
+    const nextBalance = roundUsd(Number(current.balanceUsd || 0) + amountUsd);
+    const nextDeposited = roundUsd(Number(current.totalDepositedUsd || 0) + amountUsd);
+    transaction.set(walletRef, {
+      ...current,
+      providerId: 'google',
+      label: 'Google Gemini / Veo',
+      balanceUsd: nextBalance,
+      totalDepositedUsd: nextDeposited,
+      totalSpentUsd: roundUsd(Number(current.totalSpentUsd || 0)),
+      creditsPerUsd: GOOGLE_CREDITS_PER_USD,
+      equivalentCreditsRemaining: capacityCredits(nextBalance),
+      createdAt: current.createdAt || createdAt,
+      updatedAt: createdAt,
+    }, { merge: true });
+    transaction.set(txRef, {
+      providerId: 'google',
+      type: 'deposit',
+      amountUsd,
+      equivalentCredits: Math.round(amountUsd * GOOGLE_CREDITS_PER_USD),
+      balanceAfterUsd: nextBalance,
+      description: `Dépôt Google API +$${amountUsd.toFixed(2)}`,
+      actorId,
+      createdAt,
+    });
+  });
+
+  return readGoogleProviderWallet();
 }
 
 export async function recordProviderWalletConsumption(generation: any) {
