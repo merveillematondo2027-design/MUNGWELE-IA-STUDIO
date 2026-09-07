@@ -21,6 +21,7 @@ export const AppShellHeader: React.FC<{ studioMode?: boolean }> = ({ studioMode 
   const goStudio = (studio: StudioType) => {
     localStorage.removeItem('mungwele.resume.project');
     sessionStorage.setItem('mungwele.new.project', studio);
+    window.dispatchEvent(new CustomEvent('mungwele:new-project', { detail: { studio } }));
     setActiveStudio(studio);
     go(`studio-${studio}` as NavigationTab);
   };
