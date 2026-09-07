@@ -2,9 +2,9 @@ import {
   ANNUAL_DISCOUNT_PERCENT,
   CLIP_LAUNCH_EXAMPLES,
   ELEVEN_MUSIC_USD_PER_MINUTE,
-  HAPPYHORSE_MAX_SECONDS,
-  HAPPYHORSE_MIN_SECONDS,
-  HAPPYHORSE_USD_PER_SECOND,
+  H3_MAX_MAX_SECONDS,
+  H3_MAX_MIN_SECONDS,
+  H3_MAX_USD_PER_SECOND,
   LAUNCH_CREDIT_PACKS,
   LAUNCH_SUBSCRIPTION_PLANS,
   MIN_USD_REVENUE_PER_CREDIT,
@@ -23,7 +23,7 @@ import {
   VIDEO_PROVIDER_USD_PER_SECOND,
   clipCreditsForDurationSeconds,
   creditsForProviderCost,
-  happyHorseCreditsForRequest,
+  h3MaxCreditsForRequest,
   imageCreditsForRequest,
   musicCreditsForDurationMs,
   omniCreditsForRequest,
@@ -43,9 +43,9 @@ export {
   ANNUAL_DISCOUNT_PERCENT,
   CLIP_LAUNCH_EXAMPLES,
   ELEVEN_MUSIC_USD_PER_MINUTE,
-  HAPPYHORSE_MAX_SECONDS,
-  HAPPYHORSE_MIN_SECONDS,
-  HAPPYHORSE_USD_PER_SECOND,
+  H3_MAX_MAX_SECONDS,
+  H3_MAX_MIN_SECONDS,
+  H3_MAX_USD_PER_SECOND,
   MIN_USD_REVENUE_PER_CREDIT,
   MUSIC_PROVIDER_MARKUP_RATE,
   MUSIC_RETAIL_MULTIPLIER,
@@ -62,7 +62,7 @@ export {
   VIDEO_PROVIDER_USD_PER_SECOND,
   clipCreditsForDurationSeconds,
   creditsForProviderCost,
-  happyHorseCreditsForRequest,
+  h3MaxCreditsForRequest,
   imageCreditsForRequest,
   musicCreditsForDurationMs,
   omniCreditsForRequest,
@@ -83,13 +83,8 @@ export const COMMERCIAL_PRICING_SNAPSHOT = {
   plans: LAUNCH_SUBSCRIPTION_PLANS,
   creditPacks: LAUNCH_CREDIT_PACKS,
   suppliers: {
-    image: 'OpenAI',
-    veoVideo: 'Google Gemini API',
-    omniVideo: 'Google Gemini API',
-    seedanceVideo: 'Runway Dev',
-    happyHorseVideo: 'Runway Dev',
-    music: 'ElevenLabs',
-    clips: 'Runway Dev / Act-Two',
+    image: 'OpenAI', veoVideo: 'Google Gemini API', omniVideo: 'Google Gemini API',
+    seedanceVideo: 'Runway Dev', h3MaxVideo: 'Runway Dev', music: 'ElevenLabs', clips: 'Runway Dev / Act-Two',
   },
   image: {
     baseCredits: imageCreditsForRequest(0).credits,
@@ -100,7 +95,7 @@ export const COMMERCIAL_PRICING_SNAPSHOT = {
     veo: VIDEO_CREDIT_COSTS,
     launchExamples: VIDEO_ENGINE_LAUNCH_EXAMPLES,
     seedance: SEEDANCE_LAUNCH_EXAMPLES,
-    happyHorse720UsdPerSecond: HAPPYHORSE_USD_PER_SECOND['720p'],
+    h3Max768UsdPerSecond: H3_MAX_USD_PER_SECOND['768p'],
   },
   music: {
     providerUsdPerMinute: ELEVEN_MUSIC_USD_PER_MINUTE,
@@ -108,20 +103,13 @@ export const COMMERCIAL_PRICING_SNAPSHOT = {
     creditsPerMinute: musicCreditsForDurationMs(60000).credits,
   },
   clips: {
-    model: 'act_two',
-    providerUsdPerSecond: RUNWAY_ACT_TWO_USD_PER_SECOND,
-    examples: CLIP_LAUNCH_EXAMPLES,
+    model: 'act_two', providerUsdPerSecond: RUNWAY_ACT_TWO_USD_PER_SECOND, examples: CLIP_LAUNCH_EXAMPLES,
   },
 } as const;
 
 export function assertMonetizationSafe(model: MonetizedVideoModel, duration: MonetizedDuration, credits: number, referenceImageCount = 0) {
   const minimum = videoCreditsForRequest(model, duration, { referenceImageCount }).credits;
-  if (credits < minimum) {
-    throw Object.assign(new Error(`Tarification bloquée: ${credits} crédits est inférieur au minimum sécurisé de ${minimum}.`), {
-      status: 503,
-      code: 'UNSAFE_MONETIZATION_PRICE',
-    });
-  }
+  if (credits < minimum) throw Object.assign(new Error(`Tarification bloquée: ${credits} crédits est inférieur au minimum sécurisé de ${minimum}.`), { status: 503, code: 'UNSAFE_MONETIZATION_PRICE' });
 }
 
 export function assertSeedanceMonetizationSafe(
@@ -131,40 +119,20 @@ export function assertSeedanceMonetizationSafe(
   options: { resolution?: SeedanceResolution; inputVideoSeconds?: number } = {},
 ) {
   const minimum = seedanceCreditsForRequest(model, durationSeconds, options).credits;
-  if (credits < minimum) {
-    throw Object.assign(new Error(`Tarification Seedance bloquée: ${credits} crédits est inférieur au minimum sécurisé de ${minimum}.`), {
-      status: 503,
-      code: 'UNSAFE_SEEDANCE_PRICE',
-    });
-  }
+  if (credits < minimum) throw Object.assign(new Error(`Tarification Seedance bloquée: ${credits} crédits est inférieur au minimum sécurisé de ${minimum}.`), { status: 503, code: 'UNSAFE_SEEDANCE_PRICE' });
 }
 
 export function assertImageMonetizationSafe(referenceCount: number, credits: number) {
   const minimum = imageCreditsForRequest(referenceCount).credits;
-  if (credits < minimum) {
-    throw Object.assign(new Error(`Tarification image bloquée: ${credits} crédits est inférieur au minimum sécurisé de ${minimum}.`), {
-      status: 503,
-      code: 'UNSAFE_IMAGE_MONETIZATION_PRICE',
-    });
-  }
+  if (credits < minimum) throw Object.assign(new Error(`Tarification image bloquée: ${credits} crédits est inférieur au minimum sécurisé de ${minimum}.`), { status: 503, code: 'UNSAFE_IMAGE_MONETIZATION_PRICE' });
 }
 
 export function assertMusicMonetizationSafe(durationMs: number, credits: number) {
   const minimum = musicCreditsForDurationMs(durationMs).credits;
-  if (credits < minimum) {
-    throw Object.assign(new Error(`Tarification musique bloquée: ${credits} crédits est inférieur au minimum sécurisé de ${minimum}.`), {
-      status: 503,
-      code: 'UNSAFE_MUSIC_MONETIZATION_PRICE',
-    });
-  }
+  if (credits < minimum) throw Object.assign(new Error(`Tarification musique bloquée: ${credits} crédits est inférieur au minimum sécurisé de ${minimum}.`), { status: 503, code: 'UNSAFE_MUSIC_MONETIZATION_PRICE' });
 }
 
 export function assertClipMonetizationSafe(durationSeconds: number, credits: number) {
   const minimum = clipCreditsForDurationSeconds(durationSeconds).credits;
-  if (credits < minimum) {
-    throw Object.assign(new Error(`Tarification clip bloquée: ${credits} crédits est inférieur au minimum sécurisé de ${minimum}.`), {
-      status: 503,
-      code: 'UNSAFE_CLIP_MONETIZATION_PRICE',
-    });
-  }
+  if (credits < minimum) throw Object.assign(new Error(`Tarification clip bloquée: ${credits} crédits est inférieur au minimum sécurisé de ${minimum}.`), { status: 503, code: 'UNSAFE_CLIP_MONETIZATION_PRICE' });
 }
