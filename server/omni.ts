@@ -3,6 +3,7 @@ import path from 'path';
 
 export type OmniAspectRatio = '16:9' | '9:16';
 export type OmniResolution = '720p' | '1080p' | '4k';
+export type OmniDuration = 4 | 6 | 8 | 10;
 
 function parseDataUrl(dataUrl: string) {
   const match = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl || '');
@@ -25,7 +26,7 @@ function readOutputVideo(payload: any) {
 export async function generateOmniVideo(options: {
   prompt: string;
   aspectRatio: OmniAspectRatio;
-  duration: 4 | 6 | 8;
+  duration: OmniDuration;
   resolution?: OmniResolution;
   startImage?: string | null;
   endImage?: string | null;
