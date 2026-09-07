@@ -3,8 +3,10 @@ import { installMediaDownload } from './server/installMediaDownload';
 import { installMarketCashPaymentProxy } from './server/marketCashPaymentProxy';
 import { installMarketCashBilling } from './server/installMarketCashBilling';
 import { installLaunchPricingSync } from './server/installLaunchPricing';
+import { installProviderWalletAdminApi } from './server/installProviderWalletAdmin';
 
 installBackgroundGenerationPersistence();
+installProviderWalletAdminApi();
 installMediaDownload();
 installMarketCashPaymentProxy();
 installMarketCashBilling();
