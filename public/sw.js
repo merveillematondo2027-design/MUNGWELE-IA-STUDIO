@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mungwele-ia-shell-v1';
+const CACHE_NAME = 'mungwele-ia-shell-v2';
 const SHELL_FILES = ['/', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -22,15 +22,17 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
-  if (request.mode === 'navigate') {
+  if (request.mode === 'navigate' || ['script', 'style'].includes(request.destination)) {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put('/', copy)).catch(() => undefined);
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request.mode === 'navigate' ? '/' : request, copy)).catch(() => undefined);
+          }
           return response;
         })
-        .catch(() => caches.match('/')),
+        .catch(() => caches.match(request.mode === 'navigate' ? '/' : request).then((cached) => cached || Response.error())),
     );
     return;
   }
@@ -39,7 +41,7 @@ self.addEventListener('fetch', (event) => {
     caches.match(request).then((cached) => {
       if (cached) return cached;
       return fetch(request).then((response) => {
-        if (response.ok && ['script', 'style', 'image', 'font'].includes(request.destination)) {
+        if (response.ok && ['image', 'font'].includes(request.destination)) {
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined);
         }
