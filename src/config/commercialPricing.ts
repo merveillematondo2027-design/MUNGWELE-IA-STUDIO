@@ -1,4 +1,4 @@
-export const PRICING_VERSION = 2026090701;
+export const PRICING_VERSION = 2026090702;
 
 // MUNGWELE launch policy
 // - Packs are intentionally simple: $5/500, $10/1,100, $20/2,500.
@@ -60,7 +60,6 @@ export type LaunchVideoModel = 'omni' | 'lite' | 'fast' | 'pro';
 export type LaunchVideoDuration = 4 | 6 | 8;
 export type LaunchVideoResolution = '720p' | '1080p' | '4k';
 
-// Direct Google Gemini API paid-tier effective rates, USD per generated second.
 export const VIDEO_PROVIDER_USD_PER_SECOND: Record<LaunchVideoModel, Record<LaunchVideoResolution, number | null>> = {
   lite: { '720p': 0.05, '1080p': 0.08, '4k': null },
   fast: { '720p': 0.10, '1080p': 0.12, '4k': 0.30 },
@@ -78,7 +77,6 @@ export interface SeedanceRate {
   minimumProviderUsd?: number;
 }
 
-// Runway Dev sells one developer credit for $0.01.
 export const RUNWAY_USD_PER_CREDIT = 0.01;
 export const SEEDANCE_PROVIDER_RATES: Record<SeedanceModel, Partial<Record<SeedanceResolution, SeedanceRate>>> = {
   seedance2_mini: {
@@ -109,7 +107,6 @@ export const SEEDANCE_MODEL_LIMITS: Record<SeedanceModel, { minSeconds: number; 
   seedance2_5: { minSeconds: 4, maxSeconds: 30, defaultResolution: '720p' },
 };
 
-// Runway HappyHorse 1.0: 15 Runway credits/s at 720p and 30/s at 1080p.
 export type HappyHorseResolution = '720p' | '1080p';
 export const HAPPYHORSE_USD_PER_SECOND: Record<HappyHorseResolution, number> = {
   '720p': 0.15,
@@ -119,19 +116,17 @@ export const HAPPYHORSE_MIN_SECONDS = 3;
 export const HAPPYHORSE_MAX_SECONDS = 15;
 
 export const ELEVEN_MUSIC_USD_PER_MINUTE = 0.15;
-
-// GPT-Image-2 medium 1K launch estimate and small reserve for edit references.
 export const GPT_IMAGE_2_MEDIUM_ESTIMATED_USD = 0.053;
 export const GPT_IMAGE_REFERENCE_ESTIMATED_USD = 0.01;
 
-// Runway Act-Two: 5 Runway credits/s × $0.01 = $0.05/s.
 export const RUNWAY_ACT_TWO_USD_PER_SECOND = 0.05;
 export const RUNWAY_ACT_TWO_MIN_SECONDS = 3;
 export const RUNWAY_ACT_TWO_MAX_SECONDS = 30;
 
 export function roundCreditsUp(value: number, step = 5) {
   const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
-  return Math.max(step, Math.ceil(safe / step) * step);
+  const normalized = Math.round(safe * 1_000_000_000) / 1_000_000_000;
+  return Math.max(step, Math.ceil(normalized / step) * step);
 }
 
 export function creditsForProviderCost(providerCostUsd: number, markupRate = PROVIDER_MARKUP_RATE) {
@@ -305,7 +300,7 @@ export const VIDEO_ENGINE_LAUNCH_EXAMPLES = {
   veoLite720: { 4: videoEngineCreditsForRequest('veo-lite', 4).credits, 6: videoEngineCreditsForRequest('veo-lite', 6).credits, 8: videoEngineCreditsForRequest('veo-lite', 8).credits },
   veoFast720: { 4: videoEngineCreditsForRequest('veo-fast', 4).credits, 6: videoEngineCreditsForRequest('veo-fast', 6).credits, 8: videoEngineCreditsForRequest('veo-fast', 8).credits },
   veoPro720: { 4: videoEngineCreditsForRequest('veo-pro', 4).credits, 6: videoEngineCreditsForRequest('veo-pro', 6).credits, 8: videoEngineCreditsForRequest('veo-pro', 8).credits },
-  omni720: { 4: videoEngineCreditsForRequest('omni', 4).credits, 6: videoEngineCreditsForRequest('omni', 6).credits, 8: videoEngineCreditsForRequest('omni', 8).credits, 10: videoEngineCreditsForRequest('omni', 10).credits },
+  omni720: { 4: videoEngineCreditsForRequest('omni', 4).credits, 6: videoEngineCreditsForRequest('omni', 6).credits, 8: videoEngineCreditsForRequest('omni', 8).credits },
   seedance25720: { 4: videoEngineCreditsForRequest('seedance-2-5', 4).credits, 6: videoEngineCreditsForRequest('seedance-2-5', 6).credits, 8: videoEngineCreditsForRequest('seedance-2-5', 8).credits, 10: videoEngineCreditsForRequest('seedance-2-5', 10).credits, 15: videoEngineCreditsForRequest('seedance-2-5', 15).credits, 30: videoEngineCreditsForRequest('seedance-2-5', 30).credits },
   happyHorse720: { 4: videoEngineCreditsForRequest('happyhorse-1', 4).credits, 6: videoEngineCreditsForRequest('happyhorse-1', 6).credits, 8: videoEngineCreditsForRequest('happyhorse-1', 8).credits, 10: videoEngineCreditsForRequest('happyhorse-1', 10).credits, 15: videoEngineCreditsForRequest('happyhorse-1', 15).credits },
 } as const;
