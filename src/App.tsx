@@ -2,7 +2,6 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { AppShellHeader } from './components/layout/AppShellHeader';
 import { HomeView } from './components/views/HomeView';
-import { NotificationToast } from './components/common/NotificationToast';
 import { InstallAppButton } from './components/common/InstallAppButton';
 import { subscribeToFirebaseUser } from './services/authService';
 import { AlertTriangle } from 'lucide-react';
@@ -24,6 +23,7 @@ const AdminWorkspaceView = lazy(() => import('./components/views/AdminWorkspaceV
 const HelpView = lazy(() => import('./components/views/HelpView').then((m) => ({ default: m.HelpView })));
 const MediaViewerModal = lazy(() => import('./components/common/MediaViewerModal').then((m) => ({ default: m.MediaViewerModal })));
 const MobileMoneyCheckoutLauncher = lazy(() => import('./components/common/MobileMoneyCheckoutLauncher').then((m) => ({ default: m.MobileMoneyCheckoutLauncher })));
+const NotificationToast = lazy(() => import('./components/common/NotificationToast').then((m) => ({ default: m.NotificationToast })));
 const AuthModal = lazy(() => import('./components/views/AuthModal').then((m) => ({ default: m.AuthModal })));
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
@@ -128,7 +128,7 @@ const MainLayout: React.FC = () => {
         {!needsLogin&&activeTab==='help'&&<HelpView/>}
       </Suspense>
     </div></main></div>
-    <InstallAppButton/><NotificationToast/>
+    <InstallAppButton/><Suspense fallback={null}><NotificationToast/></Suspense>
     {activeMediaModal&&<Suspense fallback={null}><MediaViewerModal media={activeMediaModal} onClose={()=>setActiveMediaModal(null)}/></Suspense>}
     {isAuthModalOpen&&<Suspense fallback={null}><AuthModal/></Suspense>}
   </div>;
