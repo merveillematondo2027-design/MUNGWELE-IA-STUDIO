@@ -6,7 +6,6 @@ import { NotificationToast } from './components/common/NotificationToast';
 import { InstallAppButton } from './components/common/InstallAppButton';
 import { subscribeToFirebaseUser } from './services/authService';
 import { AlertTriangle } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 
 const ImageStudio = lazy(() => import('./components/studios/ImageStudio').then((m) => ({ default: m.ImageStudio })));
 const VideoStudio = lazy(() => import('./components/studios/VideoStudio').then((m) => ({ default: m.VideoStudio })));
@@ -106,7 +105,7 @@ const MainLayout: React.FC = () => {
   return <div className="relative min-h-screen overflow-x-hidden bg-[#07101f] text-gray-100 antialiased selection:bg-purple-600 selection:text-white">
     <div className="pointer-events-none fixed inset-0 overflow-hidden"><div className="absolute -left-32 -top-40 h-[520px] w-[520px] rounded-full bg-purple-600/10 blur-[150px]"/><div className="absolute -right-40 top-1/3 h-[520px] w-[520px] rounded-full bg-blue-600/10 blur-[160px]"/><div className="absolute -bottom-40 left-1/3 h-[520px] w-[520px] rounded-full bg-pink-600/8 blur-[150px]"/></div>
     {appSettings.maintenanceMode&&<div className="relative z-50 flex items-center justify-center gap-2 border-b border-amber-500/30 bg-amber-950/70 px-4 py-2 text-center text-xs font-semibold text-amber-200"><AlertTriangle className="h-4 w-4 text-amber-400"/><span>Le studio est actuellement en maintenance programmée.</span></div>}
-    <div className="relative z-10 min-h-screen"><AppShellHeader studioMode={signedIn && isStudioTab}/><main className={signedIn&&isStudioTab?'mx-auto w-full max-w-7xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8':'mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8'}><AnimatePresence mode="wait"><motion.div key={needsLogin?'guest-home':activeTab} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}} transition={{duration:0.16}}>
+    <div className="relative z-10 min-h-screen"><AppShellHeader studioMode={signedIn && isStudioTab}/><main className={signedIn&&isStudioTab?'mx-auto w-full max-w-7xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8':'mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8'}><div key={needsLogin?'guest-home':activeTab}>
       <Suspense fallback={<RouteFallback/>}>
         {(activeTab==='home'||needsLogin)&&<HomeView/>}
         {!needsLogin&&activeTab==='community'&&<CommunityView/>}
@@ -128,7 +127,7 @@ const MainLayout: React.FC = () => {
         {!needsLogin&&activeTab==='admin-home'&&renderAdmin('home')}{!needsLogin&&activeTab==='admin-users'&&renderAdmin('users')}{!needsLogin&&activeTab==='admin-credits'&&renderAdmin('credits')}{!needsLogin&&activeTab==='admin-subscriptions'&&renderAdmin('subscriptions')}{!needsLogin&&activeTab==='admin-library'&&renderAdmin('library')}{!needsLogin&&activeTab==='admin-logs'&&renderAdmin('logs')}{!needsLogin&&activeTab==='admin-usage'&&renderAdmin('usage')}
         {!needsLogin&&activeTab==='help'&&<HelpView/>}
       </Suspense>
-    </motion.div></AnimatePresence></main></div>
+    </div></main></div>
     <InstallAppButton/><NotificationToast/>
     {activeMediaModal&&<Suspense fallback={null}><MediaViewerModal media={activeMediaModal} onClose={()=>setActiveMediaModal(null)}/></Suspense>}
     {isAuthModalOpen&&<Suspense fallback={null}><AuthModal/></Suspense>}
