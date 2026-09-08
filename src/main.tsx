@@ -7,6 +7,14 @@ import { installAuthenticatedApiFetch } from './services/installAuthenticatedApi
 
 installAuthenticatedApiFetch();
 
+function signalBooted() {
+  // Two animation frames ensure React has committed and the first UI paint can
+  // replace the lightweight HTML boot screen before we report startup complete.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => window.dispatchEvent(new Event('mungwele:booted')));
+  });
+}
+
 function showBootFailure(message = 'Une mise à jour de l’application doit être rechargée.') {
   const root = document.getElementById('root');
   if (!root) return;
@@ -46,6 +54,7 @@ try {
       <App />
     </StrictMode>,
   );
+  signalBooted();
 } catch (error) {
   console.error('[MUNGWELE_RENDER_ERROR]', error);
   showBootFailure();
