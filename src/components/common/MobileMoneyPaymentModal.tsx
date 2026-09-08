@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Clock3, FlaskConical, Loader2, RadioTower, ShieldCheck, Smartphone, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock3, FlaskConical, Loader2, RadioTower, ShieldCheck, Smartphone, X } from 'lucide-react';
 import type { MarketCashPaymentTarget } from '../../services/marketCashPaymentService';
 import {
+  completeMpesaSandboxTest,
   getMobileMoneyStatus,
   getMpesaSandboxStatus,
   payWithMobileMoney,
-  verifyMpesaSandbox,
+  startMpesaSandboxTest,
   type MobileMoneyProvider,
   type MobileMoneyStatus,
   type MpesaSandboxStatus,
@@ -17,6 +18,8 @@ export type MobileMoneyPaymentModalProps = {
   onSuccess?: (transactionId?: string) => void;
 };
 
+const waitOneSecond = () => new Promise((resolve) => window.setTimeout(resolve, 1000));
+
 export const MobileMoneyPaymentModal: React.FC<MobileMoneyPaymentModalProps> = ({ target, onClose, onSuccess }) => {
   const [provider, setProvider] = useState<MobileMoneyProvider>('mpesa');
   const [status, setStatus] = useState<MobileMoneyStatus | null>(null);
@@ -25,6 +28,9 @@ export const MobileMoneyPaymentModal: React.FC<MobileMoneyPaymentModalProps> = (
   const [msisdn, setMsisdn] = useState('');
   const [busy, setBusy] = useState(false);
   const [sandboxBusy, setSandboxBusy] = useState(false);
+  const [sandboxCountdown, setSandboxCountdown] = useState(0);
+  const [sandboxMessage, setSandboxMessage] = useState('');
+  const [sandboxError, setSandboxError] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [pending, setPending] = useState('');
@@ -49,8 +55,7 @@ export const MobileMoneyPaymentModal: React.FC<MobileMoneyPaymentModalProps> = (
         setSandboxStatus(next);
       })
       .catch(() => {
-        // Sandbox verification is intentionally admin-only. Regular customers
-        // simply do not see this development tool.
+        // Sandbox verification is intentionally admin-only.
       });
 
     return () => { active = false; };
@@ -99,17 +104,39 @@ export const MobileMoneyPaymentModal: React.FC<MobileMoneyPaymentModalProps> = (
 
   const runSandboxTest = async () => {
     setSandboxResult('');
-    setError('');
+    setSandboxError('');
+    setSandboxMessage('Création de la SessionKey Sandbox…');
+    setSandboxCountdown(0);
     setSandboxBusy(true);
+
     try {
-      const result = await verifyMpesaSandbox();
+      const started = await startMpesaSandboxTest();
+      if (!started.ok) throw new Error(started.error || 'Impossible de créer la session Sandbox.');
+
+      const seconds = Math.max(1, Math.ceil((started.waitMs || 30_000) / 1000));
+      for (let remaining = seconds; remaining > 0; remaining -= 1) {
+        setSandboxCountdown(remaining);
+        setSandboxMessage(`Session créée. M-Pesa la prépare encore pendant ${remaining} s…`);
+        await waitOneSecond();
+      }
+
+      setSandboxCountdown(0);
+      setSandboxMessage('Envoi de la transaction C2B simulée…');
+      const result = await completeMpesaSandboxTest();
       if (!result.ok || result.responseCode !== 'INS-0') {
         throw new Error(result.responseDesc || result.error || 'Le test Sandbox n’a pas retourné INS-0.');
       }
+
       const reference = result.conversationId ? ` • ${result.conversationId}` : '';
-      setSandboxResult(`Test réussi : INS-0${reference}. Aucun argent réel n’a été déplacé.`);
+      setSandboxMessage('');
+      setSandboxResult(`Test réussi : INS-0${reference}. Aucun argent réel n’a été déplacé et aucun crédit n’a été ajouté.`);
     } catch (reason: any) {
-      setError(String(reason?.message || reason));
+      setSandboxMessage('');
+      setSandboxCountdown(0);
+      const message = String(reason?.message || reason || 'Test Sandbox interrompu.');
+      setSandboxError(message.includes('Failed to fetch')
+        ? 'Le serveur Google AI Studio a redémarré pendant le test. Attendez que « CONNECTED » apparaisse dans les logs puis relancez le test.'
+        : message);
     } finally {
       setSandboxBusy(false);
     }
@@ -146,16 +173,20 @@ export const MobileMoneyPaymentModal: React.FC<MobileMoneyPaymentModalProps> = (
                     <p className="text-sm font-black text-white">M-Pesa Sandbox</p>
                     <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${sandboxStatus.configured ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-200'}`}>{sandboxStatus.configured ? 'Clé détectée' : 'Clé manquante'}</span>
                   </div>
-                  <p className="mt-1 text-[11px] leading-5 text-gray-400">Test technique sans argent réel avec le numéro Sandbox {sandboxStatus.testMsisdn}. Le test peut prendre environ 30 secondes.</p>
+                  <p className="mt-1 text-[11px] leading-5 text-gray-400">Test technique sans argent réel avec le numéro Sandbox {sandboxStatus.testMsisdn}. Le test se déroule maintenant en deux étapes pour rester stable dans Google AI Studio.</p>
+
                   <button
                     type="button"
                     onClick={runSandboxTest}
                     disabled={sandboxBusy || !sandboxStatus.configured}
                     className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 py-3 text-xs font-black text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-45"
                   >
-                    {sandboxBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Test Sandbox en cours (~30 s)…</> : 'Tester avec M-Pesa Sandbox'}
+                    {sandboxBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> {sandboxCountdown > 0 ? `Préparation Sandbox • ${sandboxCountdown} s` : 'Test Sandbox en cours…'}</> : 'Tester avec M-Pesa Sandbox'}
                   </button>
+
+                  {sandboxMessage && <div className="mt-3 flex items-start gap-2 rounded-xl border border-violet-500/20 bg-violet-950/20 p-3 text-[11px] leading-5 text-violet-100"><Clock3 className="mt-0.5 h-4 w-4 shrink-0" />{sandboxMessage}</div>}
                   {sandboxResult && <div className="mt-3 flex items-start gap-2 rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-3 text-[11px] leading-5 text-emerald-100"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />{sandboxResult}</div>}
+                  {sandboxError && <div className="mt-3 flex items-start gap-2 rounded-xl border border-rose-500/20 bg-rose-950/20 p-3 text-[11px] leading-5 text-rose-100"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><div><p>{sandboxError}</p><p className="mt-1 text-rose-200/70">Le bouton redevient actif automatiquement : vous pouvez relancer le test.</p></div></div>}
                 </div>
               </div>
             </div>
