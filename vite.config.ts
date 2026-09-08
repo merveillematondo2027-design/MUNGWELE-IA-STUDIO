@@ -10,6 +10,25 @@ export default defineConfig(() => ({
       '@': path.resolve(__dirname, '.'),
     },
   },
+  // Keep large, stable browser libraries in independent chunks. This lets
+  // mobile browsers download them in parallel and keep them cached across
+  // frequent MUNGWELE application deployments.
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('/firebase/') || id.includes('/@firebase/')) return 'vendor-firebase';
+          if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'vendor-react';
+          if (id.includes('/motion/')) return 'vendor-motion';
+          if (id.includes('/lucide-react/')) return 'vendor-icons';
+          if (id.includes('/@zxing/')) return 'vendor-zxing';
+          if (id.includes('/canvas-confetti/')) return 'vendor-confetti';
+          return undefined;
+        },
+      },
+    },
+  },
   // The QR scanner is loaded on demand by the Market-Cash checkout. Explicitly
   // prebundle it so Google AI Studio does not have to discover/re-optimize the
   // dependency when the scanner is opened for the first time.
