@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { ArrowRight, Clapperboard, Film, Image as ImageIcon, Music as MusicIcon, Sparkles, WalletCards } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { StudioType } from '../../types';
 import officialLogo from '../../assets/mungwele-ai-official-logo.svg';
-import { CommunityFeed } from '../community/CommunityFeed';
+
+const CommunityFeed = lazy(() => import('../community/CommunityFeed').then((m) => ({ default: m.CommunityFeed })));
 
 export const HomeView: React.FC = () => {
   const { setActiveStudio, setActiveTab, user } = useApp();
@@ -56,7 +57,9 @@ export const HomeView: React.FC = () => {
 
       <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-center text-[11px] leading-5 text-gray-500">Choisissez votre moteur et vos réglages dans chaque studio. Les anciens projets restent uniquement dans la Bibliothèque.</div>
 
-      <CommunityFeed compact />
+      <Suspense fallback={<div className="mt-4 h-24 rounded-2xl border border-white/5 bg-white/[0.015]" />}>
+        <CommunityFeed compact />
+      </Suspense>
     </div>
   );
 };
