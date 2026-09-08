@@ -2,6 +2,7 @@ import { installBackgroundGenerationPersistence } from './server/backgroundGener
 import { installMediaDownload } from './server/installMediaDownload';
 import { installMarketCashPaymentProxy } from './server/marketCashPaymentProxy';
 import { installMobileMoneyLivePaymentProxy } from './server/mobileMoneyLivePaymentProxy';
+import { installMpesaSandboxTest } from './server/mpesaSandboxTest';
 import { installMarketCashBilling } from './server/installMarketCashBilling';
 import { installLaunchPricingSync } from './server/installLaunchPricing';
 import { installProviderWalletAdminApi } from './server/installProviderWalletAdmin';
@@ -11,6 +12,7 @@ installProviderWalletAdminApi();
 installMediaDownload();
 installMarketCashPaymentProxy();
 installMobileMoneyLivePaymentProxy();
+installMpesaSandboxTest();
 installMarketCashBilling();
 installLaunchPricingSync();
 void import('./server');
