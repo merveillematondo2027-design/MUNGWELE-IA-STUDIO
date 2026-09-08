@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, CreditCard, Globe2, Landmark, Smartphone, WalletCards, X } from 'lucide-react';
 import type { MarketCashPaymentTarget } from '../../services/marketCashPaymentService';
-import { MarketCashPaymentModal } from './MarketCashPaymentModal';
+import { MarketCashLocalCardPaymentModal } from './MarketCashLocalCardPaymentModal';
 import { MobileMoneyPaymentModal } from './MobileMoneyPaymentModal';
 
 type CheckoutMode = 'chooser' | 'local-card' | 'mobile-money';
@@ -52,7 +52,7 @@ export const MarketCashCheckoutModal: React.FC<MarketCashCheckoutModalProps> = (
 
   if (mode === 'local-card') {
     return (
-      <MarketCashPaymentModal
+      <MarketCashLocalCardPaymentModal
         target={target}
         userId={userId}
         userEmail={userEmail}
