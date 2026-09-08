@@ -21,6 +21,27 @@ export type MobileMoneyStatus = {
   };
 };
 
+export type MpesaSandboxStatus = {
+  enabled: boolean;
+  configured: boolean;
+  environment: 'sandbox';
+  market: string;
+  country: string;
+  currency: string;
+  testMsisdn: string;
+};
+
+export type MpesaSandboxVerification = {
+  ok: boolean;
+  environment: 'sandbox';
+  moneyMoved: false;
+  httpStatus?: number;
+  responseCode?: string;
+  responseDesc?: string;
+  conversationId?: string;
+  error?: string;
+};
+
 export type MobileMoneyPaymentResult = {
   success: boolean;
   status: 'settled' | 'pending' | 'failed';
@@ -49,6 +70,28 @@ export async function getMobileMoneyStatus(): Promise<MobileMoneyStatus> {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload?.error || 'Statut Mobile Money indisponible.');
   return payload as MobileMoneyStatus;
+}
+
+export async function getMpesaSandboxStatus(): Promise<MpesaSandboxStatus> {
+  const headers = await authenticatedHeaders();
+  const response = await fetch('/api/mobile-money/mpesa/sandbox/status', { headers });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || 'Statut M-Pesa Sandbox indisponible.');
+  return payload as MpesaSandboxStatus;
+}
+
+export async function verifyMpesaSandbox(): Promise<MpesaSandboxVerification> {
+  const headers = await authenticatedHeaders();
+  const response = await fetch('/api/mobile-money/mpesa/sandbox/verify', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || payload?.responseDesc || `Test M-Pesa Sandbox refusé (${response.status}).`);
+  }
+  return payload as MpesaSandboxVerification;
 }
 
 export async function payWithMobileMoney(params: {
