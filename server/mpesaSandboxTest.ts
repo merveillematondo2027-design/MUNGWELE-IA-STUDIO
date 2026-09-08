@@ -5,21 +5,33 @@ import { adminAuth, adminDb } from './firebaseAdmin';
 const INSTALL_FLAG = Symbol.for('mungwele.mpesaSandboxTestInstalled');
 const APP_FLAG = Symbol.for('mungwele.mpesaSandboxTestRoutesMounted');
 
+// Public, non-secret Vodafone/M-Pesa OpenAPI Sandbox configuration for DRC.
+// These values are intentionally kept in code so Google AI Studio does not ask
+// the user to enter them as "secrets" during deployment.
+const MPESA_SANDBOX_BASE_URL = 'https://openapi.m-pesa.com';
+const MPESA_SANDBOX_MARKET = 'vodacomDRC';
+const MPESA_SANDBOX_COUNTRY = 'DRC';
+const MPESA_SANDBOX_CURRENCY = 'USD';
+const MPESA_SANDBOX_ORIGIN = '*';
+const MPESA_SANDBOX_TEST_MSISDN = '000000000001';
+const MPESA_SANDBOX_SERVICE_PROVIDER_CODE = '000000';
+const MPESA_SANDBOX_WARMUP_MS = 30_000;
+
+// Official OpenAPI RSA public key used by the verified M-Pesa Sandbox test.
+// This is a public encryption key, not the merchant API secret.
+const MPESA_OPENAPI_PUBLIC_KEY_B64 =
+  'MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEArv9yxA69XQKBo24BaF/D+fvlqmGdYjqLQ5WtNBb5tquqGvAvG3WMFETVUSow/LizQalxj2ElMVrUmzu5mGGkxK08bWEXF7a1DEvtVJs6nppIlFJc2SnrU14AOrIrB28ogm58JjAl5BOQawOXD5dfSk7MaAA82pVHoIqEu0FxA8BOKU+RGTihRU+ptw1j4bsAJYiPbSX6i71gfPvwHPYamM0bfI4CmlsUUR3KvCG24rB6FNPcRBhM3jDuv8ae2kC33w9hEq8qNB55uw51vK7hyXoAa+U7IqP1y6nBdlN25gkxEA8yrsl1678cspeXr+3ciRyqoRgj9RD/ONbJhhxFvt1cLBh+qwK2eqISfBb06eRnNeC71oBokDm3zyCnkOtMDGl7IvnMfZfEPFCfg5QgJVk1msPpRvQxmEsrX9MQRyFVzgy2CWNIb7c+jPapyrNwoUbANlN8adU1m6yOuoX7F49x+OjiG2se0EJ6nafeKUXw/+hiJZvELUYgzKUtMAZVTNZfT8jjb58j8GVtuS+6TM2AutbejaCV84ZK58E2CRJqhmjQibEUO6KPdD7oTlEkFy52Y1uOOBXgYpqMzufNPmfdqqqSM4dU70PO8ogyKGiLAIxCetMjjm6FCMEA3Kc8K0Ig7/XtFm9By6VxTJK1Mg36TlHaZKP6VzVLXMtesJECAwEAAQ==';
+
+const MPESA_OPENAPI_PUBLIC_KEY_PEM =
+  '-----BEGIN PUBLIC KEY-----\n' +
+  (MPESA_OPENAPI_PUBLIC_KEY_B64.match(/.{1,64}/g) || []).join('\n') +
+  '\n-----END PUBLIC KEY-----';
+
 const clean = (value: unknown, max = 180) => String(value ?? '').trim().slice(0, max);
-const enabled = () => ['1', 'true', 'yes', 'on'].includes(String(process.env.MPESA_SANDBOX_ENABLED || '').toLowerCase());
 
-function normalizePublicKey(value: string) {
-  const normalized = String(value || '').replace(/\\n/g, '\n').trim();
-  if (!normalized) throw new Error('Clé publique M-Pesa Sandbox absente.');
-  if (normalized.includes('-----BEGIN')) return normalized;
-  const compact = normalized.replace(/\s+/g, '');
-  const body = compact.match(/.{1,64}/g)?.join('\n') || compact;
-  return `-----BEGIN PUBLIC KEY-----\n${body}\n-----END PUBLIC KEY-----`;
-}
-
-function encrypt(value: string, publicKey: string) {
+function encrypt(value: string) {
   return publicEncrypt(
-    { key: normalizePublicKey(publicKey), padding: constants.RSA_PKCS1_PADDING },
+    { key: MPESA_OPENAPI_PUBLIC_KEY_PEM, padding: constants.RSA_PKCS1_PADDING },
     Buffer.from(value, 'utf8'),
   ).toString('base64');
 }
@@ -36,62 +48,66 @@ async function requireAdmin(req: express.Request) {
 }
 
 function config() {
-  const apiKey = clean(process.env.MPESA_SANDBOX_API_KEY || process.env.MPESA_API_KEY, 4096);
-  const publicKey = String(process.env.MPESA_SANDBOX_PUBLIC_KEY || process.env.MPESA_PUBLIC_KEY || '').trim();
-  const origin = clean(process.env.MPESA_ORIGIN || process.env.APP_URL || '*', 255) || '*';
+  // The only user-supplied value needed for the Sandbox verifier.
+  const apiKey = clean(process.env.MPESA_SANDBOX_API_KEY, 4096);
   return {
     apiKey,
-    publicKey,
-    origin,
-    configured: enabled() && Boolean(apiKey && publicKey),
-    market: clean(process.env.MPESA_MARKET || 'vodacomDRC', 32),
-    country: clean(process.env.MPESA_COUNTRY || 'DRC', 8),
-    currency: clean(process.env.MPESA_CURRENCY || 'USD', 8),
-    msisdn: clean(process.env.MPESA_SANDBOX_TEST_MSISDN || '000000000001', 20),
-    warmupMs: Math.max(0, Math.min(30_000, Number(process.env.MPESA_SANDBOX_WARMUP_MS || 30_000))),
+    configured: Boolean(apiKey),
+    market: MPESA_SANDBOX_MARKET,
+    country: MPESA_SANDBOX_COUNTRY,
+    currency: MPESA_SANDBOX_CURRENCY,
+    msisdn: MPESA_SANDBOX_TEST_MSISDN,
   };
 }
 
 async function verifySandbox() {
   const cfg = config();
-  if (!cfg.configured) throw Object.assign(new Error('Sandbox M-Pesa non configuré côté serveur.'), { status: 503 });
+  if (!cfg.configured) {
+    throw Object.assign(new Error('Ajoutez uniquement MPESA_SANDBOX_API_KEY dans les secrets serveur.'), { status: 503 });
+  }
 
-  const sessionResponse = await fetch(`https://openapi.m-pesa.com/sandbox/ipg/v2/${encodeURIComponent(cfg.market)}/getSession/`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${encrypt(cfg.apiKey, cfg.publicKey)}`,
-      Origin: cfg.origin,
-      Accept: 'application/json',
+  const sessionResponse = await fetch(
+    `${MPESA_SANDBOX_BASE_URL}/sandbox/ipg/v2/${encodeURIComponent(cfg.market)}/getSession/`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${encrypt(cfg.apiKey)}`,
+        Origin: MPESA_SANDBOX_ORIGIN,
+        Accept: 'application/json',
+      },
     },
-  });
+  );
   const sessionPayload: any = await sessionResponse.json().catch(() => ({}));
   const sessionId = clean(sessionPayload?.output_SessionID, 4096);
   if (!sessionResponse.ok || !sessionId) {
     throw Object.assign(new Error(clean(sessionPayload?.output_ResponseDesc || 'Session Sandbox refusée.', 300)), { status: 502 });
   }
 
-  if (cfg.warmupMs) await new Promise((resolve) => setTimeout(resolve, cfg.warmupMs));
+  await new Promise((resolve) => setTimeout(resolve, MPESA_SANDBOX_WARMUP_MS));
 
   const stamp = Date.now().toString(36);
-  const c2bResponse = await fetch(`https://openapi.m-pesa.com/sandbox/ipg/v2/${encodeURIComponent(cfg.market)}/c2bPayment/singleStage/`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${encrypt(sessionId, cfg.publicKey)}`,
-      Origin: cfg.origin,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
+  const c2bResponse = await fetch(
+    `${MPESA_SANDBOX_BASE_URL}/sandbox/ipg/v2/${encodeURIComponent(cfg.market)}/c2bPayment/singleStage/`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${encrypt(sessionId)}`,
+        Origin: MPESA_SANDBOX_ORIGIN,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        input_Amount: '1.00',
+        input_Country: cfg.country,
+        input_Currency: cfg.currency,
+        input_CustomerMSISDN: cfg.msisdn,
+        input_ServiceProviderCode: MPESA_SANDBOX_SERVICE_PROVIDER_CODE,
+        input_ThirdPartyConversationID: `MIA${stamp}`.slice(0, 40),
+        input_TransactionReference: `MIA${stamp}`.slice(0, 20),
+        input_PurchasedItemsDesc: 'Mungwele IA sandbox verification',
+      }),
     },
-    body: JSON.stringify({
-      input_Amount: '1.00',
-      input_Country: cfg.country,
-      input_Currency: cfg.currency,
-      input_CustomerMSISDN: cfg.msisdn,
-      input_ServiceProviderCode: '000000',
-      input_ThirdPartyConversationID: `MIA${stamp}`.slice(0, 40),
-      input_TransactionReference: `MIA${stamp}`.slice(0, 20),
-      input_PurchasedItemsDesc: 'Mungwele IA sandbox verification',
-    }),
-  });
+  );
   const c2bPayload: any = await c2bResponse.json().catch(() => ({}));
   return {
     ok: c2bResponse.status === 201 && clean(c2bPayload?.output_ResponseCode, 32) === 'INS-0',
@@ -118,7 +134,15 @@ export function installMpesaSandboxTest() {
         try {
           await requireAdmin(req);
           const cfg = config();
-          return res.json({ enabled: enabled(), configured: cfg.configured, environment: 'sandbox', market: cfg.market, country: cfg.country, currency: cfg.currency, testMsisdn: cfg.msisdn });
+          return res.json({
+            enabled: true,
+            configured: cfg.configured,
+            environment: 'sandbox',
+            market: cfg.market,
+            country: cfg.country,
+            currency: cfg.currency,
+            testMsisdn: cfg.msisdn,
+          });
         } catch (error: any) {
           return res.status(Number(error?.status || 500)).json({ error: String(error?.message || error) });
         }
@@ -130,7 +154,12 @@ export function installMpesaSandboxTest() {
           return res.status(verification.ok ? 200 : 502).json(verification);
         } catch (error: any) {
           console.warn('[MUNGWELE_MPESA_SANDBOX_VERIFY_ERROR]', String(error?.message || error));
-          return res.status(Number(error?.status || 500)).json({ ok: false, environment: 'sandbox', moneyMoved: false, error: String(error?.message || error) });
+          return res.status(Number(error?.status || 500)).json({
+            ok: false,
+            environment: 'sandbox',
+            moneyMoved: false,
+            error: String(error?.message || error),
+          });
         }
       });
     }

@@ -2,6 +2,17 @@ import { constants, publicEncrypt } from 'node:crypto';
 
 const DEFAULT_BASE_URL = 'https://openapi.m-pesa.com';
 const LIVE_SEGMENT = 'openapi';
+const DEFAULT_MARKET = 'vodacomDRC';
+const DEFAULT_COUNTRY = 'DRC';
+const DEFAULT_CURRENCY = 'USD';
+const DEFAULT_ORIGIN = '*';
+const DEFAULT_SESSION_TTL_SECONDS = 3000;
+const DEFAULT_SESSION_WARMUP_MS = 0;
+
+// Official M-Pesa OpenAPI RSA public encryption key. It is public by design;
+// only merchant/API credentials remain environment secrets.
+const MPESA_OPENAPI_PUBLIC_KEY_B64 =
+  'MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEArv9yxA69XQKBo24BaF/D+fvlqmGdYjqLQ5WtNBb5tquqGvAvG3WMFETVUSow/LizQalxj2ElMVrUmzu5mGGkxK08bWEXF7a1DEvtVJs6nppIlFJc2SnrU14AOrIrB28ogm58JjAl5BOQawOXD5dfSk7MaAA82pVHoIqEu0FxA8BOKU+RGTihRU+ptw1j4bsAJYiPbSX6i71gfPvwHPYamM0bfI4CmlsUUR3KvCG24rB6FNPcRBhM3jDuv8ae2kC33w9hEq8qNB55uw51vK7hyXoAa+U7IqP1y6nBdlN25gkxEA8yrsl1678cspeXr+3ciRyqoRgj9RD/ONbJhhxFvt1cLBh+qwK2eqISfBb06eRnNeC71oBokDm3zyCnkOtMDGl7IvnMfZfEPFCfg5QgJVk1msPpRvQxmEsrX9MQRyFVzgy2CWNIb7c+jPapyrNwoUbANlN8adU1m6yOuoX7F49x+OjiG2se0EJ6nafeKUXw/+hiJZvELUYgzKUtMAZVTNZfT8jjb58j8GVtuS+6TM2AutbejaCV84ZK58E2CRJqhmjQibEUO6KPdD7oTlEkFy52Y1uOOBXgYpqMzufNPmfdqqqSM4dU70PO8ogyKGiLAIxCetMjjm6FCMEA3Kc8K0Ig7/XtFm9By6VxTJK1Mg36TlHaZKP6VzVLXMtesJECAwEAAQ==';
 
 export type MpesaLiveConfig = {
   environment: 'production';
@@ -21,33 +32,22 @@ let sessionCache: { value: string; expiresAt: number } | null = null;
 
 const clean = (value: unknown, max = 120) => String(value ?? '').trim().slice(0, max);
 
-function resolveOrigin() {
-  const explicit = clean(process.env.MPESA_ORIGIN, 255);
-  if (explicit) return explicit;
-  const appUrl = clean(process.env.APP_URL, 255);
-  if (appUrl && appUrl !== 'MY_APP_URL') {
-    try {
-      return new URL(appUrl).origin;
-    } catch {
-      return appUrl;
-    }
-  }
-  return '*';
-}
-
 export function getMpesaLiveConfig(): MpesaLiveConfig {
   return {
     environment: 'production',
     apiKey: clean(process.env.MPESA_API_KEY, 4096),
-    publicKey: String(process.env.MPESA_PUBLIC_KEY || '').trim(),
-    baseUrl: String(process.env.MPESA_BASE_URL || DEFAULT_BASE_URL).trim().replace(/\/$/, ''),
-    market: clean(process.env.MPESA_MARKET || 'vodacomDRC', 32),
-    country: clean(process.env.MPESA_COUNTRY || 'DRC', 8),
-    currency: clean(process.env.MPESA_CURRENCY || 'USD', 8),
+    // Optional override is supported, but the official public key is built in.
+    publicKey: String(process.env.MPESA_PUBLIC_KEY || MPESA_OPENAPI_PUBLIC_KEY_B64).trim(),
+    baseUrl: DEFAULT_BASE_URL,
+    market: DEFAULT_MARKET,
+    country: DEFAULT_COUNTRY,
+    currency: DEFAULT_CURRENCY,
     serviceProviderCode: clean(process.env.MPESA_SERVICE_PROVIDER_CODE, 32),
-    origin: resolveOrigin(),
-    sessionTtlSeconds: Math.max(60, Number(process.env.MPESA_SESSION_TTL_SECONDS || 3000)),
-    sessionWarmupMs: Math.max(0, Math.min(30_000, Number(process.env.MPESA_SESSION_WARMUP_MS || 0))),
+    // During Sandbox/preview we use the OpenAPI-compatible wildcard origin.
+    // When Vodacom approves a specific production origin, MPESA_ORIGIN can override it.
+    origin: clean(process.env.MPESA_ORIGIN || DEFAULT_ORIGIN, 255) || DEFAULT_ORIGIN,
+    sessionTtlSeconds: DEFAULT_SESSION_TTL_SECONDS,
+    sessionWarmupMs: DEFAULT_SESSION_WARMUP_MS,
   };
 }
 
@@ -173,7 +173,6 @@ export async function requestMpesaLiveC2B(params: {
   const config = getMpesaLiveConfig();
   const sessionId = await getLiveSessionId();
 
-  // OpenAPI transactional calls use an RSA-encrypted SessionID as Bearer token.
   const encryptedSessionId = encryptForMpesa(sessionId, config.publicKey);
   const endpoint = `${config.baseUrl}/${LIVE_SEGMENT}/ipg/v2/${encodeURIComponent(config.market)}/c2bPayment/singleStage/`;
 
