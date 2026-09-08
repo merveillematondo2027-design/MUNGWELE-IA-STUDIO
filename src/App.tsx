@@ -23,6 +23,7 @@ const AdminWorkspaceView = lazy(() => import('./components/views/AdminWorkspaceV
 const HelpView = lazy(() => import('./components/views/HelpView').then((m) => ({ default: m.HelpView })));
 const MediaViewerModal = lazy(() => import('./components/common/MediaViewerModal').then((m) => ({ default: m.MediaViewerModal })));
 const MobileMoneyCheckoutLauncher = lazy(() => import('./components/common/MobileMoneyCheckoutLauncher').then((m) => ({ default: m.MobileMoneyCheckoutLauncher })));
+const MpesaSandboxAdminPanel = lazy(() => import('./components/common/MpesaSandboxAdminPanel').then((m) => ({ default: m.MpesaSandboxAdminPanel })));
 const NotificationToast = lazy(() => import('./components/common/NotificationToast').then((m) => ({ default: m.NotificationToast })));
 const AuthModal = lazy(() => import('./components/views/AuthModal').then((m) => ({ default: m.AuthModal })));
 
@@ -121,7 +122,7 @@ const MainLayout: React.FC = () => {
         {!needsLogin&&activeTab==='studio-clips'&&<ClipStudio/>}
         {!needsLogin&&activeTab==='studio-music'&&<MusicStudio/>}
         {!needsLogin&&activeTab==='creations'&&<LibraryView/>}
-        {!needsLogin&&activeTab==='subscription'&&<><SubscriptionView/><MobileMoneyCheckoutLauncher/></>}
+        {!needsLogin&&activeTab==='subscription'&&<><SubscriptionView/><MobileMoneyCheckoutLauncher/>{canOpenAdmin&&<MpesaSandboxAdminPanel/>}</>}
         {!needsLogin&&activeTab==='profile'&&<ProfileView/>}
         {!needsLogin&&activeTab==='admin'&&(canOpenAdmin?<AdminView/>:<HomeView/>)}
         {!needsLogin&&activeTab==='admin-home'&&renderAdmin('home')}{!needsLogin&&activeTab==='admin-users'&&renderAdmin('users')}{!needsLogin&&activeTab==='admin-credits'&&renderAdmin('credits')}{!needsLogin&&activeTab==='admin-subscriptions'&&renderAdmin('subscriptions')}{!needsLogin&&activeTab==='admin-library'&&renderAdmin('library')}{!needsLogin&&activeTab==='admin-logs'&&renderAdmin('logs')}{!needsLogin&&activeTab==='admin-usage'&&renderAdmin('usage')}
