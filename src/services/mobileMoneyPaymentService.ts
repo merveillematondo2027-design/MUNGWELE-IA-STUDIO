@@ -31,6 +31,15 @@ export type MpesaSandboxStatus = {
   testMsisdn: string;
 };
 
+export type MpesaSandboxStart = {
+  ok: boolean;
+  phase: 'warming';
+  waitMs: number;
+  environment: 'sandbox';
+  moneyMoved: false;
+  error?: string;
+};
+
 export type MpesaSandboxVerification = {
   ok: boolean;
   environment: 'sandbox';
@@ -65,6 +74,32 @@ async function authenticatedHeaders() {
   };
 }
 
+async function sandboxRequest<T>(path: string, timeoutMs = 25_000): Promise<T> {
+  const headers = await authenticatedHeaders();
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(path, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({}),
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error || payload?.responseDesc || `M-Pesa Sandbox a refusé la requête (${response.status}).`);
+    }
+    return payload as T;
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Le serveur de prévisualisation ou M-Pesa a interrompu le test. Vous pouvez le relancer sans risque.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 export async function getMobileMoneyStatus(): Promise<MobileMoneyStatus> {
   const response = await fetch('/api/mobile-money/status');
   const payload = await response.json().catch(() => ({}));
@@ -80,18 +115,17 @@ export async function getMpesaSandboxStatus(): Promise<MpesaSandboxStatus> {
   return payload as MpesaSandboxStatus;
 }
 
+export async function startMpesaSandboxTest(): Promise<MpesaSandboxStart> {
+  return sandboxRequest<MpesaSandboxStart>('/api/mobile-money/mpesa/sandbox/start');
+}
+
+export async function completeMpesaSandboxTest(): Promise<MpesaSandboxVerification> {
+  return sandboxRequest<MpesaSandboxVerification>('/api/mobile-money/mpesa/sandbox/complete');
+}
+
+// Kept for compatibility with older callers.
 export async function verifyMpesaSandbox(): Promise<MpesaSandboxVerification> {
-  const headers = await authenticatedHeaders();
-  const response = await fetch('/api/mobile-money/mpesa/sandbox/verify', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({}),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload?.error || payload?.responseDesc || `Test M-Pesa Sandbox refusé (${response.status}).`);
-  }
-  return payload as MpesaSandboxVerification;
+  return sandboxRequest<MpesaSandboxVerification>('/api/mobile-money/mpesa/sandbox/verify', 70_000);
 }
 
 export async function payWithMobileMoney(params: {
