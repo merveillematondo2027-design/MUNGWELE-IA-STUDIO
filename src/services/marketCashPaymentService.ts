@@ -12,9 +12,8 @@ export type MarketCashCardInput = {
   cvv: string;
 };
 
-export type MarketCashCardScanData = Partial<Omit<MarketCashCardInput, 'cvv'>> & {
-  cardReference?: string;
-};
+export type MarketCashCardScanData = Partial<Omit<MarketCashCardInput, 'cvv'>> & { cardReference?: string };
+export type CardNetwork = 'market-cash' | 'visa' | 'mastercard' | 'amex' | 'discover' | 'unknown';
 
 export type MarketCashPaymentResult = {
   success: boolean;
@@ -36,25 +35,33 @@ export function normalizeExpiry(value: string) {
   return clean.length > 2 ? `${clean.slice(0, 2)}/${clean.slice(2)}` : clean;
 }
 
+export function detectCardNetwork(value: string): CardNetwork {
+  const pan = digits(value);
+  if (pan.startsWith('5585')) return 'market-cash';
+  if (/^4/.test(pan)) return 'visa';
+  const first4 = Number(pan.slice(0, 4));
+  const first2 = Number(pan.slice(0, 2));
+  if ((first2 >= 51 && first2 <= 55) || (first4 >= 2221 && first4 <= 2720)) return 'mastercard';
+  if (/^3[47]/.test(pan)) return 'amex';
+  if (/^(6011|65|64[4-9])/.test(pan)) return 'discover';
+  return 'unknown';
+}
+
+export function cardNetworkLabel(network: CardNetwork) {
+  return ({ 'market-cash': 'Market-Cash', visa: 'Visa', mastercard: 'Mastercard', amex: 'American Express', discover: 'Discover', unknown: 'Carte' } as const)[network];
+}
+
 function nativeCardReference(value: string) {
   const text = String(value || '').trim();
   const match = text.match(/(?:MARKET-CASH-CARD\s*:\s*)?(MCL-[A-Z0-9_-]{4,120})/i);
   return match?.[1]?.toUpperCase() || '';
 }
 
-/**
- * QR/NFC payloads fill only non-sensitive card identity fields.
- * CVV is deliberately ignored even if a payload contains a cvv/cvc/securityCode key.
- * Native Market-Cash QR/NFC payloads contain a technical MCL reference that must be
- * resolved server-to-server through the configured Market-Cash developer API.
- */
 export function parseMarketCashCardPayload(raw: string): MarketCashCardScanData {
   const text = String(raw || '').trim();
   if (!text) return {};
-
   const reference = nativeCardReference(text);
   if (reference) return { cardReference: reference };
-
   let payload: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(text);
@@ -63,12 +70,10 @@ export function parseMarketCashCardPayload(raw: string): MarketCashCardScanData 
     const params = new URLSearchParams(text.includes('?') ? text.split('?').slice(1).join('?') : text);
     payload = Object.fromEntries(params.entries());
   }
-
   const embeddedReference = nativeCardReference(String(payload.cardReference ?? payload.cardIdentifier ?? payload.reference ?? ''));
   const cardNumber = String(payload.cardNumber ?? payload.pan ?? payload.number ?? '').replace(/\D/g, '').slice(0, 19);
   const cardHolder = String(payload.cardHolder ?? payload.holder ?? payload.name ?? '').trim().slice(0, 80);
   const expiry = normalizeExpiry(String(payload.expiry ?? payload.exp ?? payload.expiration ?? ''));
-
   return {
     ...(embeddedReference ? { cardReference: embeddedReference } : {}),
     ...(cardNumber ? { cardNumber } : {}),
@@ -81,23 +86,15 @@ export async function resolveMarketCashCardPayload(raw: string): Promise<MarketC
   const parsed = parseMarketCashCardPayload(raw);
   if (parsed.cardNumber && parsed.cardHolder && parsed.expiry) return parsed;
   if (!parsed.cardReference) return parsed;
-
   const response = await fetch('/api/market-cash/card-capture', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cardReference: parsed.cardReference }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardReference: parsed.cardReference }),
   });
   const payload: any = await response.json().catch(() => ({}));
-  if (!response.ok || payload?.resolved !== true) {
-    throw new Error(payload?.error || 'Cette carte Market-Cash n’a pas pu être reconnue par le QR/NFC.');
-  }
-
+  if (!response.ok || payload?.resolved !== true) throw new Error(payload?.error || 'Cette carte Market-Cash n’a pas pu être reconnue par le QR/NFC.');
   const cardNumber = digits(String(payload.cardNumber || '')).slice(0, 19);
   const cardHolder = String(payload.cardHolder || '').trim().slice(0, 80);
   const expiry = normalizeExpiry(String(payload.expiry || ''));
-  if (!cardNumber || !cardHolder || !/^\d{2}\/\d{2}$/.test(expiry)) {
-    throw new Error('Les informations retournées par Market-Cash sont incomplètes.');
-  }
+  if (!cardNumber || !cardHolder || !/^\d{2}\/\d{2}$/.test(expiry)) throw new Error('Les informations retournées par Market-Cash sont incomplètes.');
   return { cardNumber, cardHolder, expiry, cardReference: parsed.cardReference };
 }
 
@@ -108,26 +105,19 @@ export async function payWithMarketCashCard(params: {
   userId?: string;
   userEmail?: string;
 }): Promise<MarketCashPaymentResult> {
-  const response = await fetch('/api/market-cash/payments', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const pan = digits(params.card.cardNumber);
+  const network = detectCardNetwork(pan);
+  const endpoint = network === 'market-cash' ? '/api/market-cash/payments' : '/api/card-payments/pay';
+  const response = await fetch(endpoint, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       target: params.target,
-      paymentMethod: 'card',
-      card: {
-        cardNumber: digits(params.card.cardNumber),
-        cardHolder: params.card.cardHolder.trim(),
-        expiry: params.card.expiry.trim(),
-        cvv: digits(params.card.cvv),
-      },
-      captureMethod: params.captureMethod,
-      cvvEntry: 'manual',
-      userId: params.userId,
-      userEmail: params.userEmail,
+      paymentMethod: 'card', network,
+      card: { cardNumber: pan, cardHolder: params.card.cardHolder.trim(), expiry: params.card.expiry.trim(), cvv: digits(params.card.cvv) },
+      captureMethod: params.captureMethod, cvvEntry: 'manual', userId: params.userId, userEmail: params.userEmail,
     }),
   });
-
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.error || payload?.message || `Paiement Market-Cash refusé (${response.status}).`);
+  if (!response.ok) throw new Error(payload?.error || payload?.message || `Paiement ${cardNetworkLabel(network)} indisponible (${response.status}).`);
   return payload as MarketCashPaymentResult;
 }
