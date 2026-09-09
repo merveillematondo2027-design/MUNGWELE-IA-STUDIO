@@ -1,4 +1,5 @@
 import { installCloudRunCors } from './server/installCloudRunCors';
+import { installOpenAIImageRetry } from './server/installOpenAIImageRetry';
 import { installGeneratedMediaFetchCompat } from './server/generatedMediaFetchCompat';
 import { installBackgroundGenerationPersistence } from './server/backgroundGenerationPersistence';
 import { installMediaDownload } from './server/installMediaDownload';
@@ -10,6 +11,7 @@ import { installLaunchPricingSync } from './server/installLaunchPricing';
 import { installProviderWalletAdminApi } from './server/installProviderWalletAdmin';
 
 installCloudRunCors();
+installOpenAIImageRetry();
 installGeneratedMediaFetchCompat();
 installBackgroundGenerationPersistence();
 installProviderWalletAdminApi();
