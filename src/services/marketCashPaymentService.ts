@@ -37,11 +37,21 @@ export function normalizeExpiry(value: string) {
 
 export function detectCardNetwork(value: string): CardNetwork {
   const pan = digits(value);
+  if (!pan) return 'unknown';
+
+  // Market-Cash reserves 5585. Do not announce Mastercard too early while the
+  // user is still typing 55 / 558 because those prefixes are ambiguous.
   if (pan.startsWith('5585')) return 'market-cash';
+  if (pan === '5' || pan === '55' || pan === '558') return 'unknown';
+
   if (/^4/.test(pan)) return 'visa';
-  const first4 = Number(pan.slice(0, 4));
+
   const first2 = Number(pan.slice(0, 2));
-  if ((first2 >= 51 && first2 <= 55) || (first4 >= 2221 && first4 <= 2720)) return 'mastercard';
+  const first4 = Number(pan.slice(0, 4));
+  if (pan.length >= 2 && first2 >= 51 && first2 <= 54) return 'mastercard';
+  if (pan.length >= 4 && first2 === 55) return 'mastercard';
+  if (pan.length >= 4 && first4 >= 2221 && first4 <= 2720) return 'mastercard';
+
   if (/^3[47]/.test(pan)) return 'amex';
   if (/^(6011|65|64[4-9])/.test(pan)) return 'discover';
   return 'unknown';
