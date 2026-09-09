@@ -3,7 +3,10 @@ import { auth } from '../lib/firebase';
 let installed = false;
 const paymentAttempts = new Map<string, { id: string; createdAt: number }>();
 const PAYMENT_ATTEMPT_TTL_MS = 5 * 60 * 1000;
-const GENERATION_API_BASE_URL = String(import.meta.env.VITE_GENERATION_API_BASE_URL || '').trim().replace(/\/+$/, '');
+const DEFAULT_GENERATION_API_BASE_URL = 'https://mungwele-ia-studio-git-582509216306.europe-west1.run.app';
+const GENERATION_API_BASE_URL = String(
+  import.meta.env.VITE_GENERATION_API_BASE_URL || DEFAULT_GENERATION_API_BASE_URL,
+).trim().replace(/\/+$/, '');
 
 function paymentAttemptId(userId: string, init: RequestInit) {
   let targetKey = 'market-cash-purchase';
