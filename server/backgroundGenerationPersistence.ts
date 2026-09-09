@@ -8,6 +8,7 @@ import { recordProviderWalletConsumption } from './providerWallet';
 const TARGETS = new Map([
   ['/api/generate/image', 'image'],
   ['/api/generate/video', 'video'],
+  ['/api/generate/music', 'music'],
 ]);
 
 const originalPost = express.application.post;
@@ -20,7 +21,9 @@ function extensionFor(type: string, mime = '') {
   if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
   if (mime.includes('webp')) return 'webp';
   if (mime.includes('mp4')) return 'mp4';
-  return type === 'image' ? 'png' : 'mp4';
+  if (mime.includes('mpeg') || mime.includes('mp3')) return 'mp3';
+  if (mime.includes('wav')) return 'wav';
+  return type === 'image' ? 'png' : type === 'music' ? 'mp3' : 'mp4';
 }
 
 function sanitizeFirestore<T>(value: T): T {
@@ -63,7 +66,15 @@ async function persistMedia(userId: string, generation: any) {
     });
     const bucket = adminStorage.bucket().name;
     const url = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
-    return { ...generation, resultUrl: url, thumbnailUrl: generation.type === 'image' ? url : (generation.thumbnailUrl || url) };
+    return {
+      ...generation,
+      resultUrl: url,
+      thumbnailUrl: generation.type === 'image'
+        ? url
+        : generation.type === 'music'
+          ? (generation.thumbnailUrl || '')
+          : (generation.thumbnailUrl || url),
+    };
   } catch (error) {
     console.warn('[BACKGROUND_MEDIA_PERSISTENCE_WARNING]', error);
     return generation;
@@ -124,7 +135,7 @@ function backgroundGenerationMiddleware(kind: string) {
     const jobId = `job-${kind}-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const jobRef = adminDb.collection('generationJobs').doc(jobId);
     try {
-      await jobRef.set({ id: jobId, userId: uid, type: kind, status: 'processing', progress: 5, promptPreview: String(req.body?.prompt || '').slice(0, 160), createdAt: iso(), updatedAt: iso() });
+      await jobRef.set({ id: jobId, userId: uid, type: kind, status: 'processing', progress: 5, promptPreview: String(req.body?.prompt || req.body?.description || '').slice(0, 160), createdAt: iso(), updatedAt: iso() });
     } catch (error) {
       console.warn('[BACKGROUND_JOB_CREATE_WARNING]', error);
     }
