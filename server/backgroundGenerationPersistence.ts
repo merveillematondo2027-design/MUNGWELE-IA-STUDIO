@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { adminAuth, adminDb, adminStorage } from './firebaseAdmin';
+import { loadMediaSource } from './mediaSource';
 import { recordProviderWalletConsumption } from './providerWallet';
 
 const TARGETS = new Map([
@@ -22,6 +23,21 @@ function extensionFor(type: string, mime = '') {
   return type === 'image' ? 'png' : 'mp4';
 }
 
+function sanitizeFirestore<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.filter((item) => item !== undefined).map((item) => sanitizeFirestore(item)) as T;
+  }
+  if (value && typeof value === 'object') {
+    const output: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (child === undefined) continue;
+      output[key] = sanitizeFirestore(child);
+    }
+    return output as T;
+  }
+  return value;
+}
+
 async function authenticatedUid(req: Request) {
   const header = String(req.headers.authorization || '');
   if (!header.startsWith('Bearer ')) return null;
@@ -35,24 +51,16 @@ async function persistMedia(userId: string, generation: any) {
   const source = String(generation?.resultUrl || '');
   if (!source || source.includes('firebasestorage.googleapis.com')) return generation;
   try {
-    let bytes: Buffer;
-    let mime = '';
-    if (source.startsWith('data:')) {
-      const match = /^data:([^;]+);base64,(.+)$/s.exec(source);
-      if (!match) return generation;
-      mime = match[1];
-      bytes = Buffer.from(match[2], 'base64');
-    } else {
-      const response = await fetch(source);
-      if (!response.ok) return generation;
-      mime = response.headers.get('content-type') || '';
-      bytes = Buffer.from(await response.arrayBuffer());
-    }
-    const ext = extensionFor(generation.type, mime);
+    const loaded = await loadMediaSource(source);
+    const ext = extensionFor(generation.type, loaded.mime);
     const token = randomUUID();
     const objectPath = `users/${userId}/generations/${generation.id}/result.${ext}`;
     const file = adminStorage.bucket().file(objectPath);
-    await file.save(bytes, { resumable: false, contentType: mime || undefined, metadata: { metadata: { firebaseStorageDownloadTokens: token } } });
+    await file.save(loaded.bytes, {
+      resumable: false,
+      contentType: loaded.mime || undefined,
+      metadata: { metadata: { firebaseStorageDownloadTokens: token } },
+    });
     const bucket = adminStorage.bucket().name;
     const url = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
     return { ...generation, resultUrl: url, thumbnailUrl: generation.type === 'image' ? url : (generation.thumbnailUrl || url) };
@@ -130,9 +138,10 @@ function backgroundGenerationMiddleware(kind: string) {
         try {
           if (res.statusCode >= 200 && res.statusCode < 300 && body?.generation) {
             const persisted = await persistMedia(uid!, { ...body.generation, userId: uid, billingPending: true, backgroundJobId: jobId });
-            await adminDb.collection('generations').doc(persisted.id).set({ ...persisted, userId: uid, billingPending: true, backgroundJobId: jobId, updatedAt: iso() }, { merge: true });
+            const safeGeneration = sanitizeFirestore({ ...persisted, userId: uid, billingPending: true, backgroundJobId: jobId, updatedAt: iso() });
+            await adminDb.collection('generations').doc(persisted.id).set(safeGeneration, { merge: true });
             await recordProviderWalletConsumption(persisted).catch((error) => console.warn('[PROVIDER_WALLET_CONSUMPTION_WARNING]', error));
-            await jobRef.set({ status: 'completed', progress: 100, generationId: persisted.id, resultUrl: persisted.resultUrl, completedAt: iso(), updatedAt: iso() }, { merge: true });
+            await jobRef.set(sanitizeFirestore({ status: 'completed', progress: 100, generationId: persisted.id, resultUrl: persisted.resultUrl, completedAt: iso(), updatedAt: iso() }), { merge: true });
             body = { ...body, generation: persisted, backgroundJobId: jobId, backgroundAccepted: true };
             setTimeout(() => void settleBilling(uid!, persisted).catch((error) => console.warn('[BACKGROUND_BILLING_WARNING]', error)), 120_000);
           } else {
