@@ -3,6 +3,7 @@ import { auth } from '../lib/firebase';
 let installed = false;
 const paymentAttempts = new Map<string, { id: string; createdAt: number }>();
 const PAYMENT_ATTEMPT_TTL_MS = 5 * 60 * 1000;
+const GENERATION_API_BASE_URL = String(import.meta.env.VITE_GENERATION_API_BASE_URL || '').trim().replace(/\/+$/, '');
 
 function paymentAttemptId(userId: string, init: RequestInit) {
   let targetKey = 'market-cash-purchase';
@@ -48,34 +49,61 @@ function withPaymentAttempt(init: RequestInit, attemptId: string): RequestInit {
   }
 }
 
+function requestUrl(input: RequestInfo | URL) {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
+}
+
+function resolvedApiUrl(input: RequestInfo | URL) {
+  try {
+    return new URL(requestUrl(input), window.location.origin);
+  } catch {
+    return null;
+  }
+}
+
+function directCloudRunPath(pathname: string) {
+  return pathname.startsWith('/api/generate/') || pathname.startsWith('/api/media/download');
+}
+
+function routeToGenerationApi(input: RequestInfo | URL, resolved: URL) {
+  if (!GENERATION_API_BASE_URL || !directCloudRunPath(resolved.pathname)) return input;
+  const targetUrl = `${GENERATION_API_BASE_URL}${resolved.pathname}${resolved.search}`;
+  return input instanceof Request ? new Request(targetUrl, input) : targetUrl;
+}
+
 export function installAuthenticatedApiFetch() {
   if (installed || typeof window === 'undefined') return;
 
   const originalFetch = window.fetch.bind(window);
   const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const resolved = resolvedApiUrl(input);
+    const pathname = resolved?.pathname || requestUrl(input);
     const protectedApi =
-      url.startsWith('/api/generate/')
-      || url.startsWith('/api/media/download')
-      || url.startsWith('/api/market-cash/')
-      || url.startsWith('/api/admin/provider-wallet');
-    if (!protectedApi) return originalFetch(input, init);
+      pathname.startsWith('/api/generate/')
+      || pathname.startsWith('/api/media/download')
+      || pathname.startsWith('/api/market-cash/')
+      || pathname.startsWith('/api/admin/provider-wallet');
+    const routedInput = resolved ? routeToGenerationApi(input, resolved) : input;
+
+    if (!protectedApi) return originalFetch(routedInput, init);
 
     const currentUser = auth.currentUser;
-    if (!currentUser) return originalFetch(input, init);
+    if (!currentUser) return originalFetch(routedInput, init);
 
     const token = await currentUser.getIdToken();
     const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
     headers.set('Authorization', `Bearer ${token}`);
 
     let nextInit: RequestInit = { ...init, headers };
-    if (url.startsWith('/api/market-cash/payments')) {
+    if (pathname.startsWith('/api/market-cash/payments')) {
       const attemptId = paymentAttemptId(currentUser.uid, init);
       headers.set('X-Mungwele-Payment-Attempt', attemptId);
       nextInit = { ...withPaymentAttempt(nextInit, attemptId), headers };
     }
 
-    return originalFetch(input, nextInit);
+    return originalFetch(routedInput, nextInit);
   };
 
   try {
