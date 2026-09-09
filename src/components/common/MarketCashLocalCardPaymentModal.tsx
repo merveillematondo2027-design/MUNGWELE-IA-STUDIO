@@ -21,8 +21,11 @@ export type MarketCashLocalCardPaymentModalProps = {
 
 type CaptureMethod = 'manual' | 'qr' | 'nfc';
 const rails = [
-  { id: 'visa', text: 'VISA' }, { id: 'mastercard', text: 'MC' }, { id: 'google-pay', text: 'G' },
-  { id: 'other', text: '•••' }, { id: 'market-cash', text: 'M-C' },
+  { id: 'visa', mark: 'VISA', label: 'Visa' },
+  { id: 'mastercard', mark: '◉◉', label: 'Mastercard' },
+  { id: 'google-pay', mark: 'G', label: 'Google Pay' },
+  { id: 'other', mark: '•••', label: 'Autres cartes' },
+  { id: 'market-cash', mark: 'M', label: 'Market-Cash' },
 ];
 
 export const MarketCashLocalCardPaymentModal: React.FC<MarketCashLocalCardPaymentModalProps> = ({ target, userId, userEmail, onClose, onSuccess, onMobileMoney }) => {
@@ -40,7 +43,7 @@ export const MarketCashLocalCardPaymentModal: React.FC<MarketCashLocalCardPaymen
   const scannerStopRef = useRef<(() => void) | null>(null);
 
   const network = useMemo(() => detectCardNetwork(cardNumber), [cardNumber]);
-  const networkLabel = cardNumber.replace(/\D/g, '').length >= 4 ? cardNetworkLabel(network) : 'Détection automatique';
+  const networkLabel = network === 'unknown' ? 'Détection automatique' : cardNetworkLabel(network);
 
   const stopScanner = () => {
     scannerStopRef.current?.(); scannerStopRef.current = null;
@@ -128,7 +131,10 @@ export const MarketCashLocalCardPaymentModal: React.FC<MarketCashLocalCardPaymen
     <div className="max-h-[96vh] w-full max-w-lg overflow-y-auto rounded-[28px] border border-white/10 bg-[#0d1420] shadow-2xl">
       <div className="flex items-start justify-between border-b border-white/10 p-5"><div><p className="text-xs text-gray-400">Paiement à MUNGWELE IA STUDIO</p><h3 className="mt-1 text-xl font-black text-white">{target.label}</h3><p className="mt-2 text-3xl font-black text-white">${target.amountUsd.toFixed(2)} <span className="text-xs text-gray-400">USD</span></p></div><button type="button" onClick={onClose} className="rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-gray-400"><X className="h-5 w-5"/></button></div>
       <form onSubmit={submit} className="space-y-5 p-5">
-        <div className="flex items-center justify-between gap-2 overflow-x-auto">{rails.map((rail)=><div key={rail.id} title={rail.id} className={`grid h-11 min-w-11 place-items-center rounded-xl border text-[10px] font-black ${rail.id===network?'border-cyan-400/60 bg-cyan-500/10 text-cyan-200':'border-white/10 bg-white/[0.03] text-gray-400'}`}>{rail.text}</div>)}</div>
+        <div className="flex items-center justify-between gap-2 overflow-x-auto">{rails.map((rail)=>{
+          const active = rail.id === network;
+          return <div key={rail.id} title={rail.label} aria-label={rail.label} className={`grid h-11 min-w-11 place-items-center rounded-xl border px-2 text-[10px] font-black ${active?'border-cyan-400/60 bg-cyan-500/10 text-cyan-200':'border-white/10 bg-white/[0.03] text-gray-400'}`}>{rail.mark}</div>;
+        })}</div>
         <label className="block space-y-2"><span className="text-xs font-bold text-gray-300">Nom du titulaire</span><input value={cardHolder} onChange={(e)=>setCardHolder(e.target.value.slice(0,80))} autoComplete="cc-name" placeholder="NOM DU TITULAIRE" className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm uppercase text-white outline-none focus:border-purple-500"/></label>
         <label className="block space-y-2"><span className="flex items-center justify-between text-xs font-bold text-gray-300"><span>Numéro de carte</span><span className="text-cyan-300">{networkLabel}</span></span><div className="relative"><CreditCard className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"/><input value={cardNumber} onChange={(e)=>{setCaptureMethod('manual');setCardNumber(normalizeCardNumber(e.target.value));setError('')}} inputMode="numeric" autoComplete="cc-number" placeholder="5585 0200 02•• ••••" className="w-full rounded-xl border border-white/10 bg-black/20 py-3.5 pl-11 pr-24 text-sm text-white outline-none focus:border-purple-500"/><div className="absolute inset-y-0 right-2 flex items-center gap-1"><button type="button" onClick={()=>void openScanner()} className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.04]"><ScanLine className="h-4 w-4"/></button><button type="button" onClick={()=>void readNfc()} className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.04]"><Nfc className="h-4 w-4"/></button></div></div></label>
         {scannerOpen&&<div className="rounded-2xl border border-white/10 bg-black/30 p-3"><div className="mb-2 flex justify-between"><span className="text-xs font-bold text-white">Scanner la carte</span><button type="button" onClick={()=>{setScannerOpen(false);stopScanner()}}><X className="h-4 w-4"/></button></div><div className="mx-auto aspect-square max-w-[260px] overflow-hidden rounded-xl bg-black"><video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover"/></div>{scanBusy&&<p className="mt-2 text-center text-xs text-gray-400">Ouverture de la caméra…</p>}</div>}
