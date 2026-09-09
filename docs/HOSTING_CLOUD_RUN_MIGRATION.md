@@ -7,7 +7,7 @@ Séparer proprement le frontend statique de MUNGWELE IA STUDIO et le serveur Nod
 Architecture cible :
 
 - **Firebase Hosting classique** : HTML, CSS, JavaScript, PWA et navigation SPA.
-- **Cloud Run `mungwele-ia-api`** : API Express, générations OpenAI / Gemini / Veo / ElevenLabs, téléchargements, paiements et callbacks.
+- **Cloud Run `mungwele-ia-studio-git`** : API Express, générations OpenAI / Gemini / Veo / ElevenLabs, téléchargements, paiements et callbacks.
 - **Firebase Auth / Firestore / Storage** : identité, données utilisateur, jobs, crédits et médias persistants.
 - **Appels longs** (`/api/generate/**` et `/api/media/download`) : le navigateur appelle **directement Cloud Run** afin de ne pas passer par la limite de requête Firebase Hosting.
 - **API courtes** et callbacks : `/api/**` reste aussi disponible en same-origin via la rewrite Firebase Hosting vers Cloud Run.
@@ -22,7 +22,7 @@ Sources officielles :
 ## Paramètres retenus
 
 - Projet Google Cloud / Firebase : `diablo-design-ai`
-- Service Cloud Run : `mungwele-ia-api`
+- Service Cloud Run : `mungwele-ia-studio-git`
 - Région : `europe-west1`
 - Port conteneur : `8080`
 - Timeout initial : `900s` (15 minutes)
@@ -81,7 +81,7 @@ gcloud secrets list --project=diablo-design-ai
 Premier déploiement minimal avec le secret Gemini déjà connu :
 
 ```bash
-gcloud run deploy mungwele-ia-api \
+gcloud run deploy mungwele-ia-studio-git \
   --source . \
   --project diablo-design-ai \
   --region europe-west1 \
@@ -100,7 +100,7 @@ gcloud run deploy mungwele-ia-api \
 Ajouter ensuite les autres secrets nécessaires au runtime. Exemple de forme générale :
 
 ```bash
-gcloud run services update mungwele-ia-api \
+gcloud run services update mungwele-ia-studio-git \
   --project diablo-design-ai \
   --region europe-west1 \
   --update-secrets OPENAI_API_KEY=NOM_DU_SECRET_OPENAI:latest,ELEVENLABS_API_KEY=NOM_DU_SECRET_ELEVENLABS:latest
@@ -115,7 +115,7 @@ Dans le même projet Google Cloud, `server/firebaseAdmin.ts` peut utiliser **App
 Vérifier le compte de service utilisé :
 
 ```bash
-gcloud run services describe mungwele-ia-api \
+gcloud run services describe mungwele-ia-studio-git \
   --project diablo-design-ai \
   --region europe-west1 \
   --format="value(spec.template.spec.serviceAccountName)"
@@ -126,7 +126,7 @@ Accorder uniquement les rôles nécessaires. Éviter les clés JSON de compte de
 ## 6. Récupérer l'URL Cloud Run
 
 ```bash
-gcloud run services describe mungwele-ia-api \
+gcloud run services describe mungwele-ia-studio-git \
   --project diablo-design-ai \
   --region europe-west1 \
   --format="value(status.url)"
@@ -135,7 +135,7 @@ gcloud run services describe mungwele-ia-api \
 Exemple de résultat :
 
 ```text
-https://mungwele-ia-api-xxxxx-ew.a.run.app
+https://mungwele-ia-studio-git-xxxxx-ew.a.run.app
 ```
 
 ## 7. Tester Cloud Run avant bascule du frontend
@@ -165,7 +165,7 @@ https://diablo-design-ai.web.app,https://diablo-design-ai.firebaseapp.com,https:
 Puis :
 
 ```bash
-gcloud run services update mungwele-ia-api \
+gcloud run services update mungwele-ia-studio-git \
   --project diablo-design-ai \
   --region europe-west1 \
   --set-env-vars "CORS_ALLOWED_ORIGINS=https://diablo-design-ai.web.app,https://diablo-design-ai.firebaseapp.com"
@@ -203,7 +203,7 @@ Le `firebase.json` du dépôt :
 
 - publie `dist/` ;
 - exclut le bundle Node `server.cjs` ;
-- réécrit `/api/**` vers `mungwele-ia-api` en `europe-west1` ;
+- réécrit `/api/**` vers `mungwele-ia-studio-git` en `europe-west1` ;
 - renvoie les autres routes vers `index.html` pour la SPA.
 
 Déploiement :
