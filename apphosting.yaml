@@ -4,3 +4,9 @@ runConfig:
   concurrency: 100
   cpu: 1
   memoryMiB: 1024
+
+env:
+  - variable: GEMINI_API_KEY
+    secret: gemini-api-key
+    availability:
+      - RUNTIME
