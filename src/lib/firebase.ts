@@ -7,7 +7,7 @@ import {
   initializeAuth,
   getAuth,
 } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { firebasePublicConfig } from '../config/firebase';
 
@@ -29,5 +29,15 @@ export const auth = (() => {
   }
 })();
 
-export const db = getFirestore(firebaseApp);
+// Generation settings are assembled from optional media inputs. Firestore must
+// omit absent optional fields instead of rejecting the whole generation write.
+export const db = (() => {
+  try {
+    return initializeFirestore(firebaseApp, { ignoreUndefinedProperties: true });
+  } catch {
+    // During HMR Firestore can already be initialized.
+    return getFirestore(firebaseApp);
+  }
+})();
+
 export const storage = getStorage(firebaseApp);
