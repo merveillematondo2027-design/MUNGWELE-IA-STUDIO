@@ -62,6 +62,15 @@ export async function generateVideo(
     });
   }
 
+  // MUNGWELE exposes Veo Lite as prompt-only. Block image payloads here too so
+  // an old client or resumed project can never reach the provider with inline/image data.
+  if (options.model === 'lite' && (options.startImage || options.endImage)) {
+    throw Object.assign(new Error('Veo 3.1 Lite ne prend pas en charge l’image de référence dans MUNGWELE. Utilisez Gemini Omni Fast.'), {
+      status: 400,
+      code: 'LITE_REFERENCE_IMAGE_UNSUPPORTED',
+    });
+  }
+
   const first = dataUrlToSdkImage(options.startImage);
   const last = dataUrlToSdkImage(options.endImage);
   if (last && !first) {
