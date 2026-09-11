@@ -10,3 +10,7 @@ env:
     secret: gemini-api-key
     availability:
       - RUNTIME
+  - variable: MARKET_CASH_API_KEY
+    secret: market-cash-api-key
+    availability:
+      - RUNTIME
