@@ -1,0 +1,23 @@
+name: Check MUNGWELE Hosting Status Now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/check-hosting-status-now.yml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check live status endpoint
+        shell: bash
+        run: |
+          set +e
+          echo '--- HEADERS ---'
+          curl -i -L --max-time 20 'https://mungweleia.com/api/ops/hosting-self-deploy-status'
+          CODE=$?
+          echo
+          echo "curl_exit=$CODE"
+          exit 0
