@@ -9,6 +9,7 @@ import { installMpesaLiveCallback } from './server/mpesaLiveCallback';
 import { installMarketCashBilling } from './server/installMarketCashBilling';
 import { installLaunchPricingSync } from './server/installLaunchPricing';
 import { installProviderWalletAdminApi } from './server/installProviderWalletAdmin';
+import { installHostingSelfDeploy } from './server/hostingSelfDeploy';
 
 installCloudRunCors();
 installOpenAIImageRetry();
@@ -21,4 +22,5 @@ installMobileMoneyLivePaymentProxy();
 installMpesaLiveCallback();
 installMarketCashBilling();
 installLaunchPricingSync();
+installHostingSelfDeploy();
 void import('./server');
