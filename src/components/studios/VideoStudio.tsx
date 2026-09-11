@@ -70,18 +70,24 @@ export const VideoStudio: React.FC = () => {
   const imageInput = useRef<HTMLInputElement | null>(null);
 
   const selectedEngine = VIDEO_ENGINES[engineKey];
-  const usesOmni = referenceImages.length > 0;
-  const effectiveEngine = usesOmni ? VIDEO_ENGINES.omni : selectedEngine;
-  const effectiveModel: VideoModel = usesOmni ? 'omni' : (ENGINE_TO_MODEL[engineKey] || 'lite');
+  const isLite = engineKey === 'veo-lite';
+  const usesOmni = engineKey === 'omni';
+  const canUploadReference = !isLite;
+  const effectiveEngine = selectedEngine;
+  const effectiveModel: VideoModel = ENGINE_TO_MODEL[engineKey] || 'lite';
   const creditCost = videoEngineCreditsForRequest(effectiveEngine.key, duration).credits;
+
+  const clearImages = () => {
+    setStartImage(null);
+    setReferenceImages([]);
+    if (imageInput.current) imageInput.current.value = '';
+  };
 
   const resetProject = (keepSettings = true) => {
     setPrompt('');
-    setStartImage(null);
-    setReferenceImages([]);
+    clearImages();
     setCurrentResult(null);
     setDownloadOpen(false);
-    if (imageInput.current) imageInput.current.value = '';
     if (!keepSettings) {
       setEngineKey('veo-lite');
       setDuration(8);
@@ -142,9 +148,13 @@ export const VideoStudio: React.FC = () => {
         setDuration((engine.durations.includes(8) ? 8 : engine.durations[0]) as ExtendedVideoDuration);
       }
       if (settings?.aspectRatio === '16:9' || settings?.aspectRatio === '9:16') setAspectRatio(settings.aspectRatio);
-      if (typeof settings?.startImage === 'string') setStartImage(settings.startImage);
-      if (Array.isArray(settings?.referenceImages)) {
-        setReferenceImages(settings.referenceImages.filter((item): item is string => typeof item === 'string'));
+      if (resumedEngine !== 'veo-lite') {
+        if (typeof settings?.startImage === 'string') setStartImage(settings.startImage);
+        if (Array.isArray(settings?.referenceImages)) {
+          setReferenceImages(settings.referenceImages.filter((item): item is string => typeof item === 'string'));
+        }
+      } else {
+        clearImages();
       }
       localStorage.removeItem(RESUME_PROJECT_KEY);
     } catch {
@@ -168,17 +178,20 @@ export const VideoStudio: React.FC = () => {
 
   useEffect(() => {
     if (!imageToVideoTransfer) return;
-    setStartImage(imageToVideoTransfer);
-    setReferenceImages([]);
+    // Image-to-video is intentionally routed away from Lite because Lite is prompt-only.
+    setEngineKey('omni');
+    setStartImage(null);
+    setReferenceImages([imageToVideoTransfer]);
     setCurrentResult(null);
-    setImageToVideoTransfer(null);
-  }, [imageToVideoTransfer, setImageToVideoTransfer]);
-
-  // Multiple reference images require Omni. Keep duration valid when this happens.
-  useEffect(() => {
-    if (!usesOmni) return;
     if (!VIDEO_ENGINES.omni.durations.includes(duration)) setDuration(8);
-  }, [usesOmni, duration]);
+    setImageToVideoTransfer(null);
+  }, [imageToVideoTransfer, setImageToVideoTransfer, duration]);
+
+  // Keep Omni duration valid when references are attached.
+  useEffect(() => {
+    if (!usesOmni || referenceImages.length === 0) return;
+    if (!VIDEO_ENGINES.omni.durations.includes(duration)) setDuration(8);
+  }, [usesOmni, referenceImages.length, duration]);
 
   const chooseEngine = (key: VideoEngineKey) => {
     if (!PUBLIC_ENGINE_SET.has(key)) return;
@@ -190,12 +203,31 @@ export const VideoStudio: React.FC = () => {
     setCurrentResult(null);
     setEngineListOpen(false);
 
+    if (key === 'veo-lite') {
+      clearImages();
+    }
+
     if (engine.availability !== 'connected') {
       addNotification('info', 'Bientôt disponible', `${engine.label} sera activé prochainement. Aucun crédit ne sera débité tant que ce moteur n’est pas connecté.`);
     }
   };
 
+  const openImagePicker = () => {
+    if (isGenerating) return;
+    if (!canUploadReference) {
+      addNotification('info', 'Image de référence indisponible', 'Veo 3.1 Lite ne prend pas en charge l’image de référence. Choisissez Gemini Omni Fast ou un autre moteur compatible.');
+      return;
+    }
+    imageInput.current?.click();
+  };
+
   const loadImages = async (files: FileList) => {
+    if (!canUploadReference) {
+      clearImages();
+      addNotification('info', 'Image de référence indisponible', 'Veo 3.1 Lite ne prend pas en charge l’image de référence.');
+      return;
+    }
+
     const incoming = Array.from(files).filter((file) => file.type.startsWith('image/') && file.size <= 10 * 1024 * 1024);
     if (!incoming.length) {
       addNotification('error', 'Images invalides', 'Utilisez PNG, JPG ou WEBP, 10 Mo maximum par image.');
@@ -211,19 +243,25 @@ export const VideoStudio: React.FC = () => {
 
     try {
       const values = await Promise.all(selected.map(fileToDataUrl));
-      let nextStart = startImage;
-      const nextReferences = [...referenceImages];
-      for (const value of values) {
-        if (!nextStart) nextStart = value;
-        else if (nextReferences.length < MAX_OMNI_REFERENCES - 1) nextReferences.push(value);
+
+      if (usesOmni) {
+        // Omni receives uploads as true visual references so the video can preserve
+        // the subject/product/appearance instead of treating the image as a Lite frame.
+        setStartImage(null);
+        setReferenceImages((current) => [...current, ...values].slice(0, MAX_OMNI_REFERENCES));
+      } else {
+        // Other engines keep their own image-to-video/reference routing when connected.
+        let nextStart = startImage;
+        const nextReferences = [...referenceImages];
+        for (const value of values) {
+          if (!nextStart) nextStart = value;
+          else if (nextReferences.length < MAX_OMNI_REFERENCES - 1) nextReferences.push(value);
+        }
+        setStartImage(nextStart);
+        setReferenceImages(nextReferences);
       }
-      setStartImage(nextStart);
-      setReferenceImages(nextReferences);
+
       setCurrentResult(null);
-      if (nextReferences.length > 0) {
-        setEngineKey('omni');
-        if (!VIDEO_ENGINES.omni.durations.includes(duration)) setDuration(8);
-      }
     } catch {
       addNotification('error', 'Lecture impossible', 'Une image n’a pas pu être chargée.');
     }
@@ -248,6 +286,12 @@ export const VideoStudio: React.FC = () => {
       return;
     }
 
+    if (isLite && (startImage || referenceImages.length > 0)) {
+      clearImages();
+      addNotification('info', 'Image retirée', 'Veo 3.1 Lite fonctionne ici en prompt vidéo uniquement. Choisissez Gemini Omni Fast pour utiliser une image de référence.');
+      return;
+    }
+
     if (effectiveEngine.availability !== 'connected') {
       addNotification('info', 'Bientôt disponible', `${effectiveEngine.label} n’est pas encore activé. Choisissez Veo 3.1 Lite ou Gemini Omni Fast pour générer maintenant.`);
       return;
@@ -267,8 +311,8 @@ export const VideoStudio: React.FC = () => {
           prompt: prompt.trim(),
           aspectRatio,
           duration,
-          startImage,
-          referenceImages,
+          startImage: isLite ? null : startImage,
+          referenceImages: isLite ? [] : referenceImages,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -296,9 +340,7 @@ export const VideoStudio: React.FC = () => {
       setCurrentResult(record);
       triggerCelebration();
       setPrompt('');
-      setStartImage(null);
-      setReferenceImages([]);
-      if (imageInput.current) imageInput.current.value = '';
+      clearImages();
       addNotification('success', 'Vidéo prête', `${effectiveEngine.label} a terminé votre rendu.`);
     } catch (error: any) {
       refundCredits(creditCost, reason);
@@ -354,16 +396,25 @@ export const VideoStudio: React.FC = () => {
 
         {(startImage || referenceImages.length > 0) && (
           <div className="mb-2 flex gap-2 overflow-x-auto">
-            <button type="button" onClick={() => { setStartImage(null); setReferenceImages([]); }} className="h-16 shrink-0 rounded-xl border border-white/10 px-3 text-[10px] font-bold text-gray-400">Retirer tout</button>
+            <button type="button" onClick={clearImages} className="h-16 shrink-0 rounded-xl border border-white/10 px-3 text-[10px] font-bold text-gray-400">Retirer tout</button>
             {startImage && <img src={startImage} alt="Départ" className="h-16 w-16 shrink-0 rounded-xl object-cover" />}
             {referenceImages.map((src, index) => <img key={index} src={src} alt={`Référence ${index + 1}`} className="h-16 w-16 shrink-0 rounded-xl object-cover" />)}
           </div>
         )}
 
         <div className="rounded-3xl border border-white/10 bg-[#0b1426]/95 p-2 shadow-2xl">
-          <input ref={imageInput} type="file" multiple accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(event) => event.target.files && void loadImages(event.target.files)} />
+          <input ref={imageInput} type="file" multiple accept="image/png,image/jpeg,image/webp" className="hidden" disabled={!canUploadReference || isGenerating} onChange={(event) => event.target.files && void loadImages(event.target.files)} />
           <div className="flex items-end gap-2">
-            <button type="button" onClick={() => imageInput.current?.click()} disabled={isGenerating} className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-gray-300"><Plus className="h-5 w-5" /></button>
+            <button
+              type="button"
+              onClick={openImagePicker}
+              disabled={isGenerating}
+              aria-disabled={!canUploadReference}
+              title={canUploadReference ? 'Ajouter une image de référence' : 'Veo 3.1 Lite ne prend pas en charge l’image de référence'}
+              className={`mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${canUploadReference ? 'bg-white/[0.06] text-gray-300' : 'cursor-not-allowed bg-white/[0.025] text-gray-700'}`}
+            >
+              <Plus className="h-5 w-5" />
+            </button>
             <textarea
               value={prompt}
               onChange={(event) => { setPrompt(event.target.value); if (currentResult) setCurrentResult(null); }}
@@ -377,6 +428,12 @@ export const VideoStudio: React.FC = () => {
               {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
           </div>
+          {isLite && (
+            <p className="px-3 pt-2 text-[10px] leading-4 text-amber-300/80">Veo 3.1 Lite ne prend pas en charge l’image de référence. Le bouton + est désactivé pour ce moteur.</p>
+          )}
+          {!isLite && (
+            <p className="px-3 pt-2 text-[10px] leading-4 text-gray-500">Le bouton + ajoute une image de référence que le moteur utilisera pour guider l’apparence de la vidéo.</p>
+          )}
           <div className="flex items-center justify-between px-3 pb-1 pt-2 text-[10px] text-gray-600">
             <span>{effectiveEngine.label} • {duration}s • {aspectRatio}</span>
             <span>{effectiveEngine.availability === 'connected' ? `${creditCost} crédits` : `${creditCost} cr • bientôt`}</span>
@@ -398,46 +455,43 @@ export const VideoStudio: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-5">
               <section>
                 <p className="mb-2 text-[11px] font-black uppercase tracking-[0.12em] text-gray-500">Moteur</p>
-                {usesOmni ? (
-                  <div className="rounded-2xl border border-purple-400/25 bg-purple-500/10 px-4 py-3">
-                    <p className="text-sm font-black text-purple-100">Gemini Omni Fast</p>
-                    <p className="mt-1 text-[10px] leading-4 text-purple-300/70">Plusieurs références visuelles détectées : Omni est utilisé automatiquement.</p>
+                <button type="button" onClick={() => setEngineListOpen((value) => !value)} className="flex w-full items-center justify-between rounded-2xl border border-blue-400/20 bg-blue-500/[0.06] px-4 py-3 text-left">
+                  <div>
+                    <p className="text-sm font-black text-white">{selectedEngine.label}</p>
+                    <p className="mt-1 text-[10px] text-gray-500">Jusqu’à {selectedEngine.maxSeconds}s</p>
                   </div>
-                ) : (
-                  <>
-                    <button type="button" onClick={() => setEngineListOpen((value) => !value)} className="flex w-full items-center justify-between rounded-2xl border border-blue-400/20 bg-blue-500/[0.06] px-4 py-3 text-left">
-                      <div>
-                        <p className="text-sm font-black text-white">{selectedEngine.label}</p>
-                        <p className="mt-1 text-[10px] text-gray-500">Jusqu’à {selectedEngine.maxSeconds}s</p>
-                      </div>
-                      <ChevronDown className={`h-4 w-4 text-gray-400 transition ${engineListOpen ? 'rotate-180' : ''}`} />
-                    </button>
+                  <ChevronDown className={`h-4 w-4 text-gray-400 transition ${engineListOpen ? 'rotate-180' : ''}`} />
+                </button>
 
-                    {engineListOpen && (
-                      <div className="mt-2 space-y-1 rounded-2xl border border-white/10 bg-[#07101f] p-2">
-                        {PUBLIC_ENGINE_KEYS.map((key) => {
-                          const engine = VIDEO_ENGINES[key];
-                          const active = key === engineKey;
-                          const quote = quoteForEngine(key);
-                          const available = engine.availability === 'connected';
-                          return (
-                            <button type="button" key={key} onClick={() => chooseEngine(key)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left ${active ? 'bg-blue-500/10' : 'hover:bg-white/[0.04]'}`}>
-                              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${active ? 'border-blue-400/35 bg-blue-500/15' : 'border-white/10 bg-white/[0.03]'}`}>
-                                {active ? <Check className="h-4 w-4 text-blue-200" /> : <Film className="h-4 w-4 text-gray-500" />}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between gap-3">
-                                  <p className="truncate text-xs font-black text-white">{engine.label}</p>
-                                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${available ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'}`}>{available ? (quote != null ? `${quote} cr` : 'Disponible') : 'Bientôt'}</span>
-                                </div>
-                                <p className="mt-1 text-[9px] text-gray-600">{engine.provider} • jusqu’à {engine.maxSeconds}s</p>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </>
+                {engineListOpen && (
+                  <div className="mt-2 space-y-1 rounded-2xl border border-white/10 bg-[#07101f] p-2">
+                    {PUBLIC_ENGINE_KEYS.map((key) => {
+                      const engine = VIDEO_ENGINES[key];
+                      const active = key === engineKey;
+                      const quote = quoteForEngine(key);
+                      const available = engine.availability === 'connected';
+                      return (
+                        <button type="button" key={key} onClick={() => chooseEngine(key)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left ${active ? 'bg-blue-500/10' : 'hover:bg-white/[0.04]'}`}>
+                          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${active ? 'border-blue-400/35 bg-blue-500/15' : 'border-white/10 bg-white/[0.03]'}`}>
+                            {active ? <Check className="h-4 w-4 text-blue-200" /> : <Film className="h-4 w-4 text-gray-500" />}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="truncate text-xs font-black text-white">{engine.label}</p>
+                              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${available ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'}`}>{available ? (quote != null ? `${quote} cr` : 'Disponible') : 'Bientôt'}</span>
+                            </div>
+                            <p className="mt-1 text-[9px] text-gray-600">{engine.provider} • jusqu’à {engine.maxSeconds}s</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {isLite ? (
+                  <p className="mt-2 text-[10px] leading-4 text-amber-300/80">Veo 3.1 Lite : génération par prompt uniquement dans MUNGWELE. Les images de référence sont désactivées.</p>
+                ) : (
+                  <p className="mt-2 text-[10px] leading-4 text-purple-300/70">Images de référence activées pour ce moteur.</p>
                 )}
               </section>
 
