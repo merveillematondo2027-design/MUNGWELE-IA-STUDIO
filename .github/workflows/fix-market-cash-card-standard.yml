@@ -14,23 +14,41 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Update Mungwele Market-Cash card prefix
+      - name: Relax Mungwele local Market-Cash PAN gate
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path('server/marketCashPaymentProxy.ts')
-          s = p.read_text()
-          old = '4585020002'
-          new = '5585020002'
-          if old not in s:
-              raise SystemExit('Old Market-Cash card prefix not found')
-          s = s.replace(old, new)
-          p.write_text(s)
+
+          files = [
+              Path('server/marketCashPaymentProxy.ts'),
+              Path('src/components/common/MarketCashLocalCardPaymentModal.tsx'),
+          ]
+
+          replacements = [
+              (r'^5585020002\\d{6}$', r'^5585\\d{12}$'),
+          ]
+
+          changed = []
+          for p in files:
+              s = p.read_text()
+              original = s
+              for old, new in replacements:
+                  s = s.replace(old, new)
+              if s != original:
+                  p.write_text(s)
+                  changed.append(str(p))
+
+          if not changed:
+              raise SystemExit('No Market-Cash validation pattern was changed')
+
+          marker = Path('docs/.market-cash-card-v5-deploy')
+          marker.write_text('Market-Cash PAN validation delegated to Market-Cash API after 5585/16-digit sanity check.\n')
+          print('Changed:', ', '.join(changed))
           PY
       - name: Commit patch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/marketCashPaymentProxy.ts
-          git commit -m "Use current Market-Cash 5585 card standard"
+          git add server/marketCashPaymentProxy.ts src/components/common/MarketCashLocalCardPaymentModal.tsx docs/.market-cash-card-v5-deploy
+          git commit -m "Fix Market-Cash card validation and force redeploy"
           git push
