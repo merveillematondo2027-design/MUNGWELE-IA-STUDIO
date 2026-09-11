@@ -1,0 +1,34 @@
+name: Watch MUNGWELE Hosting Self Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/watch-hosting-self-deploy.yml'
+  workflow_dispatch:
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Cloud Run deploy and Hosting release
+        shell: bash
+        run: |
+          set -u
+          URL='https://mungweleia.com/api/ops/hosting-self-deploy-status'
+          for i in $(seq 1 30); do
+            echo "Attempt $i/30"
+            BODY=$(curl -fsS --max-time 15 "$URL" 2>/dev/null || true)
+            echo "$BODY"
+            if echo "$BODY" | grep -q '"status":"success"'; then
+              echo 'Hosting self deploy succeeded.'
+              exit 0
+            fi
+            if echo "$BODY" | grep -q '"status":"error"'; then
+              echo 'Hosting self deploy reported an error.'
+              exit 2
+            fi
+            sleep 20
+          done
+          echo 'Timed out waiting for Hosting self deploy.'
+          exit 3
