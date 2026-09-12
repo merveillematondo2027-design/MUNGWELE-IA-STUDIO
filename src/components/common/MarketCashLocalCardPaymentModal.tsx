@@ -34,8 +34,8 @@ export const MarketCashLocalCardPaymentModal: React.FC<MarketCashLocalCardPaymen
 
   const pan = cardNumber.replace(/\D/g, '');
   const securityCode = cvv.replace(/\D/g, '');
-  const cardValid = /^5585020002\d{6}$/.test(pan);
-  const formComplete = cardHolder.trim().length >= 2 && cardValid && /^\d{2}\/\d{2}$/.test(expiry) && /^\d{3}$/.test(securityCode);
+  const cardNumberComplete = /^\d{16}$/.test(pan);
+  const formComplete = cardHolder.trim().length >= 2 && cardNumberComplete && /^\d{2}\/\d{2}$/.test(expiry) && /^\d{3}$/.test(securityCode);
 
   const stopScanner = () => {
     scannerStopRef.current?.();
@@ -50,11 +50,12 @@ export const MarketCashLocalCardPaymentModal: React.FC<MarketCashLocalCardPaymen
 
   const applyPayload = async (raw: string, method: CaptureMethod) => {
     const parsed = await resolveMarketCashCardPayload(raw);
-    if (!parsed.cardNumber) throw new Error('Carte Market-Cash non reconnue.');
+    if (!parsed.cardNumber) throw new Error('Numéro de carte introuvable dans les données lues.');
     setCardNumber(normalizeCardNumber(parsed.cardNumber));
     if (parsed.cardHolder) setCardHolder(parsed.cardHolder);
     if (parsed.expiry) setExpiry(parsed.expiry);
     setCvv('');
+    setError('');
     setCaptureMethod(method);
     setScannerOpen(false);
     stopScanner();
@@ -114,7 +115,7 @@ export const MarketCashLocalCardPaymentModal: React.FC<MarketCashLocalCardPaymen
         reader.onreading = (event: any) => {
           clearTimeout(timer);
           const record = Array.from(event?.message?.records || []).find((r: any) => r?.data) as any;
-          if (!record?.data) return reject(new Error('Carte NFC non reconnue.'));
+          if (!record?.data) return reject(new Error('Données NFC illisibles.'));
           resolve(new TextDecoder().decode(record.data).replace(/^\u0002[a-z]{2}/i, '').trim());
         };
       });
@@ -129,9 +130,9 @@ export const MarketCashLocalCardPaymentModal: React.FC<MarketCashLocalCardPaymen
     setError('');
     setSuccess('');
     if (cardHolder.trim().length < 2) return setError('Nom du titulaire requis.');
-    if (!cardValid) return setError('Numéro de carte locale Market-Cash invalide.');
+    if (!cardNumberComplete) return setError('Le numéro de carte doit contenir 16 chiffres.');
     if (!/^\d{2}\/\d{2}$/.test(expiry)) return setError('Date attendue au format MM/AA.');
-    if (!/^\d{3}$/.test(securityCode)) return setError('CVV Market-Cash invalide.');
+    if (!/^\d{3}$/.test(securityCode)) return setError('Le CVV doit contenir 3 chiffres.');
 
     setBusy(true);
     try {
@@ -168,18 +169,18 @@ export const MarketCashLocalCardPaymentModal: React.FC<MarketCashLocalCardPaymen
       </div>
 
       <form onSubmit={submit} className="space-y-5 p-5">
-        <div className="flex gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-950/20 p-4"><ShieldCheck className="h-5 w-5 shrink-0 text-emerald-300" /><p className="text-xs leading-5 text-gray-300">Saisissez votre carte Market-Cash, scannez son QR ou utilisez NFC. Le CVV reste toujours saisi manuellement.</p></div>
+        <div className="flex gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-950/20 p-4"><ShieldCheck className="h-5 w-5 shrink-0 text-emerald-300" /><p className="text-xs leading-5 text-gray-300">Saisissez les informations de votre carte Market-Cash, scannez son QR ou utilisez NFC. Market-Cash vérifie ensuite la carte et autorise ou refuse le paiement.</p></div>
 
-        <label className="block space-y-2"><span className="text-xs font-bold text-gray-300">Nom du titulaire</span><input value={cardHolder} onChange={(e) => setCardHolder(e.target.value.slice(0, 80))} autoComplete="cc-name" placeholder="NOM DU TITULAIRE" className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm uppercase text-white outline-none focus:border-purple-500" /></label>
+        <label className="block space-y-2"><span className="text-xs font-bold text-gray-300">Nom du titulaire</span><input value={cardHolder} onChange={(e) => { setCardHolder(e.target.value.slice(0, 80)); setError(''); }} autoComplete="cc-name" placeholder="NOM DU TITULAIRE" className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm uppercase text-white outline-none focus:border-purple-500" /></label>
 
         <label className="block space-y-2">
-          <span className="flex items-center justify-between text-xs font-bold text-gray-300"><span>Numéro de carte</span><span className="text-cyan-300">Détection Market-Cash</span></span>
-          <div className="relative"><CreditCard className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" /><input value={cardNumber} onChange={(e) => { setCaptureMethod('manual'); setCardNumber(normalizeCardNumber(e.target.value)); setError(''); }} inputMode="numeric" autoComplete="cc-number" placeholder="5585 0200 02•• ••••" className="w-full rounded-2xl border border-white/10 bg-black/20 py-3.5 pl-11 pr-24 text-sm text-white outline-none focus:border-purple-500" /><div className="absolute inset-y-0 right-2 flex items-center gap-1"><button type="button" onClick={() => void openScanner()} className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.04]" aria-label="Scanner le QR"><ScanLine className="h-4 w-4" /></button><button type="button" onClick={() => void readNfc()} className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.04]" aria-label="Lire par NFC"><Nfc className="h-4 w-4" /></button></div></div>
+          <span className="flex items-center justify-between text-xs font-bold text-gray-300"><span>Numéro de carte</span><span className="text-cyan-300">Paiement Market-Cash</span></span>
+          <div className="relative"><CreditCard className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" /><input value={cardNumber} onChange={(e) => { setCaptureMethod('manual'); setCardNumber(normalizeCardNumber(e.target.value)); setError(''); }} inputMode="numeric" autoComplete="cc-number" placeholder="0000 0000 0000 0000" className="w-full rounded-2xl border border-white/10 bg-black/20 py-3.5 pl-11 pr-24 text-sm text-white outline-none focus:border-purple-500" /><div className="absolute inset-y-0 right-2 flex items-center gap-1"><button type="button" onClick={() => void openScanner()} className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.04]" aria-label="Scanner le QR"><ScanLine className="h-4 w-4" /></button><button type="button" onClick={() => void readNfc()} className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.04]" aria-label="Lire par NFC"><Nfc className="h-4 w-4" /></button></div></div>
         </label>
 
         {scannerOpen && <div className="rounded-2xl border border-white/10 bg-black/30 p-3"><div className="mb-2 flex justify-between"><span className="text-xs font-bold text-white">Scanner le QR Market-Cash</span><button type="button" onClick={() => { setScannerOpen(false); stopScanner(); }}><X className="h-4 w-4" /></button></div><div className="mx-auto aspect-square max-w-[260px] overflow-hidden rounded-xl bg-black"><video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" /></div>{scanBusy && <p className="mt-2 text-center text-xs text-gray-400">Ouverture de la caméra…</p>}</div>}
 
-        <div className="grid grid-cols-2 gap-3"><label className="space-y-2"><span className="text-xs font-bold text-gray-300">Expiration</span><input value={expiry} onChange={(e) => setExpiry(normalizeExpiry(e.target.value))} inputMode="numeric" autoComplete="cc-exp" placeholder="MM/AA" className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none" /></label><label className="space-y-2"><span className="text-xs font-bold text-gray-300">CVV</span><div className="relative"><input value={cvv} onChange={(e) => setCvv(e.target.value.replace(/\D/g, '').slice(0, 3))} type="password" inputMode="numeric" autoComplete="cc-csc" placeholder="•••" className="w-full rounded-2xl border border-amber-500/30 bg-black/20 px-4 py-3.5 pr-10 text-sm text-white outline-none" /><LockKeyhole className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-300" /></div></label></div>
+        <div className="grid grid-cols-2 gap-3"><label className="space-y-2"><span className="text-xs font-bold text-gray-300">Expiration</span><input value={expiry} onChange={(e) => { setExpiry(normalizeExpiry(e.target.value)); setError(''); }} inputMode="numeric" autoComplete="cc-exp" placeholder="MM/AA" className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none" /></label><label className="space-y-2"><span className="text-xs font-bold text-gray-300">CVV</span><div className="relative"><input value={cvv} onChange={(e) => { setCvv(e.target.value.replace(/\D/g, '').slice(0, 3)); setError(''); }} type="password" inputMode="numeric" autoComplete="cc-csc" placeholder="•••" className="w-full rounded-2xl border border-amber-500/30 bg-black/20 px-4 py-3.5 pr-10 text-sm text-white outline-none" /><LockKeyhole className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-300" /></div></label></div>
 
         {error && <div className="rounded-xl border border-rose-500/20 bg-rose-950/25 p-3 text-xs text-rose-200">{error}</div>}
         {success && <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-3 text-xs text-emerald-200"><CheckCircle2 className="h-4 w-4" />{success}</div>}
