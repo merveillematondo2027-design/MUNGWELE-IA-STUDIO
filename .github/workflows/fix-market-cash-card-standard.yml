@@ -1,4 +1,4 @@
-name: Fix Market-Cash card standard
+name: Fix Market-Cash payment delegation
 
 on:
   push:
@@ -14,41 +14,51 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Relax Mungwele local Market-Cash PAN gate
+      - name: Delegate card verdict to Market-Cash
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          files = [
-              Path('server/marketCashPaymentProxy.ts'),
-              Path('src/components/common/MarketCashLocalCardPaymentModal.tsx'),
-          ]
+          proxy = Path('server/marketCashPaymentProxy.ts')
+          s = proxy.read_text()
+          old = """  if (!/^5585020002\\d{6}$/.test(pan)) throw httpError('Numéro de carte locale Market-Cash invalide.', 400, 'CARD_INVALID');
+  if (!cardHolder) throw httpError('Titulaire de carte requis.', 400, 'CARD_HOLDER_REQUIRED');
+"""
+          new = """  // MUNGWELE validates only the transport/form shape. Market-Cash is the
+  // sole authority for card identity, prefix/program, existence and status.
+  if (!/^\\d{16}$/.test(pan)) throw httpError('Le numéro de carte doit contenir 16 chiffres.', 400, 'CARD_NUMBER_FORMAT_INVALID');
+  if (!cardHolder) throw httpError('Titulaire de carte requis.', 400, 'CARD_HOLDER_REQUIRED');
+"""
+          if old not in s:
+              raise SystemExit('Expected backend card gate not found')
+          proxy.write_text(s.replace(old, new, 1))
 
-          replacements = [
-              (r'^5585020002\\d{6}$', r'^5585\\d{12}$'),
-          ]
+          service = Path('src/services/marketCashPaymentService.ts')
+          s = service.read_text()
+          old = """  const pan = digits(params.card.cardNumber);
+  const network = detectCardNetwork(pan);
+  const endpoint = network === 'market-cash' ? '/api/market-cash/payments' : '/api/card-payments/pay';
+  const response = await fetch(endpoint, {
+"""
+          new = """  const pan = digits(params.card.cardNumber);
+  // This function is called only from the Market-Cash local-card checkout.
+  // Do not infer the card network locally: send the form to Market-Cash and
+  // let its API decide whether the card exists and can be charged.
+  const network: CardNetwork = 'market-cash';
+  const endpoint = '/api/market-cash/payments';
+  const response = await fetch(endpoint, {
+"""
+          if old not in s:
+              raise SystemExit('Expected frontend Market-Cash routing block not found')
+          service.write_text(s.replace(old, new, 1))
 
-          changed = []
-          for p in files:
-              s = p.read_text()
-              original = s
-              for old, new in replacements:
-                  s = s.replace(old, new)
-              if s != original:
-                  p.write_text(s)
-                  changed.append(str(p))
-
-          if not changed:
-              raise SystemExit('No Market-Cash validation pattern was changed')
-
-          marker = Path('docs/.market-cash-card-v5-deploy')
-          marker.write_text('Market-Cash PAN validation delegated to Market-Cash API after 5585/16-digit sanity check.\n')
-          print('Changed:', ', '.join(changed))
+          marker = Path('docs/.market-cash-delegated-verdict')
+          marker.write_text('MUNGWELE validates form shape only. Market-Cash owns card validation and authorization.\n')
           PY
-      - name: Commit patch
+      - name: Commit payment flow fix
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/marketCashPaymentProxy.ts src/components/common/MarketCashLocalCardPaymentModal.tsx docs/.market-cash-card-v5-deploy
-          git commit -m "Fix Market-Cash card validation and force redeploy"
+          git add server/marketCashPaymentProxy.ts src/services/marketCashPaymentService.ts docs/.market-cash-delegated-verdict
+          git commit -m "Delegate Market-Cash card validation to Market-Cash API"
           git push
