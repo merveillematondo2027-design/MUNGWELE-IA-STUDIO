@@ -63,7 +63,7 @@ export async function syncLaunchPricingCatalog() {
         supplier: 'Runway Dev', model: 'act_two', usdPerSecond: RUNWAY_ACT_TWO_USD_PER_SECOND, examples: CLIP_LAUNCH_EXAMPLES,
       },
     },
-    pricingSource: 'mungwele-launch-catalog-v4',
+    pricingSource: 'mungwele-subscription-tiers-v5',
     updatedAt: now,
     createdAt: snap.data()?.createdAt || now,
   }, { merge: true });
