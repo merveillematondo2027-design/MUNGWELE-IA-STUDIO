@@ -1,7 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { adminAuth, adminDb } from './firebaseAdmin';
 
-const originalPost = express.application.post;
 let installed = false;
 
 const PLAN_LEVEL: Record<string, number> = {
@@ -121,14 +120,17 @@ export function installVideoEntitlements() {
   if (installed) return;
   installed = true;
 
+  // Capture the post handler at installation time, after all previously installed
+  // route interceptors. This preserves the complete Express middleware chain.
+  const previousPost = express.application.post;
   express.application.post = function patchedPost(route: any, ...handlers: any[]) {
     const isRealRouteDeclaration = typeof route === 'string' && route.startsWith('/') && handlers.length > 0;
-    if (!isRealRouteDeclaration) return originalPost.call(this, route, ...handlers);
+    if (!isRealRouteDeclaration) return previousPost.call(this, route, ...handlers);
 
     if (route === '/api/generate/video') {
-      return originalPost.call(this, route, videoEntitlementMiddleware, ...handlers);
+      return previousPost.call(this, route, videoEntitlementMiddleware, ...handlers);
     }
 
-    return originalPost.call(this, route, ...handlers);
+    return previousPost.call(this, route, ...handlers);
   } as any;
 }
