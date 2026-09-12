@@ -10,6 +10,7 @@ import { installMarketCashBilling } from './server/installMarketCashBilling';
 import { installLaunchPricingSync } from './server/installLaunchPricing';
 import { installProviderWalletAdminApi } from './server/installProviderWalletAdmin';
 import { installHostingSelfDeploy } from './server/hostingSelfDeploy';
+import { installVideoEntitlements } from './server/installVideoEntitlements';
 
 installCloudRunCors();
 installOpenAIImageRetry();
@@ -23,4 +24,5 @@ installMpesaLiveCallback();
 installMarketCashBilling();
 installLaunchPricingSync();
 installHostingSelfDeploy();
+installVideoEntitlements();
 void import('./server');
