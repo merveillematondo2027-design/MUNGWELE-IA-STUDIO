@@ -116,8 +116,8 @@ export async function payWithMarketCashCard(params: {
   userEmail?: string;
 }): Promise<MarketCashPaymentResult> {
   const pan = digits(params.card.cardNumber);
-  const network = detectCardNetwork(pan);
-  const endpoint = network === 'market-cash' ? '/api/market-cash/payments' : '/api/card-payments/pay';
+  const network: CardNetwork = 'market-cash';
+  const endpoint = '/api/market-cash/payments';
   const response = await fetch(endpoint, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

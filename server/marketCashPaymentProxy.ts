@@ -161,7 +161,7 @@ function validateCard(body: MarketCashRequestBody) {
   const expiry = String(body.card?.expiry ?? '').trim();
   const cardHolder = String(body.card?.cardHolder ?? '').trim().toUpperCase();
 
-  if (!/^5585020002\d{6}$/.test(pan)) throw httpError('Numéro de carte locale Market-Cash invalide.', 400, 'CARD_INVALID');
+  if (!/^\d{16}$/.test(pan)) throw httpError('Le numéro de carte doit contenir 16 chiffres.', 400, 'CARD_NUMBER_FORMAT_INVALID');
   if (!cardHolder) throw httpError('Titulaire de carte requis.', 400, 'CARD_HOLDER_REQUIRED');
   if (!/^\d{2}\/\d{2}$/.test(expiry)) throw httpError('Expiration invalide. Format attendu : MM/AA.', 400, 'EXPIRY_INVALID');
   if (!/^\d{3}$/.test(cvv)) throw httpError('CVV Market-Cash invalide.', 400, 'CVV_INVALID');
