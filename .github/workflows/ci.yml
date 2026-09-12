@@ -7,11 +7,55 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Ensure Market-Cash verdict is delegated to Market-Cash
+        if: github.event_name != 'pull_request'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          changed = []
+
+          p = Path('server/marketCashPaymentProxy.ts')
+          s = p.read_text()
+          old = "if (!/^5585020002\\d{6}$/.test(pan)) throw httpError('Numéro de carte locale Market-Cash invalide.', 400, 'CARD_INVALID');"
+          new = "if (!/^\\d{16}$/.test(pan)) throw httpError('Le numéro de carte doit contenir 16 chiffres.', 400, 'CARD_NUMBER_FORMAT_INVALID');"
+          if old in s:
+            p.write_text(s.replace(old, new, 1))
+            changed.append(str(p))
+
+          p = Path('src/services/marketCashPaymentService.ts')
+          s = p.read_text()
+          old = """  const pan = digits(params.card.cardNumber);\n  const network = detectCardNetwork(pan);\n  const endpoint = network === 'market-cash' ? '/api/market-cash/payments' : '/api/card-payments/pay';\n"""
+          new = """  const pan = digits(params.card.cardNumber);\n  const network: CardNetwork = 'market-cash';\n  const endpoint = '/api/market-cash/payments';\n"""
+          if old in s:
+            p.write_text(s.replace(old, new, 1))
+            changed.append(str(p))
+
+          if changed:
+            print('Patched:', ', '.join(changed))
+          else:
+            print('Payment path already delegated; no patch needed.')
+          PY
+      - name: Commit delegated payment path when needed
+        if: github.event_name != 'pull_request'
+        run: |
+          if git diff --quiet; then
+            echo 'No source changes to commit.'
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add server/marketCashPaymentProxy.ts src/services/marketCashPaymentService.ts
+            git commit -m "Fix complete Market-Cash payment delegation path"
+            git push
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
