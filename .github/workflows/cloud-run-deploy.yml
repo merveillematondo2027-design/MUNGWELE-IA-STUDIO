@@ -1,0 +1,133 @@
+name: MUNGWELE IA Cloud Run Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'server-entry.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/cloud-run-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy-cloud-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate project
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run lint
+          npm run build
+
+      - name: Auth candidate 1
+        id: auth1
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/582509216306/locations/global/workloadIdentityPools/github-actions/providers/mungwele-ia'
+          service_account: '582509216306-compute@developer.gserviceaccount.com'
+
+      - name: Setup gcloud after candidate 1
+        if: steps.auth1.outcome == 'success'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Cloud Run with candidate 1
+        id: deploy1
+        if: steps.auth1.outcome == 'success'
+        continue-on-error: true
+        run: |
+          gcloud run deploy mungwele-ia-studio-git \
+            --source . \
+            --region europe-west1 \
+            --project diablo-design-ai \
+            --quiet
+
+      - name: Auth candidate 2
+        id: auth2
+        if: steps.deploy1.outcome != 'success'
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/582509216306/locations/global/workloadIdentityPools/github-actions/providers/github'
+          service_account: '582509216306-compute@developer.gserviceaccount.com'
+
+      - name: Setup gcloud after candidate 2
+        if: steps.auth2.outcome == 'success' && steps.deploy1.outcome != 'success'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Cloud Run with candidate 2
+        id: deploy2
+        if: steps.auth2.outcome == 'success' && steps.deploy1.outcome != 'success'
+        continue-on-error: true
+        run: |
+          gcloud run deploy mungwele-ia-studio-git \
+            --source . \
+            --region europe-west1 \
+            --project diablo-design-ai \
+            --quiet
+
+      - name: Auth candidate 3
+        id: auth3
+        if: steps.deploy1.outcome != 'success' && steps.deploy2.outcome != 'success'
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/582509216306/locations/global/workloadIdentityPools/github-actions/providers/github-actions'
+          service_account: '582509216306-compute@developer.gserviceaccount.com'
+
+      - name: Setup gcloud after candidate 3
+        if: steps.auth3.outcome == 'success' && steps.deploy1.outcome != 'success' && steps.deploy2.outcome != 'success'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Cloud Run with candidate 3
+        id: deploy3
+        if: steps.auth3.outcome == 'success' && steps.deploy1.outcome != 'success' && steps.deploy2.outcome != 'success'
+        continue-on-error: true
+        run: |
+          gcloud run deploy mungwele-ia-studio-git \
+            --source . \
+            --region europe-west1 \
+            --project diablo-design-ai \
+            --quiet
+
+      - name: Auth candidate 4
+        id: auth4
+        if: steps.deploy1.outcome != 'success' && steps.deploy2.outcome != 'success' && steps.deploy3.outcome != 'success'
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/582509216306/locations/global/workloadIdentityPools/github/providers/github'
+          service_account: '582509216306-compute@developer.gserviceaccount.com'
+
+      - name: Setup gcloud after candidate 4
+        if: steps.auth4.outcome == 'success' && steps.deploy1.outcome != 'success' && steps.deploy2.outcome != 'success' && steps.deploy3.outcome != 'success'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Cloud Run with candidate 4
+        id: deploy4
+        if: steps.auth4.outcome == 'success' && steps.deploy1.outcome != 'success' && steps.deploy2.outcome != 'success' && steps.deploy3.outcome != 'success'
+        continue-on-error: true
+        run: |
+          gcloud run deploy mungwele-ia-studio-git \
+            --source . \
+            --region europe-west1 \
+            --project diablo-design-ai \
+            --quiet
+
+      - name: Require successful Cloud Run deployment
+        if: steps.deploy1.outcome != 'success' && steps.deploy2.outcome != 'success' && steps.deploy3.outcome != 'success' && steps.deploy4.outcome != 'success'
+        run: exit 1
