@@ -3,7 +3,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { CalendarClock, Check, CreditCard, Crown, Lock, PackageOpen, Plus, Receipt, RefreshCw, ShieldCheck, Trash2, WalletCards, Zap } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { db } from '../../lib/firebase';
-import { VIDEO_CREDIT_COSTS } from '../../config/commercialPricing';
+import { VIDEO_CREDIT_COSTS, VIDEO_ENGINE_LAUNCH_EXAMPLES } from '../../config/commercialPricing';
 import { MarketCashPaymentModal } from '../common/MarketCashPaymentModal';
 import { MarketCashPaymentMethodModal } from '../common/MarketCashPaymentMethodModal';
 import type { MarketCashPaymentTarget } from '../../services/marketCashPaymentService';
@@ -19,12 +19,13 @@ import {
 type SectionMode = 'choose' | 'credits' | 'subscription' | 'billing';
 type PostPaymentPrompt = 'credits' | 'subscription' | null;
 
-const costLabel = (model: keyof typeof VIDEO_CREDIT_COSTS) => `${VIDEO_CREDIT_COSTS[model][4]} / ${VIDEO_CREDIT_COSTS[model][6]} / ${VIDEO_CREDIT_COSTS[model][8]} crédits`;
+const veoCostLabel = (model: 'lite' | 'fast') => `${VIDEO_CREDIT_COSTS[model][4]} / ${VIDEO_CREDIT_COSTS[model][6]} / ${VIDEO_CREDIT_COSTS[model][8]} cr`;
 const VIDEO_ROWS = [
-  ['Veo 3.1 Lite', costLabel('lite'), '4s / 6s / 8s'],
-  ['Veo 3.1 Fast', costLabel('fast'), '4s / 6s / 8s'],
-  ['Gemini Omni', costLabel('omni'), '4s / 6s / 8s'],
-  ['Veo 3.1 Pro', costLabel('pro'), '4s / 6s / 8s'],
+  ['Veo 3.1 Lite', veoCostLabel('lite'), 'Gratuit • 4 / 6 / 8 s'],
+  ['Veo 3.1 Fast', veoCostLabel('fast'), 'Gratuit • 4 / 6 / 8 s'],
+  ['Gemini Omni Fast', `${VIDEO_ENGINE_LAUNCH_EXAMPLES.omni720[4]} / ${VIDEO_ENGINE_LAUNCH_EXAMPLES.omni720[6]} / ${VIDEO_ENGINE_LAUNCH_EXAMPLES.omni720[8]} / ${VIDEO_ENGINE_LAUNCH_EXAMPLES.omni720[10]} cr`, 'Creator • jusqu’à 10 s'],
+  ['MiniMax H3 Max', `${VIDEO_ENGINE_LAUNCH_EXAMPLES.h3Max768[5]} / ${VIDEO_ENGINE_LAUNCH_EXAMPLES.h3Max768[10]} / ${VIDEO_ENGINE_LAUNCH_EXAMPLES.h3Max768[15]} cr`, 'Pro • jusqu’à 15 s'],
+  ['Seedance 2.5', `${VIDEO_ENGINE_LAUNCH_EXAMPLES.seedance25720[4]} / ${VIDEO_ENGINE_LAUNCH_EXAMPLES.seedance25720[10]} / ${VIDEO_ENGINE_LAUNCH_EXAMPLES.seedance25720[15]} / ${VIDEO_ENGINE_LAUNCH_EXAMPLES.seedance25720[30]} cr`, 'Studio • jusqu’à 30 s'],
 ] as const;
 
 function isExpired(expiry: string) {
@@ -228,10 +229,10 @@ export const SubscriptionView: React.FC = () => {
       {section === 'choose' && (
         <div className="grid gap-5 md:grid-cols-3">
           <button onClick={() => setSection('credits')} className="group rounded-[28px] border border-purple-500/20 bg-gradient-to-br from-purple-950/35 to-transparent p-6 text-left transition hover:border-purple-400/50">
-            <WalletCards className="h-7 w-7 text-purple-300" /><h2 className="mt-5 text-xl font-black text-white">Acheter des crédits</h2><p className="mt-2 text-sm leading-6 text-gray-400">Choisissez un pack et payez avec Market-Cash.</p>
+            <WalletCards className="h-7 w-7 text-purple-300" /><h2 className="mt-5 text-xl font-black text-white">Acheter des crédits</h2><p className="mt-2 text-sm leading-6 text-gray-400">Achetez des crédits à tout moment, avec ou sans abonnement.</p>
           </button>
           <button onClick={() => setSection('subscription')} className="group rounded-[28px] border border-cyan-500/20 bg-gradient-to-br from-cyan-950/30 to-transparent p-6 text-left transition hover:border-cyan-400/50">
-            <Crown className="h-7 w-7 text-cyan-300" /><h2 className="mt-5 text-xl font-black text-white">Mes abonnements</h2><p className="mt-2 text-sm leading-6 text-gray-400">Comparez les formules et choisissez votre cycle.</p>
+            <Crown className="h-7 w-7 text-cyan-300" /><h2 className="mt-5 text-xl font-black text-white">Mes abonnements</h2><p className="mt-2 text-sm leading-6 text-gray-400">Débloquez moteurs, durées et téléchargements sans filigrane.</p>
           </button>
           <button onClick={() => setSection('billing')} className="group rounded-[28px] border border-emerald-500/20 bg-gradient-to-br from-emerald-950/25 to-transparent p-6 text-left transition hover:border-emerald-400/50">
             <CreditCard className="h-7 w-7 text-emerald-300" /><h2 className="mt-5 text-xl font-black text-white">Facturation et paiements</h2><p className="mt-2 text-sm leading-6 text-gray-400">Cartes enregistrées, paiement par défaut et renouvellement automatique.</p>
@@ -244,7 +245,7 @@ export const SubscriptionView: React.FC = () => {
       {section === 'credits' && (
         <>
           <section className="space-y-4">
-            <div><h2 className="text-2xl font-black text-white">Acheter des crédits</h2><p className="mt-1 text-xs text-gray-400">Packs simples, sans abonnement obligatoire. Les crédits MUNGWELE sont une unité interne et ne sont pas équivalents aux crédits d’un autre service.</p></div>
+            <div><h2 className="text-2xl font-black text-white">Acheter des crédits</h2><p className="mt-1 text-xs leading-5 text-gray-400">Packs simples, sans abonnement obligatoire. Un abonné peut également racheter des crédits lorsque son solde est épuisé : cela ne change ni sa formule ni sa date de fin d’abonnement.</p></div>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {packs.map((pack) => <article key={pack.id} className="rounded-3xl border border-white/10 bg-white/[0.03] p-5"><PackageOpen className="h-5 w-5 text-purple-300" /><p className="mt-4 text-sm font-bold text-white">{pack.name}</p><p className="mt-1 text-3xl font-black text-amber-300">{pack.credits}</p><p className="text-xs text-gray-500">crédits</p><p className="mt-3 text-lg font-black text-white">${pack.priceUsd.toFixed(2)}</p><button onClick={() => openPayment({ kind: 'credits', label: `${pack.credits} crédits`, amountUsd: pack.priceUsd, metadata: { packId: pack.id, credits: pack.credits } })} className="mt-5 w-full rounded-xl bg-purple-600 py-3 text-xs font-black text-white">Payer avec Market-Cash</button></article>)}
             </div>
@@ -256,7 +257,7 @@ export const SubscriptionView: React.FC = () => {
       {section === 'subscription' && (
         <>
           <section className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-2xl font-black text-white">Abonnements</h2><p className="mt-1 text-xs text-gray-400">Des formules accessibles avec davantage de crédits mensuels. Le renouvellement automatique reste facultatif.</p></div><div className="inline-flex rounded-2xl border border-white/10 bg-white/[0.04] p-1"><button onClick={() => setBillingCycle('monthly')} className={`rounded-xl px-4 py-2 text-xs font-bold ${billingCycle === 'monthly' ? 'bg-purple-600 text-white' : 'text-gray-400'}`}>Mensuel</button><button onClick={() => setBillingCycle('yearly')} className={`rounded-xl px-4 py-2 text-xs font-bold ${billingCycle === 'yearly' ? 'bg-purple-600 text-white' : 'text-gray-400'}`}>Annuel -{discount}%</button></div></div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-2xl font-black text-white">Abonnements</h2><p className="mt-1 max-w-2xl text-xs leading-5 text-gray-400">L’abonnement donne des crédits mensuels mais surtout des moteurs, des durées supérieures et le téléchargement personnel sans filigrane. Si les crédits finissent avant l’échéance, vous pouvez simplement en racheter.</p></div><div className="inline-flex rounded-2xl border border-white/10 bg-white/[0.04] p-1"><button onClick={() => setBillingCycle('monthly')} className={`rounded-xl px-4 py-2 text-xs font-bold ${billingCycle === 'monthly' ? 'bg-purple-600 text-white' : 'text-gray-400'}`}>Mensuel</button><button onClick={() => setBillingCycle('yearly')} className={`rounded-xl px-4 py-2 text-xs font-bold ${billingCycle === 'yearly' ? 'bg-purple-600 text-white' : 'text-gray-400'}`}>Annuel -{discount}%</button></div></div>
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
               {plans.map((plan) => {
                 const current = user.plan === plan.id;
@@ -266,8 +267,8 @@ export const SubscriptionView: React.FC = () => {
               })}
             </div>
           </section>
-          <section className="rounded-3xl border border-white/10 bg-white/[0.025] p-5"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" /><div><h3 className="text-sm font-black text-white">Coût vidéo transparent</h3><p className="mt-1 text-xs leading-5 text-gray-400">Le coût dépend du moteur et de la durée. Les tarifs ci-dessous correspondent à la génération 720p actuellement connectée ; la résolution de téléchargement relève du niveau d’abonnement.</p></div></div><div className="mt-4 overflow-hidden rounded-2xl border border-white/10">{VIDEO_ROWS.map(([name, cost, duration]) => <div key={name} className="grid grid-cols-[1.2fr_1fr_auto] gap-3 border-b border-white/5 px-4 py-3 text-xs"><span className="font-bold text-white">{name}</span><span className="text-amber-300">{cost}</span><span className="text-gray-500">{duration}</span></div>)}</div></section>
-          <section className="flex gap-3 rounded-3xl border border-amber-500/20 bg-amber-950/10 p-5"><Lock className="h-5 w-5 shrink-0 text-amber-400" /><div><h4 className="text-sm font-bold text-white">Contrôle utilisateur</h4><p className="mt-1 text-xs leading-5 text-gray-400">Vous pouvez désactiver le renouvellement automatique ou supprimer une carte enregistrée depuis Facturation et paiements.</p></div></section>
+          <section className="rounded-3xl border border-white/10 bg-white/[0.025] p-5"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" /><div><h3 className="text-sm font-black text-white">Coût vidéo transparent</h3><p className="mt-1 text-xs leading-5 text-gray-400">Les crédits varient automatiquement selon le moteur et la durée. Veo Lite, Veo Fast et Omni sont les moteurs Google actuellement reliés au parcours ; MiniMax H3 Max et Seedance restent signalés « Bientôt disponible » tant que leurs fournisseurs ne sont pas connectés.</p></div></div><div className="mt-4 overflow-x-auto rounded-2xl border border-white/10"><div className="min-w-[680px]">{VIDEO_ROWS.map(([name, cost, tier]) => <div key={name} className="grid grid-cols-[1.15fr_1.2fr_1fr] gap-3 border-b border-white/5 px-4 py-3 text-xs"><span className="font-bold text-white">{name}</span><span className="text-amber-300">{cost}</span><span className="text-gray-500">{tier}</span></div>)}</div></div></section>
+          <section className="flex gap-3 rounded-3xl border border-amber-500/20 bg-amber-950/10 p-5"><Lock className="h-5 w-5 shrink-0 text-amber-400" /><div><h4 className="text-sm font-bold text-white">Abonnement, crédits et carte séparés</h4><p className="mt-1 text-xs leading-5 text-gray-400">Un achat supplémentaire de crédits ne remplace pas votre abonnement. La carte Market-Cash enregistrée reste dans Facturation jusqu’à ce que vous la supprimiez ; le renouvellement automatique reste facultatif et peut être désactivé à tout moment.</p></div></section>
         </>
       )}
 
