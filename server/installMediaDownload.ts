@@ -62,16 +62,20 @@ async function authenticatedUser(req: Request): Promise<Requester | null> {
 
   const decoded = await adminAuth.verifyIdToken(token);
   const snap = await adminDb.collection('users').doc(decoded.uid).get();
-  const data = snap.data() || {};
+  const data: any = snap.data() || {};
   const role = data.role === 'admin' || decoded.admin === true ? 'admin' : 'user';
-  const plan = String(data.plan || 'free');
+  const storedPlan = ['creator', 'pro', 'studio'].includes(String(data.plan)) ? String(data.plan) : 'free';
+  const endsAt = String(data.subscriptionEndsAt || '');
+  const expired = role !== 'admin' && storedPlan !== 'free' && endsAt && Number.isFinite(Date.parse(endsAt)) && Date.parse(endsAt) <= Date.now();
+  const plan = role === 'admin' ? 'studio' : expired ? 'free' : storedPlan;
   const level = role === 'admin' || plan === 'studio' ? 3 : plan === 'pro' ? 2 : plan === 'creator' ? 1 : 0;
   return { uid: decoded.uid, role, plan, level };
 }
 
 function outputInfo(format: string): OutputInfo | null {
   if (format === 'video-480') return { ext: 'mp4', mime: 'video/mp4', height: 480 };
-  if (format === 'video-780') return { ext: 'mp4', mime: 'video/mp4', height: 780 };
+  // Keep the legacy id for compatibility, but the actual Creator tier is 720p.
+  if (format === 'video-780') return { ext: 'mp4', mime: 'video/mp4', height: 720 };
   if (format === 'video-1080') return { ext: 'mp4', mime: 'video/mp4', height: 1080 };
   if (format === 'video-1440') return { ext: 'mp4', mime: 'video/mp4', height: 1440 };
   if (format === 'video-2160') return { ext: 'mp4', mime: 'video/mp4', height: 2160 };
@@ -203,7 +207,7 @@ async function runFfmpeg(args: string[]) {
   });
 }
 
-async function transcode(input: Buffer, kind: Kind, format: string, community: boolean, ownerName: string) {
+async function transcode(input: Buffer, kind: Kind, format: string, community: boolean, ownerName: string, applyWatermark: boolean) {
   const info = outputInfo(format);
   if (!info) throw new Error('Format de téléchargement invalide.');
 
@@ -248,24 +252,7 @@ async function transcode(input: Buffer, kind: Kind, format: string, community: b
       await runFfmpeg(args);
     } else {
       const height = info.height || 480;
-      const wmHeight = Math.max(32, Math.min(74, Math.round(height * 0.075)));
-      const padding = Math.max(10, Math.min(28, Math.round(height * 0.025)));
-      const wmPath = path.join(dir, 'watermark.png');
-
-      await fs.writeFile(wmPath, await watermarkBuffer(ownerName));
-
-      /*
-       * Android/Samsung Gallery compatibility is intentional here.
-       * Source AI videos can arrive as H.264 High 4:4:4 / yuv444p. Many Android
-       * media indexers can play their audio but cannot decode a thumbnail/video frame.
-       * We always produce ordinary AVC/H.264 yuv420p in an MP4/avc1 container.
-       */
-      const args = [
-        '-y',
-        '-i', inputPath,
-        '-i', wmPath,
-        '-filter_complex',
-        `[0:v]scale=-2:${height}:flags=lanczos,setsar=1[base];[1:v]scale=-1:${wmHeight}[wm];[base][wm]overlay=${padding}:H-h-${padding}:format=auto,format=yuv420p[outv]`,
+      const baseEncodingArgs = [
         '-map', '[outv]',
         '-map', '0:a:0?',
         '-c:v', 'libx264',
@@ -278,8 +265,6 @@ async function transcode(input: Buffer, kind: Kind, format: string, community: b
         '-ar', '48000',
         '-ac', '2',
         '-b:a', '160k',
-        '-metadata', `artist=${publicHandle(ownerName)}`,
-        '-metadata', `comment=Vidéo MUNGWELE • ${publicHandle(ownerName)}`,
         '-metadata:s:v:0', 'handler_name=VideoHandler',
         '-metadata:s:a:0', 'handler_name=SoundHandler',
         '-movflags', '+faststart',
@@ -288,7 +273,40 @@ async function transcode(input: Buffer, kind: Kind, format: string, community: b
         outputPath,
       ];
 
-      await runFfmpeg(args);
+      /*
+       * Android/Samsung Gallery compatibility is intentional here.
+       * Source AI videos can arrive as H.264 High 4:4:4 / yuv444p. Many Android
+       * media indexers can play their audio but cannot decode a thumbnail/video frame.
+       * We always produce ordinary AVC/H.264 yuv420p in an MP4/avc1 container.
+       */
+      if (applyWatermark) {
+        const wmHeight = Math.max(32, Math.min(74, Math.round(height * 0.075)));
+        const padding = Math.max(10, Math.min(28, Math.round(height * 0.025)));
+        const wmPath = path.join(dir, 'watermark.png');
+        await fs.writeFile(wmPath, await watermarkBuffer(ownerName));
+
+        const args = [
+          '-y',
+          '-i', inputPath,
+          '-i', wmPath,
+          '-filter_complex',
+          `[0:v]scale=-2:${height}:flags=lanczos,setsar=1[base];[1:v]scale=-1:${wmHeight}[wm];[base][wm]overlay=${padding}:H-h-${padding}:format=auto,format=yuv420p[outv]`,
+          ...baseEncodingArgs,
+        ];
+        args.splice(args.length - 4, 0,
+          '-metadata', `artist=${publicHandle(ownerName)}`,
+          '-metadata', `comment=Vidéo MUNGWELE • ${publicHandle(ownerName)}`,
+        );
+        await runFfmpeg(args);
+      } else {
+        const args = [
+          '-y',
+          '-i', inputPath,
+          '-filter_complex', `[0:v]scale=-2:${height}:flags=lanczos,setsar=1,format=yuv420p[outv]`,
+          ...baseEncodingArgs,
+        ];
+        await runFfmpeg(args);
+      }
     }
 
     return { bytes: await fs.readFile(outputPath), ...info };
@@ -304,7 +322,8 @@ async function loadAuthorizedGeneration(requester: Requester, generationId: stri
 
   const requiredLevel = FORMAT_LEVEL[format];
   if (requiredLevel > requester.level) {
-    throw Object.assign(new Error(`Ce format nécessite un abonnement niveau ${requiredLevel}.`), { status: 403 });
+    const requiredPlan = requiredLevel === 1 ? 'Creator' : requiredLevel === 2 ? 'Pro' : 'Studio';
+    throw Object.assign(new Error(`Ce format nécessite l’abonnement ${requiredPlan}.`), { status: 403 });
   }
 
   const snap = await adminDb.collection('generations').doc(generationId).get();
@@ -337,7 +356,10 @@ async function sendMedia(requester: Requester, generationId: string, format: str
 
   const input = Buffer.from(await upstream.arrayBuffer());
   const ownerName = await resolveOwnerName(generation);
-  const output = await transcode(input, kind, format, community, ownerName);
+  // Community content stays signed. Personal video/clips are watermarked only for
+  // the free tier (480p). Any active paid subscription downloads without watermark.
+  const applyWatermark = community || ((kind === 'video' || kind === 'clips') && requester.level === 0);
+  const output = await transcode(input, kind, format, community, ownerName, applyWatermark);
   const safeTitle = String(generation.title || 'creation')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -353,6 +375,7 @@ async function sendMedia(requester: Requester, generationId: string, format: str
   res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Transfer-Encoding', 'binary');
+  res.setHeader('X-Mungwele-Watermark', applyWatermark ? 'applied' : 'none');
   return res.send(output.bytes);
 }
 
