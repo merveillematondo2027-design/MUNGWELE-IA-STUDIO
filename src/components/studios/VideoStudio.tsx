@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Download, Film, Loader2, Plus, Send, Settings2, X } from 'lucide-react';
+import { Check, ChevronDown, Download, Film, Loader2, Lock, Plus, Send, Settings2, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type {
   ExtendedVideoDuration,
@@ -14,12 +14,21 @@ import { DownloadOptionsModal } from '../common/DownloadOptionsModal';
 
 const ENGINE_TO_MODEL: Partial<Record<VideoEngineKey, VideoModel>> = {
   'veo-lite': 'lite',
+  'veo-fast': 'fast',
   omni: 'omni',
 };
 
-// Launch parcours intentionally reduced to four clear choices.
-const PUBLIC_ENGINE_KEYS: VideoEngineKey[] = ['veo-lite', 'omni', 'h3-max', 'seedance-2-5'];
+// Commercial hierarchy: Free -> Creator -> Pro -> Studio.
+const PUBLIC_ENGINE_KEYS: VideoEngineKey[] = ['veo-lite', 'veo-fast', 'omni', 'h3-max', 'seedance-2-5'];
 const PUBLIC_ENGINE_SET = new Set<VideoEngineKey>(PUBLIC_ENGINE_KEYS);
+const ENGINE_MIN_LEVEL: Partial<Record<VideoEngineKey, number>> = {
+  'veo-lite': 0,
+  'veo-fast': 0,
+  omni: 1,
+  'h3-max': 2,
+  'seedance-2-5': 3,
+};
+const PLAN_LABELS = ['Gratuit', 'Creator', 'Pro', 'Studio'] as const;
 const MAX_OMNI_REFERENCES = 6;
 const SETTINGS_KEY = 'mungwele.video.simple-settings.v1';
 const NEW_PROJECT_KEY = 'mungwele.new.project';
@@ -42,6 +51,19 @@ function isExtendedDuration(value: unknown): value is ExtendedVideoDuration {
 
 function isPublicEngine(value: unknown): value is VideoEngineKey {
   return typeof value === 'string' && PUBLIC_ENGINE_SET.has(value as VideoEngineKey);
+}
+
+function planLevel(plan: string, role: string) {
+  if (role === 'admin') return 3;
+  if (plan === 'studio') return 3;
+  if (plan === 'pro') return 2;
+  if (plan === 'creator') return 1;
+  return 0;
+}
+
+function requiredPlanLabel(engineKey: VideoEngineKey) {
+  const level = ENGINE_MIN_LEVEL[engineKey] ?? 0;
+  return PLAN_LABELS[Math.max(0, Math.min(3, level))];
 }
 
 export const VideoStudio: React.FC = () => {
@@ -69,13 +91,15 @@ export const VideoStudio: React.FC = () => {
   const [downloadOpen, setDownloadOpen] = useState(false);
   const imageInput = useRef<HTMLInputElement | null>(null);
 
+  const currentPlanLevel = planLevel(user.plan, user.role);
   const selectedEngine = VIDEO_ENGINES[engineKey];
   const isLite = engineKey === 'veo-lite';
   const usesOmni = engineKey === 'omni';
-  const canUploadReference = !isLite;
+  const canUploadReference = selectedEngine.supportsImages;
   const effectiveEngine = selectedEngine;
   const effectiveModel: VideoModel = ENGINE_TO_MODEL[engineKey] || 'lite';
   const creditCost = videoEngineCreditsForRequest(effectiveEngine.key, duration).credits;
+  const isEngineUnlocked = (key: VideoEngineKey) => currentPlanLevel >= (ENGINE_MIN_LEVEL[key] ?? 0);
 
   const clearImages = () => {
     setStartImage(null);
@@ -113,6 +137,15 @@ export const VideoStudio: React.FC = () => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({ engineKey, duration, aspectRatio }));
   }, [engineKey, duration, aspectRatio]);
 
+  // If a subscription expires while an advanced engine was selected, fall back to
+  // the best free engine instead of leaving an inaccessible project selected.
+  useEffect(() => {
+    if (isEngineUnlocked(engineKey)) return;
+    setEngineKey('veo-fast');
+    setDuration((VIDEO_ENGINES['veo-fast'].durations.includes(duration) ? duration : 8) as ExtendedVideoDuration);
+    setReferenceImages([]);
+  }, [user.plan, user.role, engineKey]);
+
   // A module entry is always a fresh project. Resume is only allowed from Library.
   useEffect(() => {
     const newProject = sessionStorage.getItem(NEW_PROJECT_KEY);
@@ -148,9 +181,9 @@ export const VideoStudio: React.FC = () => {
         setDuration((engine.durations.includes(8) ? 8 : engine.durations[0]) as ExtendedVideoDuration);
       }
       if (settings?.aspectRatio === '16:9' || settings?.aspectRatio === '9:16') setAspectRatio(settings.aspectRatio);
-      if (resumedEngine !== 'veo-lite') {
+      if (engine.supportsImages) {
         if (typeof settings?.startImage === 'string') setStartImage(settings.startImage);
-        if (Array.isArray(settings?.referenceImages)) {
+        if (resumedEngine === 'omni' && Array.isArray(settings?.referenceImages)) {
           setReferenceImages(settings.referenceImages.filter((item): item is string => typeof item === 'string'));
         }
       } else {
@@ -178,14 +211,19 @@ export const VideoStudio: React.FC = () => {
 
   useEffect(() => {
     if (!imageToVideoTransfer) return;
-    // Image-to-video is intentionally routed away from Lite because Lite is prompt-only.
-    setEngineKey('omni');
-    setStartImage(null);
-    setReferenceImages([imageToVideoTransfer]);
+    const target: VideoEngineKey = currentPlanLevel >= 1 ? 'omni' : 'veo-fast';
+    setEngineKey(target);
+    if (target === 'omni') {
+      setStartImage(null);
+      setReferenceImages([imageToVideoTransfer]);
+    } else {
+      setStartImage(imageToVideoTransfer);
+      setReferenceImages([]);
+    }
     setCurrentResult(null);
-    if (!VIDEO_ENGINES.omni.durations.includes(duration)) setDuration(8);
+    if (!VIDEO_ENGINES[target].durations.includes(duration)) setDuration(8);
     setImageToVideoTransfer(null);
-  }, [imageToVideoTransfer, setImageToVideoTransfer, duration]);
+  }, [imageToVideoTransfer, setImageToVideoTransfer, duration, currentPlanLevel]);
 
   // Keep Omni duration valid when references are attached.
   useEffect(() => {
@@ -195,6 +233,11 @@ export const VideoStudio: React.FC = () => {
 
   const chooseEngine = (key: VideoEngineKey) => {
     if (!PUBLIC_ENGINE_SET.has(key)) return;
+    if (!isEngineUnlocked(key)) {
+      addNotification('info', `${requiredPlanLabel(key)} requis`, `${VIDEO_ENGINES[key].label} est disponible à partir de la formule ${requiredPlanLabel(key)}.`);
+      return;
+    }
+
     const engine = VIDEO_ENGINES[key];
     setEngineKey(key);
     if (!engine.durations.includes(duration)) {
@@ -203,19 +246,22 @@ export const VideoStudio: React.FC = () => {
     setCurrentResult(null);
     setEngineListOpen(false);
 
-    if (key === 'veo-lite') {
+    if (!engine.supportsImages) {
       clearImages();
+    } else if (key !== 'omni' && referenceImages.length > 0) {
+      setStartImage((current) => current || referenceImages[0]);
+      setReferenceImages([]);
     }
 
     if (engine.availability !== 'connected') {
-      addNotification('info', 'Bientôt disponible', `${engine.label} sera activé prochainement. Aucun crédit ne sera débité tant que ce moteur n’est pas connecté.`);
+      addNotification('info', 'Bientôt disponible', `${engine.label} fait partie de votre palier mais son fournisseur n’est pas encore connecté. Aucun crédit ne sera débité.`);
     }
   };
 
   const openImagePicker = () => {
     if (isGenerating) return;
     if (!canUploadReference) {
-      addNotification('info', 'Image de référence indisponible', 'Veo 3.1 Lite ne prend pas en charge l’image de référence. Choisissez Gemini Omni Fast ou un autre moteur compatible.');
+      addNotification('info', 'Image de référence indisponible', `${selectedEngine.label} fonctionne ici par prompt uniquement. Choisissez Veo 3.1 Fast ou un moteur supérieur compatible.`);
       return;
     }
     imageInput.current?.click();
@@ -224,7 +270,7 @@ export const VideoStudio: React.FC = () => {
   const loadImages = async (files: FileList) => {
     if (!canUploadReference) {
       clearImages();
-      addNotification('info', 'Image de référence indisponible', 'Veo 3.1 Lite ne prend pas en charge l’image de référence.');
+      addNotification('info', 'Image de référence indisponible', `${selectedEngine.label} ne prend pas en charge l’image de référence dans ce parcours.`);
       return;
     }
 
@@ -234,10 +280,11 @@ export const VideoStudio: React.FC = () => {
       return;
     }
 
-    const occupied = (startImage ? 1 : 0) + referenceImages.length;
-    const selected = incoming.slice(0, Math.max(0, MAX_OMNI_REFERENCES - occupied));
+    const maxImages = usesOmni ? MAX_OMNI_REFERENCES : 1;
+    const occupied = usesOmni ? referenceImages.length : (startImage ? 1 : 0);
+    const selected = incoming.slice(0, Math.max(0, maxImages - occupied));
     if (!selected.length) {
-      addNotification('info', 'Limite références', `${MAX_OMNI_REFERENCES} images maximum par projet vidéo.`);
+      addNotification('info', 'Limite références', usesOmni ? `${MAX_OMNI_REFERENCES} images maximum avec Gemini Omni Fast.` : 'Une image de référence maximum avec ce moteur.');
       return;
     }
 
@@ -245,20 +292,11 @@ export const VideoStudio: React.FC = () => {
       const values = await Promise.all(selected.map(fileToDataUrl));
 
       if (usesOmni) {
-        // Omni receives uploads as true visual references so the video can preserve
-        // the subject/product/appearance instead of treating the image as a Lite frame.
         setStartImage(null);
         setReferenceImages((current) => [...current, ...values].slice(0, MAX_OMNI_REFERENCES));
       } else {
-        // Other engines keep their own image-to-video/reference routing when connected.
-        let nextStart = startImage;
-        const nextReferences = [...referenceImages];
-        for (const value of values) {
-          if (!nextStart) nextStart = value;
-          else if (nextReferences.length < MAX_OMNI_REFERENCES - 1) nextReferences.push(value);
-        }
-        setStartImage(nextStart);
-        setReferenceImages(nextReferences);
+        setStartImage(values[0]);
+        setReferenceImages([]);
       }
 
       setCurrentResult(null);
@@ -286,14 +324,19 @@ export const VideoStudio: React.FC = () => {
       return;
     }
 
+    if (!isEngineUnlocked(engineKey)) {
+      addNotification('warning', `${requiredPlanLabel(engineKey)} requis`, `${effectiveEngine.label} n’est pas inclus dans votre formule actuelle.`);
+      return;
+    }
+
     if (isLite && (startImage || referenceImages.length > 0)) {
       clearImages();
-      addNotification('info', 'Image retirée', 'Veo 3.1 Lite fonctionne ici en prompt vidéo uniquement. Choisissez Gemini Omni Fast pour utiliser une image de référence.');
+      addNotification('info', 'Image retirée', 'Veo 3.1 Lite fonctionne ici en prompt vidéo uniquement. Choisissez Veo 3.1 Fast ou Gemini Omni Fast pour utiliser une image.');
       return;
     }
 
     if (effectiveEngine.availability !== 'connected') {
-      addNotification('info', 'Bientôt disponible', `${effectiveEngine.label} n’est pas encore activé. Choisissez Veo 3.1 Lite ou Gemini Omni Fast pour générer maintenant.`);
+      addNotification('info', 'Bientôt disponible', `${effectiveEngine.label} n’est pas encore connecté au fournisseur. Aucun crédit ne sera débité.`);
       return;
     }
 
@@ -312,7 +355,7 @@ export const VideoStudio: React.FC = () => {
           aspectRatio,
           duration,
           startImage: isLite ? null : startImage,
-          referenceImages: isLite ? [] : referenceImages,
+          referenceImages: usesOmni ? referenceImages : [],
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -332,7 +375,7 @@ export const VideoStudio: React.FC = () => {
           duration,
           aspectRatio,
           startImage: startImage || undefined,
-          referenceImages,
+          referenceImages: usesOmni ? referenceImages : undefined,
         },
       };
 
@@ -410,7 +453,7 @@ export const VideoStudio: React.FC = () => {
               onClick={openImagePicker}
               disabled={isGenerating}
               aria-disabled={!canUploadReference}
-              title={canUploadReference ? 'Ajouter une image de référence' : 'Veo 3.1 Lite ne prend pas en charge l’image de référence'}
+              title={canUploadReference ? 'Ajouter une image de référence' : `${selectedEngine.label} ne prend pas en charge l’image de référence`}
               className={`mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${canUploadReference ? 'bg-white/[0.06] text-gray-300' : 'cursor-not-allowed bg-white/[0.025] text-gray-700'}`}
             >
               <Plus className="h-5 w-5" />
@@ -428,11 +471,11 @@ export const VideoStudio: React.FC = () => {
               {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
           </div>
-          {isLite && (
-            <p className="px-3 pt-2 text-[10px] leading-4 text-amber-300/80">Veo 3.1 Lite ne prend pas en charge l’image de référence. Le bouton + est désactivé pour ce moteur.</p>
+          {!canUploadReference && (
+            <p className="px-3 pt-2 text-[10px] leading-4 text-amber-300/80">{selectedEngine.label} : image de référence désactivée pour ce moteur.</p>
           )}
-          {!isLite && (
-            <p className="px-3 pt-2 text-[10px] leading-4 text-gray-500">Le bouton + ajoute une image de référence que le moteur utilisera pour guider l’apparence de la vidéo.</p>
+          {canUploadReference && (
+            <p className="px-3 pt-2 text-[10px] leading-4 text-gray-500">Le bouton + ajoute {usesOmni ? `jusqu’à ${MAX_OMNI_REFERENCES} images de référence` : 'une image de référence'} pour guider la vidéo.</p>
           )}
           <div className="flex items-center justify-between px-3 pb-1 pt-2 text-[10px] text-gray-600">
             <span>{effectiveEngine.label} • {duration}s • {aspectRatio}</span>
@@ -458,7 +501,7 @@ export const VideoStudio: React.FC = () => {
                 <button type="button" onClick={() => setEngineListOpen((value) => !value)} className="flex w-full items-center justify-between rounded-2xl border border-blue-400/20 bg-blue-500/[0.06] px-4 py-3 text-left">
                   <div>
                     <p className="text-sm font-black text-white">{selectedEngine.label}</p>
-                    <p className="mt-1 text-[10px] text-gray-500">Jusqu’à {selectedEngine.maxSeconds}s</p>
+                    <p className="mt-1 text-[10px] text-gray-500">{requiredPlanLabel(engineKey)} • jusqu’à {selectedEngine.maxSeconds}s</p>
                   </div>
                   <ChevronDown className={`h-4 w-4 text-gray-400 transition ${engineListOpen ? 'rotate-180' : ''}`} />
                 </button>
@@ -470,15 +513,16 @@ export const VideoStudio: React.FC = () => {
                       const active = key === engineKey;
                       const quote = quoteForEngine(key);
                       const available = engine.availability === 'connected';
+                      const unlocked = isEngineUnlocked(key);
                       return (
-                        <button type="button" key={key} onClick={() => chooseEngine(key)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left ${active ? 'bg-blue-500/10' : 'hover:bg-white/[0.04]'}`}>
+                        <button type="button" key={key} onClick={() => chooseEngine(key)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left ${active ? 'bg-blue-500/10' : 'hover:bg-white/[0.04]'} ${!unlocked ? 'opacity-65' : ''}`}>
                           <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${active ? 'border-blue-400/35 bg-blue-500/15' : 'border-white/10 bg-white/[0.03]'}`}>
-                            {active ? <Check className="h-4 w-4 text-blue-200" /> : <Film className="h-4 w-4 text-gray-500" />}
+                            {active ? <Check className="h-4 w-4 text-blue-200" /> : unlocked ? <Film className="h-4 w-4 text-gray-500" /> : <Lock className="h-4 w-4 text-amber-300" />}
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-3">
                               <p className="truncate text-xs font-black text-white">{engine.label}</p>
-                              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${available ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'}`}>{available ? (quote != null ? `${quote} cr` : 'Disponible') : 'Bientôt'}</span>
+                              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${!unlocked ? 'bg-amber-500/10 text-amber-300' : available ? 'bg-emerald-500/10 text-emerald-300' : 'bg-cyan-500/10 text-cyan-300'}`}>{!unlocked ? `${requiredPlanLabel(key)} requis` : available ? (quote != null ? `${quote} cr` : 'Disponible') : 'Bientôt'}</span>
                             </div>
                             <p className="mt-1 text-[9px] text-gray-600">{engine.provider} • jusqu’à {engine.maxSeconds}s</p>
                           </div>
@@ -488,8 +532,8 @@ export const VideoStudio: React.FC = () => {
                   </div>
                 )}
 
-                {isLite ? (
-                  <p className="mt-2 text-[10px] leading-4 text-amber-300/80">Veo 3.1 Lite : génération par prompt uniquement dans MUNGWELE. Les images de référence sont désactivées.</p>
+                {!canUploadReference ? (
+                  <p className="mt-2 text-[10px] leading-4 text-amber-300/80">{selectedEngine.label} : génération par prompt uniquement dans MUNGWELE.</p>
                 ) : (
                   <p className="mt-2 text-[10px] leading-4 text-purple-300/70">Images de référence activées pour ce moteur.</p>
                 )}
