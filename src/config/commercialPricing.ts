@@ -1,4 +1,4 @@
-export const PRICING_VERSION = 2026090703;
+export const PRICING_VERSION = 2026091201;
 
 // MUNGWELE launch policy
 // - Packs: $5/500, $10/1,100, $20/2,500.
@@ -16,23 +16,50 @@ export const MIN_USD_REVENUE_PER_CREDIT = 20 / 2500;
 export const LAUNCH_SUBSCRIPTION_PLANS = [
   {
     id: 'free', name: 'Gratuit', priceMonth: 0, creditsMonthly: 0,
+    maxVideoDuration: 8,
     maxDownloadResolution: 'standard',
-    features: ['100 crédits de bienvenue une seule fois', 'Achetez des crédits selon vos besoins', 'Téléchargement standard'],
+    features: [
+      '100 crédits de bienvenue une seule fois',
+      'Veo 3.1 Lite + Veo 3.1 Fast jusqu’à 8 s',
+      'Téléchargement vidéo 480p avec filigrane MUNGWELE',
+      'Achetez des crédits selon vos besoins',
+    ],
   },
   {
-    id: 'creator', name: 'Creator', priceMonth: 5, creditsMonthly: 500, popular: true,
+    id: 'creator', name: 'Creator', priceMonth: 7, creditsMonthly: 500, popular: true,
+    maxVideoDuration: 10,
     maxDownloadResolution: '720p',
-    features: ['500 crédits chaque mois', 'Téléchargement vidéo jusqu’à 720p', 'Image, vidéo et musique avec les moteurs disponibles'],
+    features: [
+      '500 crédits chaque mois',
+      'Tous les moteurs Gratuit + Gemini Omni Fast jusqu’à 10 s',
+      'Téléchargements personnels sans filigrane MUNGWELE',
+      'Téléchargement vidéo jusqu’à 720p',
+      'Rachat de crédits possible à tout moment',
+    ],
   },
   {
-    id: 'pro', name: 'Pro', priceMonth: 10, creditsMonthly: 1100,
+    id: 'pro', name: 'Pro', priceMonth: 15, creditsMonthly: 1100,
+    maxVideoDuration: 15,
     maxDownloadResolution: '1080p',
-    features: ['1 100 crédits chaque mois', 'Téléchargement vidéo jusqu’à 1080p', 'Accès aux moteurs premium selon le solde'],
+    features: [
+      '1 100 crédits chaque mois',
+      'Tous les moteurs Creator + MiniMax H3 Max jusqu’à 15 s',
+      'Téléchargements personnels sans filigrane MUNGWELE',
+      'Téléchargement vidéo jusqu’à 1080p',
+      'Rachat de crédits possible à tout moment',
+    ],
   },
   {
-    id: 'studio', name: 'Studio', priceMonth: 20, creditsMonthly: 2500,
+    id: 'studio', name: 'Studio', priceMonth: 30, creditsMonthly: 2500,
+    maxVideoDuration: 30,
     maxDownloadResolution: '4k',
-    features: ['2 500 crédits chaque mois', 'Téléchargement vidéo jusqu’à 4K', 'Meilleure valeur par crédit pour les créateurs intensifs'],
+    features: [
+      '2 500 crédits chaque mois',
+      'Tous les moteurs Pro + Seedance 2.5 jusqu’à 30 s',
+      'Téléchargements personnels sans filigrane MUNGWELE',
+      'Téléchargement vidéo jusqu’à 4K',
+      'Rachat de crédits possible à tout moment',
+    ],
   },
 ] as const;
 
@@ -215,7 +242,7 @@ export const VIDEO_ENGINE_LAUNCH_EXAMPLES = {
   veoLite720: { 4: videoEngineCreditsForRequest('veo-lite', 4).credits, 6: videoEngineCreditsForRequest('veo-lite', 6).credits, 8: videoEngineCreditsForRequest('veo-lite', 8).credits },
   veoFast720: { 4: videoEngineCreditsForRequest('veo-fast', 4).credits, 6: videoEngineCreditsForRequest('veo-fast', 6).credits, 8: videoEngineCreditsForRequest('veo-fast', 8).credits },
   veoPro720: { 4: videoEngineCreditsForRequest('veo-pro', 4).credits, 6: videoEngineCreditsForRequest('veo-pro', 6).credits, 8: videoEngineCreditsForRequest('veo-pro', 8).credits },
-  omni720: { 4: videoEngineCreditsForRequest('omni', 4).credits, 6: videoEngineCreditsForRequest('omni', 6).credits, 8: videoEngineCreditsForRequest('omni', 8).credits },
+  omni720: { 4: videoEngineCreditsForRequest('omni', 4).credits, 6: videoEngineCreditsForRequest('omni', 6).credits, 8: videoEngineCreditsForRequest('omni', 8).credits, 10: videoEngineCreditsForRequest('omni', 10).credits },
   seedance25720: { 4: videoEngineCreditsForRequest('seedance-2-5', 4).credits, 6: videoEngineCreditsForRequest('seedance-2-5', 6).credits, 8: videoEngineCreditsForRequest('seedance-2-5', 8).credits, 10: videoEngineCreditsForRequest('seedance-2-5', 10).credits, 15: videoEngineCreditsForRequest('seedance-2-5', 15).credits, 30: videoEngineCreditsForRequest('seedance-2-5', 30).credits },
   h3Max768: { 5: videoEngineCreditsForRequest('h3-max', 5).credits, 6: videoEngineCreditsForRequest('h3-max', 6).credits, 8: videoEngineCreditsForRequest('h3-max', 8).credits, 10: videoEngineCreditsForRequest('h3-max', 10).credits, 15: videoEngineCreditsForRequest('h3-max', 15).credits },
 } as const;
@@ -244,7 +271,7 @@ export const LAUNCH_LEGACY_CREDIT_COSTS = {
   imageStandard: imageCreditsForRequest(0).credits,
   imageHd: imageCreditsForRequest(0).credits,
   video5s: VIDEO_CREDIT_COSTS.lite[4],
-  video10s: VIDEO_CREDIT_COSTS.fast[8],
+  video10s: omniCreditsForRequest(10).credits,
   musicTrack: musicCreditsForDurationMs(60000).credits,
   promptEnhance: 0,
 } as const;
