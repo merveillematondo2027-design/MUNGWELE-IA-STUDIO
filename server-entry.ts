@@ -11,6 +11,7 @@ import { installLaunchPricingSync } from './server/installLaunchPricing';
 import { installProviderWalletAdminApi } from './server/installProviderWalletAdmin';
 import { installHostingSelfDeploy } from './server/hostingSelfDeploy';
 import { installVideoEntitlements } from './server/installVideoEntitlements';
+import { installDeviceBinding } from './server/installDeviceBinding';
 
 installCloudRunCors();
 installOpenAIImageRetry();
@@ -25,4 +26,5 @@ installMarketCashBilling();
 installLaunchPricingSync();
 installHostingSelfDeploy();
 installVideoEntitlements();
+installDeviceBinding();
 void import('./server');
