@@ -20,19 +20,21 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId)
-        && request.resource.data.credits == 100
-        && request.resource.data.welcomeBonusGranted == true
-        && request.resource.data.welcomeBonusVersion == 2
-        && request.resource.data.referralRewardsCount == 0
-        && request.resource.data.referralCode is string
-        && ((isAdmin() && request.resource.data.role in ['admin','user']) || (!isAdmin() && request.resource.data.role == 'user'));
+      // New profiles and welcome credits are created only by the trusted backend
+      // after the device/account binding check. Admin SDK bypasses Firestore rules.
+      allow create: if false;
       allow update: if isAdmin() || validReferralReward(userId) || (isOwner(userId)
         && request.resource.data.role == resource.data.role
         && request.resource.data.welcomeBonusGranted == resource.data.welcomeBonusGranted
         && request.resource.data.totalGenerations >= resource.data.totalGenerations
         && (request.resource.data.credits <= resource.data.credits || (resource.data.welcomeBonusGranted == true && (!('welcomeBonusVersion' in resource.data) || resource.data.welcomeBonusVersion < 2) && request.resource.data.welcomeBonusVersion == 2 && request.resource.data.credits == resource.data.credits + 50)));
       allow delete: if isAdmin();
+    }
+
+    // Device bindings are security records. They are never readable or writable
+    // from the browser; only the backend Admin SDK can access them.
+    match /deviceBindings/{deviceId} {
+      allow read, write: if false;
     }
 
     match /mdigiProfiles/{userId} {
