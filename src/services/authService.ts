@@ -21,9 +21,78 @@ const WELCOME_CREDITS = 100;
 const REFERRAL_BONUS = 100;
 const WELCOME_BONUS_VERSION = 2;
 const REF_STORAGE_KEY = 'mungwele.pending.referral';
+const DEVICE_STORAGE_KEY = 'mungwele.device.binding.v1';
+const DEVICE_COOKIE_KEY = 'mungwele_device_v1';
 
 function isGeneralAdmin(user: User) { return user.email?.toLowerCase() === GENERAL_ADMIN_EMAIL; }
 function referralCodeFor(uid: string) { return `MGL-${uid.replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase()}`; }
+
+function validDeviceId(value: string | null | undefined) {
+  return Boolean(value && /^[A-Za-z0-9._:-]{20,160}$/.test(value));
+}
+
+function readDeviceCookie() {
+  if (typeof document === 'undefined') return '';
+  const prefix = `${DEVICE_COOKIE_KEY}=`;
+  const row = document.cookie.split(';').map((item) => item.trim()).find((item) => item.startsWith(prefix));
+  return row ? decodeURIComponent(row.slice(prefix.length)) : '';
+}
+
+function persistDeviceId(id: string) {
+  if (typeof window !== 'undefined') localStorage.setItem(DEVICE_STORAGE_KEY, id);
+  if (typeof document !== 'undefined') {
+    const secure = typeof location !== 'undefined' && location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${DEVICE_COOKIE_KEY}=${encodeURIComponent(id)}; Max-Age=315360000; Path=/; SameSite=Lax${secure}`;
+  }
+}
+
+function deviceInstallationId() {
+  if (typeof window === 'undefined') return 'server-device-unavailable';
+  const cookieId = readDeviceCookie();
+  const localId = localStorage.getItem(DEVICE_STORAGE_KEY) || '';
+
+  // If both stores disagree, the cookie wins. This makes an accidental localStorage
+  // clear insufficient to obtain a second MUNGWELE welcome bonus on the same browser.
+  if (validDeviceId(cookieId)) {
+    persistDeviceId(cookieId);
+    return cookieId;
+  }
+  if (validDeviceId(localId)) {
+    persistDeviceId(localId);
+    return localId;
+  }
+
+  const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  const id = `mgl-device-${random}`;
+  persistDeviceId(id);
+  return id;
+}
+
+async function ensureDeviceSession(user: User) {
+  const token = await user.getIdToken();
+  const response = await fetch('/api/auth/device-session', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      deviceId: deviceInstallationId(),
+      platform: typeof navigator !== 'undefined' ? `${navigator.platform || ''} ${navigator.userAgent || ''}`.trim().slice(0, 120) : '',
+    }),
+  });
+  const payload: any = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = Object.assign(new Error(payload?.error || 'Cet appareil ne peut pas ouvrir ce compte MUNGWELE.'), {
+      code: payload?.code || 'DEVICE_SESSION_FAILED',
+      status: response.status,
+    });
+    throw error;
+  }
+  return payload;
+}
 
 export function captureReferralFromUrl() {
   if (typeof window === 'undefined') return;
@@ -50,7 +119,11 @@ function mapProfile(user: User, data: Record<string, any>): UserProfile {
   };
 }
 
-async function preparePersistence() { await setPersistence(auth, browserLocalPersistence); }
+let persistencePromise: Promise<void> | null = null;
+async function preparePersistence() {
+  if (!persistencePromise) persistencePromise = setPersistence(auth, browserLocalPersistence);
+  await persistencePromise;
+}
 
 async function ensureReferralIndex(user: User, name: string) {
   const code = referralCodeFor(user.uid);
@@ -93,6 +166,10 @@ async function redeemPendingReferral(user: User) {
 }
 
 export async function ensureUserProfile(user: User, preferredName?: string): Promise<UserProfile> {
+  // The server claims/checks the browser installation BEFORE any profile or welcome
+  // credits are created. A second Gmail on the same installation is rejected here.
+  await ensureDeviceSession(user);
+
   const ref = doc(db, 'users', user.uid);
   const snapshot = await getDoc(ref);
   const admin = isGeneralAdmin(user);
@@ -100,33 +177,7 @@ export async function ensureUserProfile(user: User, preferredName?: string): Pro
   const referralCode = referralCodeFor(user.uid);
 
   if (!snapshot.exists()) {
-    const now = new Date().toISOString();
-    const initial = {
-      uid: user.uid,
-      name: displayName,
-      email: user.email || '',
-      avatar: user.photoURL || DEFAULT_AVATAR,
-      role: admin ? 'admin' : 'user',
-      adminLevel: admin ? 'general' : null,
-      status: 'active',
-      credits: WELCOME_CREDITS,
-      plan: admin ? 'studio' : 'free',
-      totalGenerations: 0,
-      referralCode,
-      referralRewardsCount: 0,
-      welcomeBonusGranted: true,
-      welcomeBonusAmount: WELCOME_CREDITS,
-      welcomeBonusVersion: WELCOME_BONUS_VERSION,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    // Le document users est obligatoire : aucune session "fantôme" ne doit être créée.
-    await setDoc(ref, initial);
-    await ensureReferralIndex(user, displayName).catch((error) => console.warn('Referral index warning:', error));
-    await redeemPendingReferral(user).catch((error) => console.warn('Referral reward warning:', error));
-    const fresh = await getDoc(ref).catch(() => null);
-    return mapProfile(user, fresh?.exists() ? fresh.data() : initial);
+    throw Object.assign(new Error('Le profil sécurisé MUNGWELE n’a pas pu être créé par le serveur.'), { code: 'SECURE_PROFILE_MISSING' });
   }
 
   let data = snapshot.data();
@@ -198,12 +249,13 @@ export async function logoutFirebase() { await signOut(auth); }
 
 export function subscribeToFirebaseUser(onProfile: (profile: UserProfile | null) => void, onError?: (error: Error) => void) {
   captureReferralFromUrl();
+  void preparePersistence().catch((error) => console.warn('Firebase persistence warning:', error));
   return onAuthStateChanged(auth, async (user) => {
     if (!user) { onProfile(null); return; }
     try {
       onProfile(await ensureUserProfile(user));
     } catch (error) {
-      // Ne jamais fabriquer un compte local "Invité" ou un profil à 0 crédit.
+      await signOut(auth).catch(() => undefined);
       onProfile(null);
       onError?.(error as Error);
     }
@@ -215,6 +267,9 @@ export function friendlyAuthError(error: unknown): string {
   const code = (error as { code?: string })?.code || '';
   const hostname = getCurrentAuthHostname();
   switch (code) {
+    case 'DEVICE_ACCOUNT_LOCKED': return 'Ce téléphone ou navigateur est déjà lié au premier compte MUNGWELE utilisé ici. Pour protéger les crédits gratuits, un autre compte Google n’est pas accepté sur cet appareil.';
+    case 'DEVICE_ID_INVALID': return 'MUNGWELE n’a pas pu identifier correctement cet appareil. Rechargez l’application puis réessayez.';
+    case 'DEVICE_SESSION_FAILED': case 'SECURE_PROFILE_MISSING': return 'La vérification de sécurité MUNGWELE a échoué. Réessayez dans un instant.';
     case 'auth/email-already-in-use': return 'Cette adresse e-mail possède déjà un compte. Utilisez « Se connecter » ou « Mot de passe oublié ».';
     case 'auth/invalid-credential': case 'auth/wrong-password': case 'auth/user-not-found': return 'E-mail ou mot de passe incorrect.';
     case 'auth/weak-password': return 'Le mot de passe doit contenir au moins 6 caractères.';
@@ -226,7 +281,7 @@ export function friendlyAuthError(error: unknown): string {
     case 'auth/operation-not-allowed': return 'La connexion Google n’est pas activée dans Firebase Authentication.';
     case 'auth/operation-not-supported-in-this-environment': return 'Ce navigateur intégré bloque le mécanisme Google. Testez la version publiée.';
     case 'auth/network-request-failed': return 'Connexion réseau indisponible. Vérifiez Internet puis réessayez.';
-    case 'permission-denied': case 'firestore/permission-denied': return 'Connexion réussie, mais Firestore refuse la création ou la lecture du profil. Publiez les dernières règles Firestore puis reconnectez-vous.';
+    case 'permission-denied': case 'firestore/permission-denied': return 'Connexion réussie, mais Firestore refuse la lecture du profil sécurisé. Publiez les dernières règles Firestore puis reconnectez-vous.';
     default: return (error as Error)?.message || 'Une erreur Firebase est survenue. Réessayez.';
   }
 }
